@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Корект — калкулатор за приблизителна цена</title>
+<meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style> body { margin:0; font-family:'Inter',system-ui,sans-serif; } </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+/* --- Пазене на настройки и калкулации в браузъра на устройството ---
+   В сайта няма хранилището на Claude, затова ползваме localStorage.
+   Общата база остава Google Sheet (адресът се задава в ⚙ Параметри). */
+window.storage = {
+  async get(key) {
+    const v = localStorage.getItem("korekt:" + key);
+    if (v === null) throw new Error("not found");
+    return { key: key, value: v, shared: true };
+  },
+  async set(key, value) {
+    localStorage.setItem("korekt:" + key, value);
+    return { key: key, value: value, shared: true };
+  },
+  async delete(key) {
+    localStorage.removeItem("korekt:" + key);
+    return { key: key, deleted: true, shared: true };
+  },
+  async list(prefix) {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf("korekt:") === 0) {
+        const bare = k.slice(7);
+        if (!prefix || bare.indexOf(prefix) === 0) keys.push(bare);
+      }
+    }
+    return { keys: keys, prefix: prefix, shared: true };
+  }
+};
+</script>
+
+<script>
+/*__APP__*/
+</script>
+</body>
+</html>
