@@ -1,0 +1,10 @@
+{
+  "name": "korekt-calculator",
+  "version": "1.0.0",
+  "description": "Калкулатор за приблизителна цена на хамалски услуги — Корект",
+  "type": "module",
+  "scripts": {
+    "test": "node korekt-calculator.test.mjs"
+  },
+  "private": true
+}
