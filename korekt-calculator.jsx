@@ -96,7 +96,7 @@ const DEFAULTS = {
     Чехия: 1300, Полша: 1300, Испания: 2800, Швеция: 2200,
   },
 
-  sheetEndpoint: "",     // URL на Apps Script уеб приложението (Google Sheet база)
+  sheetEndpoint: "https://script.google.com/macros/s/AKfycbxNirSAcxZdm3qXfvCQjNrKBrci6v81hw1aq_oGJJq2kXrlJklB-gHqj00wdqHgGLrX/exec",     // URL на Apps Script уеб приложението (Google Sheet база)
   mapsApiKey: "",        // Google Maps Routes API ключ — за реални пътни разстояния
 
   phone: "0882 944 098",
