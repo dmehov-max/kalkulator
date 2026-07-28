@@ -1937,7 +1937,6 @@ export default function KorektCalculator() {
             <button onClick={() => setShowSettings((v) => !v)}
               className="text-sm font-semibold px-3 py-2 rounded-full border transition"
               style={{ borderColor: showSettings ? accent : "#e2e6ec", color: showSettings ? accent : "#64748b" }}>⚙ Параметри</button>
-            <a href={p.phoneHref} className="text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: ink }}>{p.phone}</a>
           </div>
         </div>
 
