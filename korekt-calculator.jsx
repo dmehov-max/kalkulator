@@ -97,9 +97,10 @@ const DEFAULTS = {
   },
 
   sheetEndpoint: "",     // URL на Apps Script уеб приложението (Google Sheet база)
+  mapsApiKey: "",        // Google Maps Routes API ключ — за реални пътни разстояния
 
   phone: "0882 944 098",
-  phoneHref: "tel:+359882944098",
+  phoneHref: "tel:+35970014485",
 };
 
 /* -------- Каталог с вещи -------- */
@@ -112,6 +113,7 @@ const CATALOG = [
     { id: "tvstand", label: "ТВ + стойка", m3: 0.4, kg: 20, dis: 0.15, asm: 0.4, wrap: 5, wrapReq: true, protect: 5, protectReq: true },
     { id: "vitrine", label: "Витрина", m3: 1.0, kg: 50, dis: 0.4, asm: 1.2, wrap: 10, protect: 6 },
     { id: "table", label: "Маса за хранене", m3: 0.7, kg: 30, dis: 0.2, asm: 0.5, wrap: 8, protect: 5 },
+    { id: "tableSmall", label: "Малка масичка", m3: 0.25, kg: 12, dis: 0.1, asm: 0.25, wrap: 4, protect: 3 },
     { id: "chair", label: "Стол", m3: 0.15, kg: 5, wrap: 3 },
     { id: "shelf", label: "Библиотека / етажерка", m3: 0.8, kg: 35, dis: 0.3, asm: 0.9, wrap: 8 },
   ]},
@@ -572,7 +574,137 @@ function baseOnRoute(from, base, to, roadFactor, tolerance) {
   return (a + b) <= direct * (tolerance || 1.1);
 }
 
+/* Реални пътни разстояния (км, еднопосочно) за маршрути, където изчислението
+   по права линия се разминава — напр. планински обходи. Имат превес над формулата.
+   Посоката няма значение — записвай ги в какъвто ред е удобно. */
+const REAL_DISTANCES_RAW = {
+  "София|Банско": 160,
+};
+
+function realDistanceKey(a, b) {
+  return [a, b].sort((x, y) => x.localeCompare(y, "bg")).join("|");
+}
+
+// нормализираме ключовете веднъж, за да е без значение в какъв ред са записани
+const REAL_DISTANCES = Object.fromEntries(
+  Object.entries(REAL_DISTANCES_RAW).map(([k, v]) => {
+    const [a, b] = k.split("|");
+    return [realDistanceKey(a, b), v];
+  })
+);
+
+function lookupRealDistance(cityA, cityB) {
+  if (!cityA || !cityB) return null;
+  const direct = REAL_DISTANCES[realDistanceKey(cityA, cityB)];
+  if (direct != null) return direct;
+  // толерантно спрямо непълно въведени имена
+  const a = findCity(cityA), b = findCity(cityB);
+  if (!a || !b) return null;
+  const viaMatch = REAL_DISTANCES[realDistanceKey(a, b)];
+  return viaMatch != null ? viaMatch : null;
+}
+
+/* --- Реални разстояния през Google Routes API (по избор) ---------------
+   Ако е зададен ключ в ⚙ Параметри, калкулаторът пита Google за реалния
+   маршрут по път. Резултатите се кешират, за да не се хабят заявки. */
+const routesCache = new Map();
+const ROUTES_CACHE_KEY = "cache:routes";
+let routesCacheLoaded = false;
+
+// зареждаме запомнените разстояния от хранилището (веднъж при стартиране)
+async function loadRoutesCache() {
+  if (routesCacheLoaded) return;
+  routesCacheLoaded = true;
+  try {
+    const raw = await storageGet(ROUTES_CACHE_KEY);
+    if (!raw) return;
+    const obj = JSON.parse(raw);
+    for (const [k, v] of Object.entries(obj)) {
+      if (!routesCache.has(k)) routesCache.set(k, v);
+    }
+  } catch (e) { /* без кеш — просто ще питаме Google наново */ }
+}
+
+async function persistRoutesCache() {
+  try {
+    await storageSet(ROUTES_CACHE_KEY, JSON.stringify(Object.fromEntries(routesCache)));
+  } catch (e) { /* не е критично */ }
+}
+
+function routesCacheKey(a, b) {
+  return [a, b].sort((x, y) => x.localeCompare(y, "bg")).join("|");
+}
+
+async function fetchRealDistanceKm(cityA, cityB, apiKey) {
+  if (!apiKey || !cityA || !cityB) return null;
+  const ck = routesCacheKey(cityA, cityB);
+  if (routesCache.has(ck)) return routesCache.get(ck);
+  try {
+    const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "routes.distanceMeters,routes.description",
+      },
+      body: JSON.stringify({
+        origin: { address: `${cityA}, България` },
+        destination: { address: `${cityB}, България` },
+        travelMode: "DRIVE",
+        routingPreference: "TRAFFIC_UNAWARE", // без трафик — стабилен резултат
+        computeAlternativeRoutes: true,       // питаме за няколко варианта
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const routes = (data?.routes || []).filter((r) => r.distanceMeters);
+    if (!routes.length) return null;
+    // взимаме най-краткия вариант, не най-бързия
+    const best = routes.reduce((a, b) => (a.distanceMeters <= b.distanceMeters ? a : b));
+    const km = Math.round(best.distanceMeters / 1000);
+    const info = { km, via: best.description || null, source: "google" };
+    routesCache.set(ck, info);
+    persistRoutesCache(); // запомняме трайно, за да не питаме Google пак
+    return info;
+  } catch (e) {
+    return null; // при проблем си остава изчислението по формулата
+  }
+}
+
+// Откъде идва разстоянието за този маршрут — за прозрачност в офертата
+function distanceSourceInfo(cityA, cityB) {
+  if (!cityA || !cityB) return null;
+  if (lookupRealDistance(cityA, cityB) != null) {
+    return { source: "manual", label: "ръчно заложено разстояние" };
+  }
+  const a = findCity(cityA), b = findCity(cityB);
+  if (a && b) {
+    const cached = routesCache.get(routesCacheKey(a, b));
+    if (cached && typeof cached === "object") {
+      return { source: "google", label: "Google Maps", via: cached.via };
+    }
+  }
+  return { source: "estimate", label: "изчислено по права линия" };
+}
+
+// Линк към Google Maps за визуална проверка на маршрута
+function mapsLink(cityA, cityB) {
+  if (!cityA || !cityB) return null;
+  const q = (c) => encodeURIComponent(`${c}, България`);
+  return `https://www.google.com/maps/dir/?api=1&origin=${q(cityA)}&destination=${q(cityB)}&travelmode=driving`;
+}
+
 function estimateKmAny(cityA, hoodA, cityB, hoodB, roadFactor) {
+  // 1) ръчно заложено реално разстояние (най-висок приоритет)
+  const real = lookupRealDistance(cityA, cityB);
+  if (real != null) return real;
+  // 2) вече изтеглено от Google Routes API
+  const a0 = findCity(cityA), b0 = findCity(cityB);
+  if (a0 && b0) {
+    const cached = routesCache.get(routesCacheKey(a0, b0));
+    if (cached != null) return typeof cached === "object" ? cached.km : cached;
+  }
+  // 3) изчисление по права линия
   const a = pointFor(cityA, hoodA), b = pointFor(cityB, hoodB);
   if (!a || !b) return null;
   return Math.max(1, Math.round(haversineKm(a, b) * (roadFactor || 1.25)));
@@ -1042,12 +1174,13 @@ async function saveParams(p) {
   return storageSet(PARAMS_KEY, JSON.stringify(p));
 }
 
-function buildRecord(s, p, r, id) {
+function buildRecord(s, p, r, id, calcNumber) {
   const items = Object.entries(s.qty)
     .filter(([, cnt]) => cnt > 0)
     .map(([id, cnt]) => ({ id, label: ITEM_INDEX[id]?.label || id, qty: cnt, m3: +( (ITEM_INDEX[id]?.m3 || 0) * cnt ).toFixed(2) }));
   return {
     id: id || null,
+    calcNumber: calcNumber || null,
     createdAt: new Date().toISOString(),
     service: s.service,
     city: s.city || null,
@@ -1111,6 +1244,21 @@ async function pushToSheet(record, endpoint) {
   }
 }
 
+const CALC_COUNTER_KEY = "counter:calc";
+
+// поредните номера на калкулациите (обща бройка, споделена между устройствата)
+async function nextCalcNumber() {
+  try {
+    const cur = await storageGet(CALC_COUNTER_KEY);
+    const n = cur ? parseInt(cur, 10) || 0 : 0;
+    const next = n + 1;
+    await storageSet(CALC_COUNTER_KEY, String(next));
+    return next;
+  } catch (e) {
+    return null; // без номер, ако хранилището не е налично
+  }
+}
+
 async function saveCalc(key, record) {
   return storageSet(key, JSON.stringify(record));
 }
@@ -1121,7 +1269,11 @@ async function loadCalcs() {
   for (const k of keys) {
     try {
       const val = await storageGet(k);
-      if (val) out.push({ key: k, ...JSON.parse(val) });
+      if (!val) continue;
+      const rec = JSON.parse(val);
+      // пропускаме всичко, което не е истинска калкулация (напр. служебни ключове)
+      if (!rec || typeof rec !== "object" || !rec.createdAt || typeof rec.total !== "number") continue;
+      out.push({ key: k, ...rec });
     } catch (e) { /* пропускаме повреден запис */ }
   }
   return out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
@@ -1167,17 +1319,17 @@ function Stepper({ value, onChange }) {
   return (
     <div className="flex items-center gap-1.5">
       <button onClick={() => onChange(Math.max(0, value - 1))}
-        className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">−</button>
+        className="w-11 h-11 rounded-lg border border-slate-200 text-slate-600 text-lg active:bg-slate-100">−</button>
       <input
         type="text" inputMode="numeric" value={raw}
         onChange={handle}
         onFocus={(e) => { setFocused(true); e.target.select(); }}
         onBlur={() => { setFocused(false); setRaw(String(value || 0)); }}
-        className="w-16 h-8 text-center font-semibold text-sm rounded-lg border"
+        className="w-16 h-11 text-center font-semibold text-base rounded-lg border"
         style={{ color: value ? ink : "#cbd5e1", borderColor: value ? "#cbd5e1" : "#e2e8f0" }}
       />
       <button onClick={() => onChange((value || 0) + 1)}
-        className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">+</button>
+        className="w-11 h-11 rounded-lg border border-slate-200 text-slate-600 text-lg active:bg-slate-100">+</button>
     </div>
   );
 }
@@ -1280,7 +1432,7 @@ function HoodInput({ city, value, onChange, placeholder }) {
   );
 }
 
-function SettingsPanel({ p, setP, saveState, onSave }) {
+function SettingsPanel({ p, setP, saveState }) {
   const upd = (patch) => setP({ ...p, ...patch });
 
   const exportParams = () => {
@@ -1415,6 +1567,27 @@ function SettingsPanel({ p, setP, saveState, onSave }) {
         <Num label="Цена чувал" value={p.sackPrice} step={0.05} onChange={(v) => upd({ sackPrice: v })} suffix="€/бр." />
       </div>
 
+      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">Реални разстояния (Google Maps)</div>
+      <label className="block">
+        <span className="text-[11px] text-slate-500">Routes API ключ — оставете празно за изчисление по права линия</span>
+        <input value={p.mapsApiKey || ""} onChange={(e) => upd({ mapsApiKey: e.target.value })}
+          placeholder="AIza..." type="password"
+          className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
+      </label>
+      <p className="text-[11px] text-slate-400 mt-1">
+        С ключ разстоянията се теглят по реален път от Google. Всеки маршрут се пита само веднъж и се запомня трайно.
+      </p>
+      <div className="flex items-center gap-3 mt-2">
+        <span className="text-[11px] text-slate-500">Запомнени маршрути: <b style={{ color: ink }}>{routesCache.size}</b></span>
+        {routesCache.size > 0 && (
+          <button
+            onClick={async () => { routesCache.clear(); await persistRoutesCache(); setP({ ...p }); }}
+            className="text-[11px] font-medium px-2 py-1 rounded-full border border-slate-200 text-slate-600">
+            Изчисти запомнените
+          </button>
+        )}
+      </div>
+
       <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">Google Sheet база данни</div>
       <label className="block">
         <span className="text-[11px] text-slate-500">Адрес на Apps Script (оставете празно, за да не се изпраща)</span>
@@ -1424,9 +1597,6 @@ function SettingsPanel({ p, setP, saveState, onSave }) {
       </label>
 
       <div className="flex flex-wrap items-center gap-2 mt-4">
-        <button onClick={onSave} disabled={saveState === "saving"} className="text-xs font-semibold px-3 py-1.5 rounded-full text-white disabled:opacity-60" style={{ background: accent }}>
-          💾 Запази
-        </button>
         <button onClick={exportParams} className="text-xs font-semibold px-3 py-1.5 rounded-full text-white" style={{ background: ink }}>
           ⬇ Свали настройките
         </button>
@@ -1479,11 +1649,22 @@ function AddressBlock({ title, data, onChange }) {
 
 const STEPS = ["Услуга", "Локация", "Вещи и детайли", "Цена"];
 
-function LogPanel({ onClose }) {
+function LogPanel({ onClose, p }) {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState(false);
+  const [confirming, setConfirming] = useState(null);
   const refresh = async () => { setRows(null); const d = await loadCalcs(); setRows(d); setErr(d.length === 0); };
   useEffect(() => { refresh(); }, []);
+
+  const confirmRow = async (row) => {
+    setConfirming(row.key);
+    const { key, ...record } = row;
+    record.status = "потвърдена";
+    pushToSheet(record, p?.sheetEndpoint);
+    await saveCalc(key, record);
+    await refresh();
+    setConfirming(null);
+  };
 
   const download = () => {
     const blob = new Blob(["\uFEFF" + toCSV(rows || [])], { type: "text/csv;charset=utf-8" });
@@ -1495,6 +1676,7 @@ function LogPanel({ onClose }) {
 
   const sum = (rows || []).reduce((t, r) => t + (r.total || 0), 0);
   const withContact = (rows || []).filter((r) => r.contact).length;
+  const displayNum = (r) => (r.calcNumber ? `№${r.calcNumber}` : r.key.slice(-5));
 
   return (
     <div className="rounded-2xl border-2 bg-white p-5 mb-4" style={{ borderColor: ink }}>
@@ -1530,23 +1712,39 @@ function LogPanel({ onClose }) {
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-slate-400 text-left">
+                  <th className="py-1.5 px-1 font-medium">№</th>
                   <th className="py-1.5 px-1 font-medium">Дата</th>
                   <th className="py-1.5 px-1 font-medium">Маршрут</th>
                   <th className="py-1.5 px-1 font-medium text-right">м³</th>
                   <th className="py-1.5 px-1 font-medium text-right">Цена</th>
-                  <th className="py-1.5 px-1 font-medium">Контакт</th>
+                  <th className="py-1.5 px-1 font-medium">Статус</th>
+                  <th className="py-1.5 px-1 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.key} className="border-t border-slate-100">
+                    <td className="py-1.5 px-1 font-semibold whitespace-nowrap" style={{ color: ink }}>{displayNum(r)}</td>
                     <td className="py-1.5 px-1 text-slate-500 whitespace-nowrap">{new Date(r.createdAt).toLocaleDateString("bg-BG")} {new Date(r.createdAt).toLocaleTimeString("bg-BG", { hour: "2-digit", minute: "2-digit" })}</td>
                     <td className="py-1.5 px-1 text-slate-700">
                       {r.service === "local" ? `${r.city}: ${r.from} → ${r.to}` : `${r.service === "intercity" ? "Междугр." : "Межд."}: ${r.destination || ""}`}
                     </td>
                     <td className="py-1.5 px-1 text-right text-slate-600">{r.volumeM3}</td>
                     <td className="py-1.5 px-1 text-right font-semibold" style={{ color: ink }}>{r.total} €</td>
-                    <td className="py-1.5 px-1 text-slate-500">{r.contact ? `${r.contact.name || ""} ${r.contact.phone || ""}`.trim() : "—"}</td>
+                    <td className="py-1.5 px-1 whitespace-nowrap">
+                      <span className="px-2 py-0.5 rounded-full text-[11px]" style={{
+                        background: r.status === "потвърдена" ? "#dcfce7" : r.status === "заявка" ? "#fff8ef" : "#f1f5f9",
+                        color: r.status === "потвърдена" ? "#166534" : r.status === "заявка" ? accent : "#64748b",
+                      }}>{r.status || "калкулация"}</span>
+                    </td>
+                    <td className="py-1.5 px-1 whitespace-nowrap">
+                      {r.status !== "потвърдена" && (
+                        <button onClick={() => confirmRow(r)} disabled={confirming === r.key}
+                          className="text-[11px] font-semibold px-2 py-1 rounded-full text-white disabled:opacity-50" style={{ background: ink }}>
+                          {confirming === r.key ? "…" : "Потвърди"}
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1556,10 +1754,10 @@ function LogPanel({ onClose }) {
       )}
       <p className="text-[11px] text-slate-400 mt-3">
         {getStorageMode() === "shared"
-          ? "Записите се пазят в споделено хранилище и са видими за всички, които ползват калкулатора."
+          ? "Записите се пазят в браузъра на този сайт и се виждат от всеки, който го отвори на това устройство."
           : getStorageMode() === "personal"
-          ? "Записите се пазят локално за това устройство. За обща база свържете Google Sheet от ⚙ Параметри."
-          : "За трайна база свържете Google Sheet от ⚙ Параметри."}
+          ? "Записите се пазят локално за това устройство и този браузър."
+          : "Тази среда не пази записи трайно."}
       </p>
     </div>
   );
@@ -1570,6 +1768,7 @@ export default function KorektCalculator() {
   const [showSettings, setShowSettings] = useState(false);
   const [p, setP] = useState(() => structuredClone(DEFAULTS));
   const [openGroups, setOpenGroups] = useState({ "Хол и трапезария": true });
+  const [itemSearch, setItemSearch] = useState("");
   const [s, setS] = useState({
     service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {},
     pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger" },
@@ -1587,11 +1786,32 @@ export default function KorektCalculator() {
 
   // --- зареждане и автоматичен запис на ПАРАМЕТРИТЕ ---
   const [paramsLoaded, setParamsLoaded] = useState(false);
+  const [, forceRedraw] = useState(0); // за преизчисление след като Google върне разстояние
+
+  // Ако има ключ и са избрани два града — теглим реалното разстояние по път.
+  // Питаме Google САМО ако маршрутът още не е запомнен.
+  useEffect(() => {
+    if (s.service !== "intercity" || !p.mapsApiKey) return;
+    const a = findCity(s.pickupCity), b = findCity(s.dropoffCity);
+    if (!a || !b || a === b) return;
+    let alive = true;
+    (async () => {
+      await loadRoutesCache(); // първо проверяваме запомнените
+      if (!alive) return;
+      if (routesCache.has(routesCacheKey(a, b))) { forceRedraw((x) => x + 1); return; }
+      if (lookupRealDistance(a, b) != null) return; // ръчно зададено — не питаме Google
+      const info = await fetchRealDistanceKm(a, b, p.mapsApiKey);
+      if (alive && info != null) forceRedraw((x) => x + 1);
+    })();
+    return () => { alive = false; };
+  }, [s.service, s.pickupCity, s.dropoffCity, p.mapsApiKey]);
   const [paramSave, setParamSave] = useState("idle"); // idle | saving | saved | error
 
   useEffect(() => {
     let alive = true;
     (async () => {
+      await loadRoutesCache(); // запомнените разстояния — без нови заявки към Google
+      if (alive) forceRedraw((x) => x + 1);
       const local = await loadParams();
       if (alive && local) setP(local);
       const endpoint = (local || DEFAULTS).sheetEndpoint;
@@ -1617,17 +1837,12 @@ export default function KorektCalculator() {
     return () => clearTimeout(t);
   }, [p, paramsLoaded]);
 
-  const forceSaveParams = async () => {
-    setParamSave("saving");
-    const okLocal = await saveParams(p);
-    const okSheet = await pushParamsToSheet(p, p.sheetEndpoint);
-    setParamSave(okSheet ? "saved-sheet" : okLocal ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
-  };
-
   // --- автоматичен запис на калкулацията при показване на цената ---
   const [showLog, setShowLog] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
   const recordKey = useRef(null);
+  const recordNumber = useRef(null); // поредният номер на тази калкулация (генерира се веднъж)
+  const [calcNumberState, setCalcNumberState] = useState(null); // за показване в резултата
 
   // Всяка калкулация се пази автоматично — без клиентът да прави нищо.
   // Записът се обновява при промяна, вместо да се дублира.
@@ -1637,9 +1852,10 @@ export default function KorektCalculator() {
     if (!s.service || r.vol <= 0 || r.total <= 0) return;
     if (!recordKey.current) {
       recordKey.current = `${CALC_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      nextCalcNumber().then((num) => { recordNumber.current = num; setCalcNumberState(num); });
     }
     const key = recordKey.current;
-    const rec = buildRecord(s, p, r, key);
+    const rec = buildRecord(s, p, r, key, recordNumber.current);
     if (s.name || s.phone || s.email) {
       rec.contact = { name: s.name, phone: s.phone, email: s.email };
       rec.status = "заявка";
@@ -1679,7 +1895,7 @@ export default function KorektCalculator() {
   const submitRequest = async () => {
     const key = recordKey.current || `${CALC_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     recordKey.current = key;
-    const rec = buildRecord(s, p, r, key);
+    const rec = buildRecord(s, p, r, key, recordNumber.current);
     rec.contact = { name: s.name, phone: s.phone, email: s.email };
     rec.status = "заявка";
     setSaveState("saving");
@@ -1715,8 +1931,8 @@ export default function KorektCalculator() {
           </div>
         </div>
 
-        {showLog && <LogPanel onClose={() => setShowLog(false)} />}
-        {showSettings && <SettingsPanel p={p} setP={setP} saveState={paramSave} onSave={forceSaveParams} />}
+        {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} />}
+        {showSettings && <SettingsPanel p={p} setP={setP} saveState={paramSave} />}
 
         <div className="flex gap-2 mb-8">
           {STEPS.map((label, i) => (
@@ -1907,8 +2123,24 @@ export default function KorektCalculator() {
 
                     {s.pickupCity && s.dropoffCity && oneWayKm > 0 && (
                       <div className="text-sm text-slate-500">
-                        Приблизително разстояние: <span className="font-bold" style={{ color: ink }}>{oneWayKm} км</span>
-                        {oneWayKm < p.intercityThresholdKm && <span className="text-xs" style={{ color: accent }}> · под {p.intercityThresholdKm} км — смята се по почасова тарифа</span>}
+                        <div>
+                          Приблизително разстояние: <span className="font-bold" style={{ color: ink }}>{oneWayKm} км</span>
+                          {oneWayKm < p.intercityThresholdKm && <span className="text-xs" style={{ color: accent }}> · под {p.intercityThresholdKm} км — смята се по почасова тарифа</span>}
+                        </div>
+                        {(() => {
+                          const info = distanceSourceInfo(s.pickupCity, s.dropoffCity);
+                          const link = mapsLink(s.pickupCity, s.dropoffCity);
+                          if (!info) return null;
+                          return (
+                            <div className="text-xs mt-1" style={{ color: info.source === "google" ? ink : "#94a3b8" }}>
+                              Източник: {info.label}
+                              {info.via && <> · през {info.via}</>}
+                              {link && (
+                                <> · <a href={link} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: accent }}>виж маршрута</a></>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                     <p className="text-xs text-slate-400">Над {p.intercityThresholdKm} км се смята като курс: двупосочен пробег + по 1 ч товарене и разтоварване.</p>
@@ -1935,6 +2167,70 @@ export default function KorektCalculator() {
                     <h2 className="text-xl font-bold" style={{ color: ink }}>Списък с вещи</h2>
                     <div className="text-sm text-slate-500">Общо: <span className="font-bold" style={{ color: accent }}>{vol.toFixed(1)} м³</span></div>
                   </div>
+
+                  <div className="relative mb-3">
+                    <input
+                      value={itemSearch}
+                      onChange={(e) => setItemSearch(e.target.value)}
+                      placeholder="🔍 Търсене на вещ…"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-base"
+                    />
+                    {itemSearch && (
+                      <button onClick={() => setItemSearch("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">×</button>
+                    )}
+                  </div>
+
+                  {itemSearch.trim() && (
+                    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden mb-3">
+                      {(() => {
+                        const q = itemSearch.trim().toLowerCase();
+                        const hits = CATALOG.flatMap((g) => g.items)
+                          .filter((it) => it.label.toLowerCase().includes(q));
+                        if (!hits.length) return <div className="px-4 py-3 text-sm text-slate-400">Няма намерена вещ.</div>;
+                        return (
+                          <div className="px-4 py-1 divide-y divide-slate-50">
+                            {hits.map((it) => {
+                              const cnt = s.qty[it.id] || 0;
+                              return (
+                                <div key={it.id} className="py-2.5 flex items-center justify-between">
+                                  <div className="min-w-0 pr-3">
+                                    <div className="text-sm text-slate-700 truncate">{it.label}</div>
+                                    <div className="text-xs text-slate-400">
+                                      {it.m3} м³ · {it.kg} кг/бр{cnt > 0 ? ` · избрани ${cnt}` : ""}
+                                    </div>
+                                  </div>
+                                  <Stepper value={cnt} onChange={(v) => setQty(it.id, v)} />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                  {vol > 0 && !itemSearch.trim() && (
+                    <div className="rounded-2xl border-2 bg-white p-4 mb-3" style={{ borderColor: accent }}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold" style={{ color: ink }}>Избрани вещи</span>
+                        <button onClick={() => setS((prev) => ({ ...prev, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {} }))}
+                          className="text-xs text-slate-500 underline">изчисти всички</button>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {Object.entries(s.qty).filter(([, c]) => c > 0).map(([id, c]) => {
+                          const it = ITEM_INDEX[id];
+                          if (!it) return null;
+                          return (
+                            <button key={id} onClick={() => setQty(id, 0)}
+                              className="text-xs px-2.5 py-1.5 rounded-full border border-slate-200 text-slate-700 active:bg-slate-100">
+                              {c} × {it.label} <span className="text-slate-400">×</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     {CATALOG.map((grp) => {
                       const open = openGroups[grp.group];
@@ -2195,6 +2491,11 @@ export default function KorektCalculator() {
             {step === 3 && (
               <div className="space-y-4">
                 <div className="rounded-2xl p-6 text-white" style={{ background: ink }}>
+                  {calcNumberState && (
+                    <div className="inline-block text-xs font-semibold px-2.5 py-1 rounded-full mb-2" style={{ background: accent }}>
+                      Калкулация №{calcNumberState}
+                    </div>
+                  )}
                   <div className="flex justify-between items-start">
                     <div>
                       <div className="text-sm opacity-80">Прогнозна цена — по опит</div>
@@ -2253,6 +2554,23 @@ export default function KorektCalculator() {
                           : s.service === "intercity" ? `${s.pickupCity} → ${s.dropoffCity} (${oneWayKm} км, център до център)` : `${s.country} (${oneWayKm} км)`}
                       </span>
                     </div>
+                    {s.service === "intercity" && s.pickupCity && s.dropoffCity && (() => {
+                      const info = distanceSourceInfo(s.pickupCity, s.dropoffCity);
+                      const link = mapsLink(s.pickupCity, s.dropoffCity);
+                      if (!info) return null;
+                      return (
+                        <div className="flex justify-between gap-3">
+                          <span className="text-slate-500">Разстоянието е по</span>
+                          <span className="text-right text-xs" style={{ color: ink }}>
+                            {info.label}
+                            {info.via && <> · през {info.via}</>}
+                            {link && (
+                              <> · <a href={link} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: accent }}>карта</a></>
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })()}
                     {isCourse && (
                       <div className="flex justify-between gap-3">
                         <span className="text-slate-500">Организация</span>

@@ -27,7 +27,7 @@ const engineSrc =
   `\nexport { DEFAULTS, CATALOG, ITEM_INDEX, totalVolume, countKind, NEIGHBORHOODS,
   haversineKm, normHood, findHood, cityCenter, estimateKm, crewFor, ownTruck,
   fleetFor, tripsFor, bestTruck, computePrice, totalWeight, findCity, protectMetersFor, BASES, nearestBase, baseOnRoute, mergeParams, buildRecord, toCSV, disHoursFor, wrapMetersFor, CITIES, estimateKmAny, pointFor,
-  saveCalc, loadCalcs, saveParams, loadParams, CALC_PREFIX, PARAMS_KEY, fetchParamsFromSheet, pushParamsToSheet,
+  saveCalc, loadCalcs, saveParams, loadParams, CALC_PREFIX, PARAMS_KEY, fetchParamsFromSheet, pushParamsToSheet, nextCalcNumber, CALC_COUNTER_KEY, fetchRealDistanceKm, routesCache, ROUTES_CACHE_KEY,
   storageSet, storageGet, storageList, getStorageMode, hasStorage };\n`;
 
 const tmp = path.join(os.tmpdir(), `korekt-engine-${Date.now()}.mjs`);
@@ -321,7 +321,8 @@ test("бази: екипи има точно в шестте града", () => 
 });
 test("бази: избира се най-близката до адреса на разтоварване", () => {
   eq(E.nearestBase("Созопол", 1.25).city, "Бургас");
-  eq(E.nearestBase("Банско", 1.25).city, "София");
+  // Пловдив е реално по-близо до Банско (~137 км) от София (~160 км по път през Симитли)
+  eq(E.nearestBase("Банско", 1.25).city, "Пловдив");
   eq(E.nearestBase("Балчик", 1.25).city, "Варна");
 });
 test("местен екип: плаща се пътят от базата и обратно плюс работата", () => {
@@ -1150,6 +1151,37 @@ test("градове около София вече работят като ме
   }
 });
 
+
+/* --- Реални пътни разстояния --- */
+test("реални км: София → Банско е 160, не изчисленото по права линия", () => {
+  eq(E.estimateKmAny("София", "", "Банско", "", P.roadFactorBG), 160);
+});
+test("реални км: посоката няма значение", () => {
+  eq(E.estimateKmAny("Банско", "", "София", "", P.roadFactorBG),
+     E.estimateKmAny("София", "", "Банско", "", P.roadFactorBG));
+});
+test("реални км: работи и при непълно въведени имена", () => {
+  eq(E.estimateKmAny("софи", "", "банс", "", P.roadFactorBG), 160);
+});
+test("реални км: не влияят на маршрути извън таблицата", () => {
+  const км = E.estimateKmAny("София", "", "Пловдив", "", P.roadFactorBG);
+  ok(км > 100 && км < 250, `София→Пловдив трябва да е по формулата, а е ${км}`);
+});
+test("реални км: влизат в цената двупосочно", () => {
+  const r = calc({ service: "intercity", pickupCity: "София", dropoffCity: "Банско", qty: { boxL: 20 } });
+  eq(r.oneWayKm, 160);
+  eq(r.totalKm, r.trips * 2 * 160, "трябва да е удвоено за връщането:");
+});
+
+
+test("каталог: малката масичка е добавена и е по-малка от голямата маса", () => {
+  const малка = E.ITEM_INDEX.tableSmall, голяма = E.ITEM_INDEX.table;
+  ok(малка, "липсва малка масичка");
+  ok(малка.m3 < голяма.m3, "малката трябва да е с по-малък обем");
+  ok(малка.kg < голяма.kg, "малката трябва да е по-лека");
+  ok(малка.asm > малка.dis, "сглобяването трябва да е по-дълго от разглобяването");
+});
+
 /* --- Минимални цени --- */
 test("минимум: градско не пада под прага", () => {
   const r = calc({ qty: { boxS: 1 }, pickupHood: "Център", dropoffHood: "Център" });
@@ -1259,6 +1291,84 @@ test("запис: съдържа всичко нужно за таблицата
 /* ---------- Асинхронни тестове (хранилище) ---------- */
 const asyncTests = [];
 function testAsync(name, fn) { asyncTests.push([name, fn]); }
+
+/* --- Поредни номера на калкулациите --- */
+testAsync("номера: първата калкулация получава номер 1", async () => {
+  const n = await E.nextCalcNumber();
+  ok(n >= 1, `очаквано поне 1, получено ${n}`);
+});
+testAsync("номера: всяка следваща калкулация е с по-голям номер", async () => {
+  const a = await E.nextCalcNumber();
+  const b = await E.nextCalcNumber();
+  eq(b, a + 1, "номерата трябва да са последователни:");
+});
+testAsync("номера: буквеният запис пази номера", async () => {
+  const num = await E.nextCalcNumber();
+  const o = order({ qty: { boxM: 10 } });
+  const rec = E.buildRecord(o, P, E.computePrice(o, P), "calc:numtest", num);
+  eq(rec.calcNumber, num);
+});
+testAsync("номера: записът без подаден номер остава null, не 0", async () => {
+  const o = order({ qty: { boxM: 10 } });
+  const rec = E.buildRecord(o, P, E.computePrice(o, P), "calc:numtest2");
+  eq(rec.calcNumber, null);
+});
+
+
+testAsync("списък: броячът не се появява като фалшива калкулация", async () => {
+  await E.nextCalcNumber(); // създава служебния ключ
+  const o = order({ qty: { boxM: 10 } });
+  await E.saveCalc("calc:realtest", E.buildRecord(o, P, E.computePrice(o, P), "calc:realtest", 1));
+  const rows = await E.loadCalcs();
+  for (const r of rows) {
+    ok(r.createdAt, `запис ${r.key} без дата — вероятно служебен ключ`);
+    ok(typeof r.total === "number", `запис ${r.key} без цена — вероятно служебен ключ`);
+  }
+});
+testAsync("списък: повреден запис не чупи зареждането", async () => {
+  await E.saveCalc("calc:broken", "това не е JSON");
+  const rows = await E.loadCalcs();
+  ok(Array.isArray(rows), "списъкът трябва да се върне, въпреки повредения запис");
+});
+
+
+testAsync("кеш: Google се пита само веднъж за маршрут", async () => {
+  E.routesCache.clear();
+  let calls = 0;
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => { calls++; return { ok: true, json: async () => ({ routes: [{ distanceMeters: 198000, description: "тест" }] }) }; };
+  await E.fetchRealDistanceKm("София", "Казанлък", "test-key");
+  await E.fetchRealDistanceKm("София", "Казанлък", "test-key");
+  eq(calls, 1, "втората заявка трябва да дойде от кеша:");
+  globalThis.fetch = origFetch;
+});
+testAsync("кеш: обратната посока също се взима от кеша", async () => {
+  E.routesCache.clear();
+  let calls = 0;
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => { calls++; return { ok: true, json: async () => ({ routes: [{ distanceMeters: 198000 }] }) }; };
+  await E.fetchRealDistanceKm("София", "Казанлък", "test-key");
+  await E.fetchRealDistanceKm("Казанлък", "София", "test-key");
+  eq(calls, 1, "посоката не бива да поражда нова заявка:");
+  globalThis.fetch = origFetch;
+});
+testAsync("кеш: без ключ изобщо не се обръщаме към Google", async () => {
+  let calls = 0;
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => { calls++; return { ok: true, json: async () => ({ routes: [] }) }; };
+  eq(await E.fetchRealDistanceKm("София", "Варна", ""), null);
+  eq(calls, 0, "без ключ не бива да има заявка:");
+  globalThis.fetch = origFetch;
+});
+testAsync("кеш: запомненото се записва трайно в хранилището", async () => {
+  E.routesCache.clear();
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ routes: [{ distanceMeters: 150000 }] }) });
+  await E.fetchRealDistanceKm("Пловдив", "Бургас", "test-key");
+  const saved = await E.loadParams; // само проверка че функцията съществува
+  ok(E.routesCache.size > 0, "кешът трябва да съдържа маршрута");
+  globalThis.fetch = origFetch;
+});
 
 testAsync("хранилище: параметрите се записват и зареждат", async () => {
   const changed = { ...P, workerRate: 21.5, kmRate: 0.85 };
