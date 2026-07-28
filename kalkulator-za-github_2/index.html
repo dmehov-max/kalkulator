@@ -77,8 +77,6 @@ const DEFAULTS = {
   // над това (еднопосочно) = междуградски курс
   loadHours: 1,
   // включено товарене на курс (междуградско+)
-  workerDayRate: 144,
-  // € на ден за придружаващ работник (при пътуваща бригада)
   travelCrew: 1,
   // души извън шофьора, които пътуват с камиона
   dayHours: 10,
@@ -130,7 +128,11 @@ const DEFAULTS = {
     payloadKg: 24000
   }],
   m3PerManHour: 1.6,
-  // производителност (пълен цикъл, на работник)
+  // производителност (пълен цикъл, на работник) — без стълби
+  stairsTripM3: 0.4,
+  // обем, който се носи на един курс нагоре/надолу по стълби
+  stairsMinPerFloorTrip: 1.5,
+  // минути на етаж, на курс (отиване + връщане), без асансьор
   minLocalHours: 2,
   // МИН градско: 2 ч труд И 2 ч транспорт
   cityRoadFactor: 1.3,
@@ -150,17 +152,47 @@ const DEFAULTS = {
   heavyAppliancePerFloor: 5,
   // €/етаж на нестандартен уред (двуврат хлад., Miele)
 
+  // ИЗХВЪРЛЯНЕ (извозване до сметище)
+  fillMinPerSack: 2,
+  // минути за пълнене на един чувал
+  dumpHoursPerTrip: 0.4,
+  // разтоварване/изсипване на сметището, на курс
+  landfillKm: 15,
+  // разстояние до сметището (еднопосочно)
+  // Такса на сметището — плаща се НА КАМИОН (на курс), не на тон
+  landfillFees: {
+    household: 50,
+    construction: 50,
+    mixed: 50
+  },
+  minDisposalHours: 2,
+  // минимум за изхвърляне
+  disposalWorkerRate: 20,
+  // €/час за изхвърляне (отделна ставка от преместването)
+  disposalMaxWorkers: 8,
+  // макс. общ брой хора за изхвърляне (напр. Варна)
+  sackPrice: 0.4,
+  // € за чувал, БЕЗ ДДС (клиентът ги купува от нас; сайтът показва 0.48 € с ДДС — Сезалов чувал)
+  disposalMaxPayloadKg: 3500,
+  // изхвърляне на отпадък се вози само с малки камиони (не ТИР)
+
   // Разглобяване/сглобяване и опаковане
   disFactor: 1,
   // коеф. върху времето за разглобяване/сглобяване по вещ
   disCrew: 2,
-  // души, които работят по разглобяването (времената са реални часове)
-  stretchRollM: 150,
-  // метри в една ролка стреч (типична мини ролка)
-  stretchRollPrice: 7,
-  // € за ролка стреч
+  // души за разглобяване (времената са реални часове)
+  asmCrew: 2,
+  // души за сглобяване (различен екип)
+  stretchRollM: 175,
+  // метри в ролка 1.9 кг стреч, 23мк (≈93 м/кг × 1.9 кг, korekt-bg.com/magazin)
+  stretchRollPrice: 8.17,
+  // € за тази ролка, БЕЗ ДДС (сайтът показва 9.80 € с ДДС)
   wrapMPerManHour: 40,
   // метри опаковане на човекочас (10 м ≈ 15 мин)
+  protectPricePerM: 0.5,
+  // велпапе / аеропласт — €/линеен метър, БЕЗ ДДС (сайтът показва 0.60 € с ДДС)
+  protectMPerManHour: 25,
+  // метри твърда защита на човекочас
 
   minPrice: {
     local: 80,
@@ -208,6 +240,8 @@ const DEFAULTS = {
   },
   sheetEndpoint: "",
   // URL на Apps Script уеб приложението (Google Sheet база)
+  mapsApiKey: "",
+  // Google Maps Routes API ключ — за реални пътни разстояния
 
   phone: "0700 1 4485",
   phoneHref: "tel:+35970014485"
@@ -221,24 +255,27 @@ const CATALOG = [{
     label: "Диван 2-местен",
     m3: 1.4,
     kg: 45,
-    wrap: 10
+    wrap: 10,
+    wrapReq: true
   }, {
     id: "sofa3",
     label: "Диван 3-местен",
     m3: 2.0,
     kg: 60,
-    dis: 0.4,
-    asm: 0.4,
+    dis: 0.3,
+    asm: 0.5,
     wrap: 12,
+    wrapReq: true,
     kind: "oversized"
   }, {
     id: "sofaL",
     label: "Ъглов диван",
     m3: 3.0,
     kg: 90,
-    dis: 0.6,
-    asm: 0.7,
+    dis: 0.5,
+    asm: 0.9,
     wrap: 16,
+    wrapReq: true,
     kind: "oversized"
   }, {
     id: "armchair",
@@ -251,25 +288,30 @@ const CATALOG = [{
     label: "ТВ + стойка",
     m3: 0.4,
     kg: 20,
-    dis: 0.2,
-    asm: 0.25,
-    wrap: 5
+    dis: 0.15,
+    asm: 0.4,
+    wrap: 5,
+    wrapReq: true,
+    protect: 5,
+    protectReq: true
   }, {
     id: "vitrine",
     label: "Витрина",
     m3: 1.0,
     kg: 50,
-    dis: 0.5,
-    asm: 0.6,
-    wrap: 10
+    dis: 0.4,
+    asm: 1.2,
+    wrap: 10,
+    protect: 6
   }, {
     id: "table",
     label: "Маса за хранене",
     m3: 0.7,
     kg: 30,
-    dis: 0.3,
-    asm: 0.4,
-    wrap: 8
+    dis: 0.2,
+    asm: 0.5,
+    wrap: 8,
+    protect: 5
   }, {
     id: "chair",
     label: "Стол",
@@ -281,8 +323,8 @@ const CATALOG = [{
     label: "Библиотека / етажерка",
     m3: 0.8,
     kg: 35,
-    dis: 0.4,
-    asm: 0.5,
+    dis: 0.3,
+    asm: 0.9,
     wrap: 8
   }]
 }, {
@@ -292,16 +334,16 @@ const CATALOG = [{
     label: "Единично легло",
     m3: 1.0,
     kg: 40,
-    dis: 0.5,
-    asm: 0.6,
+    dis: 0.4,
+    asm: 0.9,
     wrap: 8
   }, {
     id: "bedDouble",
     label: "Двойно легло (рамка + матрак)",
     m3: 2.0,
     kg: 70,
-    dis: 0.7,
-    asm: 0.8,
+    dis: 0.5,
+    asm: 1.2,
     wrap: 12,
     wrapReq: true
   }, {
@@ -316,8 +358,8 @@ const CATALOG = [{
     label: "Гардероб 2-крилен",
     m3: 1.2,
     kg: 70,
-    dis: 1.0,
-    asm: 1.0,
+    dis: 0.7,
+    asm: 2.0,
     wrap: 8
   }, {
     id: "wardrobe3",
@@ -325,15 +367,15 @@ const CATALOG = [{
     m3: 1.8,
     kg: 110,
     dis: 1.5,
-    asm: 1.5,
+    asm: 3.0,
     wrap: 10
   }, {
     id: "dresser",
     label: "Скрин / шкаф",
     m3: 0.6,
     kg: 40,
-    dis: 0.4,
-    asm: 0.5,
+    dis: 0.3,
+    asm: 0.9,
     wrap: 8
   }, {
     id: "nightstand",
@@ -346,8 +388,8 @@ const CATALOG = [{
     label: "Бюро",
     m3: 0.6,
     kg: 30,
-    dis: 0.4,
-    asm: 0.5,
+    dis: 0.3,
+    asm: 0.9,
     wrap: 8
   }]
 }, {
@@ -467,7 +509,7 @@ const CATALOG = [{
     kind: "box"
   }, {
     id: "suitcase",
-    label: "Куфар / чувал",
+    label: "Куфар",
     m3: 0.1,
     kg: 15
   }, {
@@ -481,7 +523,48 @@ const CATALOG = [{
     label: "Огледало / картина",
     m3: 0.15,
     kg: 5,
-    wrap: 3
+    wrap: 3,
+    wrapReq: true,
+    protect: 4,
+    protectReq: true
+  }]
+}, {
+  group: "Отпадък за изхвърляне",
+  items: [{
+    id: "sackHouse",
+    label: "Чувал битов отпадък",
+    m3: 0.1,
+    kg: 15,
+    kind: "sack"
+  }, {
+    id: "sackConstr",
+    label: "Чувал строителен отпадък",
+    m3: 0.06,
+    kg: 40,
+    kind: "sack"
+  }, {
+    id: "sackGarden",
+    label: "Чувал градински отпадък",
+    m3: 0.12,
+    kg: 12,
+    kind: "sack"
+  }, {
+    id: "junkFurniture",
+    label: "Стара мебел за изхвърляне",
+    m3: 1.0,
+    kg: 40,
+    kind: "appliance"
+  }, {
+    id: "junkMattress",
+    label: "Стар матрак",
+    m3: 0.6,
+    kg: 25
+  }, {
+    id: "junkAppliance",
+    label: "Стар уред",
+    m3: 0.5,
+    kg: 50,
+    kind: "appliance"
   }]
 }, {
   group: "Специални (спец. обработка)",
@@ -511,8 +594,8 @@ const CATALOG = [{
     label: "Спортен уред (пътека)",
     m3: 0.8,
     kg: 60,
-    dis: 0.5,
-    asm: 0.6,
+    dis: 0.4,
+    asm: 0.8,
     wrap: 8
   }]
 }];
@@ -535,6 +618,14 @@ const disHoursFor = (qty, dis, asm, factor) => {
     total: (d + a) * k
   };
 };
+
+// метри твърда защита (велпапе / автопласт) — за чупливи повърхности
+const protectMetersFor = (qty, protect) => Object.entries(qty).reduce((s, [id, cnt]) => {
+  const it = ITEM_INDEX[id];
+  if (!it?.protect || !cnt) return s;
+  const on = it.protectReq || protect?.[id];
+  return on ? s + it.protect * cnt : s;
+}, 0);
 
 // метри стреч фолио: задължителните вещи винаги, останалите — по избор
 const wrapMetersFor = (qty, wrap) => Object.entries(qty).reduce((s, [id, cnt]) => {
@@ -1785,6 +1876,34 @@ const CITIES = {
   "Белослав": {
     lat: 43.190,
     lng: 27.700
+  },
+  "Нови Искър": {
+    lat: 42.810,
+    lng: 23.340
+  },
+  "Божурище": {
+    lat: 42.750,
+    lng: 23.200
+  },
+  "Костинброд": {
+    lat: 42.810,
+    lng: 23.210
+  },
+  "Елин Пелин": {
+    lat: 42.670,
+    lng: 23.600
+  },
+  "Своге": {
+    lat: 42.960,
+    lng: 23.350
+  },
+  "Ихтиман": {
+    lat: 42.430,
+    lng: 23.820
+  },
+  "Сливница": {
+    lat: 42.850,
+    lng: 23.040
   }
 };
 
@@ -1833,7 +1952,86 @@ function baseOnRoute(from, base, to, roadFactor, tolerance) {
   if (direct == null || a == null || b == null) return false;
   return a + b <= direct * (tolerance || 1.1);
 }
+
+/* Реални пътни разстояния (км, еднопосочно) за маршрути, където изчислението
+   по права линия се разминава — напр. планински обходи. Имат превес над формулата.
+   Посоката няма значение — записвай ги в какъвто ред е удобно. */
+const REAL_DISTANCES_RAW = {
+  "София|Банско": 160
+};
+function realDistanceKey(a, b) {
+  return [a, b].sort((x, y) => x.localeCompare(y, "bg")).join("|");
+}
+
+// нормализираме ключовете веднъж, за да е без значение в какъв ред са записани
+const REAL_DISTANCES = Object.fromEntries(Object.entries(REAL_DISTANCES_RAW).map(([k, v]) => {
+  const [a, b] = k.split("|");
+  return [realDistanceKey(a, b), v];
+}));
+function lookupRealDistance(cityA, cityB) {
+  if (!cityA || !cityB) return null;
+  const direct = REAL_DISTANCES[realDistanceKey(cityA, cityB)];
+  if (direct != null) return direct;
+  // толерантно спрямо непълно въведени имена
+  const a = findCity(cityA),
+    b = findCity(cityB);
+  if (!a || !b) return null;
+  const viaMatch = REAL_DISTANCES[realDistanceKey(a, b)];
+  return viaMatch != null ? viaMatch : null;
+}
+
+/* --- Реални разстояния през Google Routes API (по избор) ---------------
+   Ако е зададен ключ в ⚙ Параметри, калкулаторът пита Google за реалния
+   маршрут по път. Резултатите се кешират, за да не се хабят заявки. */
+const routesCache = new Map();
+function routesCacheKey(a, b) {
+  return [a, b].sort((x, y) => x.localeCompare(y, "bg")).join("|");
+}
+async function fetchRealDistanceKm(cityA, cityB, apiKey) {
+  if (!apiKey || !cityA || !cityB) return null;
+  const ck = routesCacheKey(cityA, cityB);
+  if (routesCache.has(ck)) return routesCache.get(ck);
+  try {
+    const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "routes.distanceMeters"
+      },
+      body: JSON.stringify({
+        origin: {
+          address: `${cityA}, България`
+        },
+        destination: {
+          address: `${cityB}, България`
+        },
+        travelMode: "DRIVE"
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const meters = data?.routes?.[0]?.distanceMeters;
+    if (!meters) return null;
+    const km = Math.round(meters / 1000);
+    routesCache.set(ck, km);
+    return km;
+  } catch (e) {
+    return null; // при проблем си остава изчислението по формулата
+  }
+}
 function estimateKmAny(cityA, hoodA, cityB, hoodB, roadFactor) {
+  // 1) ръчно заложено реално разстояние (най-висок приоритет)
+  const real = lookupRealDistance(cityA, cityB);
+  if (real != null) return real;
+  // 2) вече изтеглено от Google Routes API
+  const a0 = findCity(cityA),
+    b0 = findCity(cityB);
+  if (a0 && b0) {
+    const cached = routesCache.get(routesCacheKey(a0, b0));
+    if (cached != null) return cached;
+  }
+  // 3) изчисление по права линия
   const a = pointFor(cityA, hoodA),
     b = pointFor(cityB, hoodB);
   if (!a || !b) return null;
@@ -1852,9 +2050,25 @@ function ownTruck(p) {
     kmRate: n(p.kmRate)
   };
 }
-function fleetFor(service, p) {
+function partnersOf(p) {
+  return (p.partnerTrucks || []).map(t => ({
+    id: t.id,
+    name: t.name,
+    cap: n(t.capacity) * n(p.fillFactor),
+    payloadKg: n(t.payloadKg || 3500),
+    kmRate: t.kmRate != null && t.kmRate !== "" ? n(t.kmRate) : n(p.kmRate)
+  }));
+}
+function fleetFor(service, p, wasteType) {
   const own = ownTruck(p);
   if (service === "local") return [own];
+  if (service === "disposal") {
+    const all = [own, ...partnersOf(p)];
+    // изхвърляне на отпадък (от градски адрес) — само малки камиони, не ТИР
+    const limit = n(p.disposalMaxPayloadKg || 3500);
+    const small = all.filter(t => t.payloadKg <= limit);
+    return small.length ? small : [own];
+  }
   const partners = (p.partnerTrucks || []).map(t => ({
     id: t.id,
     name: t.name,
@@ -1902,9 +2116,10 @@ function computePrice(s, p) {
   };
   const vol = totalVolume(s.qty);
   const weight = totalWeight(s.qty);
+  const wasteType = s.wasteType || "household";
 
   // избор на камион
-  const fleet = fleetFor(s.service, p);
+  const fleet = fleetFor(s.service, p, s.wasteType);
   const picked = s.truckId ? fleet.find(t => t.id === s.truckId) : null;
   const chosen = picked || bestTruck(fleet, vol, weight);
   const cap = chosen ? chosen.cap : 0;
@@ -1930,13 +2145,19 @@ function computePrice(s, p) {
   if (reqCrew) crew = Math.max(crew, reqCrew);
 
   // курс = разстояние над прага; далечни "градски" адреси също минават на км тарифа
-  const isCourse = oneWayKm >= n(p.intercityThresholdKm);
+  const isCourse = s.service !== "disposal" && oneWayKm >= n(p.intercityThresholdKm);
 
   // екстри (човекочаса) — достъпът по стълби вече е парична такса, не часове
   const work = disHoursFor(s.qty, s.dis, s.asm, n(p.disFactor || 1));
-  const disHours = work.total; // реално време (часове)
-  const disCrew = n(p.disCrew || 2); // толкова души работят по него
-  const disManHours = disHours * disCrew; // → човекочаса за таксуване
+  // разглобяването и сглобяването се правят от РАЗЛИЧНИ екипи — броят се поотделно
+  const disCrew = n(p.disCrew || 2);
+  const asmCrew = n(p.asmCrew || 2);
+  const disOnlyHours = work.dis; // реални часове разглобяване
+  const asmOnlyHours = work.asm; // реални часове сглобяване
+  const disOnlyManHours = disOnlyHours * disCrew;
+  const asmOnlyManHours = asmOnlyHours * asmCrew;
+  const disHours = disOnlyHours + asmOnlyHours; // общо реално време
+  const disManHours = disOnlyManHours + asmOnlyManHours;
 
   // опаковане със стреч: метри → часове труд + ролки материал
   const wrapMeters = wrapMetersFor(s.qty, s.wrap);
@@ -1944,25 +2165,58 @@ function computePrice(s, p) {
   const wrapHours = wrapManHours; // човекочаса за опаковане
   const rolls = wrapMeters > 0 ? wrapMeters / n(p.stretchRollM || 20) : 0; // дробна част се таксува пропорционално
 
-  // ПЪТ: градско = еднопосочно (адрес→адрес); извънградско = двупосочно
-  const rtFactor = isCourse ? n(p.roundTripFactor) : 1;
-  const totalKm = trips * rtFactor * oneWayKm;
+  // велпапе / автопласт за огледала, картини, стъкла
+  const protectMeters = protectMetersFor(s.qty, s.protect);
+  const protectManHours = protectMeters / n(p.protectMPerManHour || 25);
+
+  // ИЗХВЪРЛЯНЕ: разстояние до сметището, пълнене на чували, тонаж
+  const isDisposal = s.service === "disposal";
+  const sacks = countKind(s.qty, "sack");
+  const fillManHours = isDisposal && s.weFill ? sacks * n(p.fillMinPerSack) / 60 : 0;
+  const tons = weight / 1000;
+  const landfillKm = n(s.landfillKm || p.landfillKm);
+
+  // ПЪТ: градско = еднопосочно; изхвърляне = до сметището и обратно; извънградско = двупосочно
+  // междуградско е ВИНАГИ двупосочно (камионът се връща до базата), дори под прага от 50 км;
+  // само истинското градско (в рамките на града) остава еднопосочно.
+  const rtFactor = s.service === "local" ? 1 : n(p.roundTripFactor);
+  const totalKm = trips * rtFactor * (isDisposal ? landfillKm : oneWayKm);
   const speed = isCourse ? n(p.roadSpeed || 65) : n(p.citySpeed || 30);
   const driveHours = speed ? totalKm / speed : 0;
 
   // 1) ПРЕНАСЯНЕ И ПЪТ — това е времето, в което камионът е ангажиран
   let handlingClock; // реални часове
+  let fillClockElapsed = 0; // отделно календарно време за пълнене на чували (изхвърляне)
+  let disposalTotalCrew = 0; // общ брой хора за изхвърляне (след таван), за показване в интерфейса
+  const disposalTrucksN = s.service === "disposal" ? Math.max(1, Math.round(n(s.disposalTrucks || 1))) : 1;
   const minCrewH = n(p.minCrewHours || 2);
   const loadClock = Math.max(n(p.loadHours) * trips, minCrewH); // мин. 2 ч на изпратена бригада
   const unloadClock = Math.max(n(p.unloadHours) * trips, minCrewH);
   if (isCourse) {
     handlingClock = loadClock + unloadClock;
   } else {
-    handlingClock = vol / n(p.m3PerManHour || 1) / crew + driveHours;
+    // товарене (при адреса на извозване) и разтоварване (на адреса на доставка) — на курсове,
+    // с добавка на етаж без асансьор. При партер/асансьор дава същия резултат като старата
+    // формула vol/m3PerManHour; стълбите винаги добавят време отгоре, никога не го намаляват.
+    const pickupNoElevFloors = s.pickup.floor >= 1 && !s.pickup.elevator ? s.pickup.floor : 0;
+    const dropoffNoElevFloors = s.dropoff.floor >= 1 && !s.dropoff.elevator ? s.dropoff.floor : 0;
+    const stairsTripM3 = n(p.stairsTripM3 || 0.4);
+    const stairsHourPerFloorTrip = n(p.stairsMinPerFloorTrip || 1.5) / 60;
+    const perTripBaseHours = stairsTripM3 / n(p.m3PerManHour || 1.6); // = базовата производителност при 0 етажа
+
+    const legClock = (volPortion, floors) => {
+      const trips = volPortion > 0 ? Math.ceil(volPortion / stairsTripM3) : 0;
+      return trips * (perTripBaseHours + floors * stairsHourPerFloorTrip) / crew;
+    };
+    const loadCarryClock = legClock(vol / 2, pickupNoElevFloors);
+    const unloadCarryClock = legClock(vol / 2, dropoffNoElevFloors);
+    handlingClock = loadCarryClock + unloadCarryClock + driveHours;
     if (handlingClock < n(p.minLocalHours)) handlingClock = n(p.minLocalHours); // мин 2 ч
   }
-  // при курс с пътуваща бригада вторият човек се плаща на ДЕН, не на час
-  const travelDays = isCourse ? Math.max(1, Math.ceil((handlingClock + driveHours) / n(p.dayHours || 10))) : 0;
+  // при курс с пътуваща бригада вторият човек се плаща за РЕАЛНИТЕ часове (път + работа) × часова ставка,
+  // без таван — 10 часа = 10 × ставката, 12 часа = 12 × ставката и т.н.
+  const dayTotalH = handlingClock + driveHours;
+  const travelDays = isCourse ? Math.max(1, Math.ceil(dayTotalH / n(p.dayHours || 10))) : 0; // само за информация
   const dayCrewMode = isCourse && s.courseMode === "dayCrew";
   const localCrewMode = isCourse && s.courseMode === "localCrew";
   const selfUnloadMode = isCourse && s.courseMode === "selfUnload"; // клиентът разтоварва сам
@@ -1978,7 +2232,7 @@ function computePrice(s, p) {
   if (dayCrewMode) {
     handlingManHours = 0; // трудът се плаща на ден, не на час
     const people = n(p.travelCrew || 1);
-    add(`Придружаващ работник — ${travelDays} ${travelDays === 1 ? "ден" : "дни"} × ${people} ${people === 1 ? "човек" : "души"} × ${n(p.workerDayRate)} ${p.currency}/ден`, travelDays * people * n(p.workerDayRate));
+    add(`Придружаващ работник — ${dayTotalH.toFixed(1)} ч × ${people} ${people === 1 ? "човек" : "души"} × ${n(p.workerRate)} ${p.currency}/ч`, dayTotalH * people * n(p.workerRate));
   } else if (localCrewMode) {
     // товаренето при клиента + местна бригада, която пътува до адреса и разтоварва
     handlingManHours = loadClock * crew;
@@ -1992,6 +2246,32 @@ function computePrice(s, p) {
     if (baseCity && needCar) {
       add(`Кола ${baseCity} → ${s.dropoffCity} — ${2 * baseKm} км × ${n(p.carRatePerKm)} ${p.currency}/км`, 2 * baseKm * n(p.carRatePerKm), true);
     }
+  } else if (isDisposal) {
+    // изнасяне + път до сметището и обратно + изсипване
+    // При няколко камиона, работещи паралелно, общата работа (и цена) е същата,
+    // но календарното време се дели на броя камиони/екипи.
+    // Общият брой хора е ограничен (напр. Варна — макс. 8 души на разположение).
+    const trucksN = disposalTrucksN;
+    const disposalRate = n(p.disposalWorkerRate || p.workerRate);
+    const maxWorkers = n(p.disposalMaxWorkers || 8);
+    const totalCrew = Math.min(crew * trucksN, maxWorkers);
+    disposalTotalCrew = totalCrew;
+    fillClockElapsed = fillManHours / totalCrew; // реално време за пълнене, ако помагат всички
+    const carryClock = vol / n(p.m3PerManHour || 1) / totalCrew;
+    const dumpClockTotal = trips * n(p.dumpHoursPerTrip);
+    const driveHoursElapsed = driveHours / trucksN; // driveHours е общо за всички курсове
+    const dumpClockElapsed = dumpClockTotal / trucksN;
+    let jobClock = carryClock + driveHoursElapsed + dumpClockElapsed;
+    if (jobClock < n(p.minDisposalHours)) jobClock = n(p.minDisposalHours);
+    handlingClock = jobClock; // само престоят на камиона — за него се таксува транспортът
+    handlingManHours = jobClock * totalCrew;
+    if (fillManHours) {
+      add(`Пълнене на ${sacks} чувала — ${fillManHours.toFixed(1)} чч × ${disposalRate} ${p.currency}/ч`, fillManHours * disposalRate);
+    }
+    if (sacks > 0) {
+      add(`Чували — ${sacks} бр. × ${n(p.sackPrice)} ${p.currency}/бр.`, sacks * n(p.sackPrice), true);
+    }
+    add(`Изнасяне, извозване и изсипване${trucksN > 1 ? ` (${trucksN} камиона)` : ""} — ${jobClock.toFixed(1)} ч × ${totalCrew} души × ${disposalRate} ${p.currency}/ч`, handlingManHours * disposalRate);
   } else if (selfUnloadMode) {
     // клиентът разтоварва сам — плаща се само товаренето при него
     handlingManHours = loadClock * crew;
@@ -2016,16 +2296,22 @@ function computePrice(s, p) {
   }
 
   // 2) РАЗГЛОБЯВАНЕ/СГЛОБЯВАНЕ — реални часове × хора по демонтажа (камионът чака, но не се таксува)
-  if (disManHours) {
-    add(`Разглобяване/сглобяване — ${disHours.toFixed(1)} ч × ${disCrew} души × ${n(p.workerRate)} ${p.currency}/ч`, disManHours * n(p.workerRate));
+  if (disOnlyManHours) {
+    add(`Разглобяване (${s.pickupHood || s.pickupCity || "товарене"}) — ${disOnlyHours.toFixed(1)} ч × ${disCrew} души × ${n(p.workerRate)} ${p.currency}/ч`, disOnlyManHours * n(p.workerRate));
+  }
+  if (asmOnlyManHours) {
+    add(`Сглобяване (${s.dropoffHood || s.dropoffCity || "разтоварване"}) — ${asmOnlyHours.toFixed(1)} ч × ${asmCrew} души × ${n(p.workerRate)} ${p.currency}/ч`, asmOnlyManHours * n(p.workerRate));
   }
 
   // 3) ОПАКОВАНЕ — човекочаса
-  if (wrapManHours) {
-    add(`Опаковане — ${wrapManHours.toFixed(1)} чч × ${n(p.workerRate)} ${p.currency}/ч`, wrapManHours * n(p.workerRate));
+  if (wrapManHours + protectManHours) {
+    const общо = wrapManHours + protectManHours;
+    add(`Опаковане — ${общо.toFixed(1)} чч × ${n(p.workerRate)} ${p.currency}/ч`, общо * n(p.workerRate));
   }
-  const manHours = handlingManHours + disManHours + wrapManHours;
-  const clockHours = handlingClock + disHours + (crew ? wrapManHours / crew : wrapManHours); // общ престой на обекта
+  const manHours = handlingManHours + disManHours + wrapManHours + protectManHours + fillManHours;
+  const clockHours = handlingClock + fillClockElapsed + disHours + (crew ? (wrapManHours + protectManHours) / crew : wrapManHours + protectManHours); // общ престой на обекта
+  // над 10 часа на ден не се работи — толкова дни реално са нужни за изпълнение
+  const workDays = Math.max(1, Math.ceil(clockHours / n(p.dayHours || 10)));
 
   // спец. обработка
   Object.entries(s.qty).forEach(([id, cnt]) => {
@@ -2034,7 +2320,7 @@ function computePrice(s, p) {
   });
 
   // СТЪЛБИ — парична такса на етаж, на адрес (товарене + разтоварване)
-  const boxes = countKind(s.qty, "box");
+  const boxes = countKind(s.qty, "box") + countKind(s.qty, "sack"); // чувалите се носят като кашони
   const appNormal = countKind(s.qty, "appliance");
   const appHeavy = countKind(s.qty, "appliance_heavy");
   const oversized = countKind(s.qty, "oversized");
@@ -2044,9 +2330,10 @@ function computePrice(s, p) {
   const floorsOvr = a => a.floor >= 1 && !(a.elevator && a.elevatorType === "cargo") ? a.floor : 0;
   const perFloorStd = n(p.floorFeeNoElevator) + boxes * n(p.boxPerFloor) + appNormal * n(p.appliancePerFloor) + appHeavy * n(p.heavyAppliancePerFloor);
   const perFloorOvr = oversized * n(p.heavyAppliancePerFloor);
-  // при самостоятелно разтоварване стълбите на адреса на доставка са за сметка на клиента
-  const floorsStdTot = floorsStd(s.pickup) + (selfUnloadMode ? 0 : floorsStd(s.dropoff));
-  const floorsOvrTot = floorsOvr(s.pickup) + (selfUnloadMode ? 0 : floorsOvr(s.dropoff));
+  // при изхвърляне няма адрес на доставка (само сметище); при самостоятелно разтоварване стълбите там са за сметка на клиента
+  const skipDropoffFloors = isDisposal || selfUnloadMode;
+  const floorsStdTot = floorsStd(s.pickup) + (skipDropoffFloors ? 0 : floorsStd(s.dropoff));
+  const floorsOvrTot = floorsOvr(s.pickup) + (skipDropoffFloors ? 0 : floorsOvr(s.dropoff));
   const stairs = floorsStdTot * perFloorStd + floorsOvrTot * perFloorOvr;
   if (stairs) {
     const parts = [];
@@ -2058,7 +2345,14 @@ function computePrice(s, p) {
   }
 
   // ТРАНСПОРТ (перо) — само за времето, в което камионът реално участва
-  if (!isCourse) {
+  if (isDisposal) {
+    const totalTruckHours = handlingClock * disposalTrucksN; // сума от часовете на всички камиони
+    add(`Транспорт${disposalTrucksN > 1 ? ` (${disposalTrucksN} камиона)` : ""} — ${totalTruckHours.toFixed(1)} ч × ${n(p.truckRate)} ${p.currency}/ч (${totalKm} км до сметището)`, totalTruckHours * n(p.truckRate));
+    const fee = n((p.landfillFees || {})[wasteType]);
+    if (fee > 0) {
+      add(`Такса сметище (${WASTE_LABEL[wasteType]}) — ${trips} курс${trips === 1 ? "" : "а"} × ${fee} ${p.currency}`, trips * fee);
+    }
+  } else if (!isCourse) {
     add(`Транспорт — ${handlingClock.toFixed(1)} ч × ${n(p.truckRate)} ${p.currency}/ч`, handlingClock * n(p.truckRate));
   } else {
     const rate = chosen ? chosen.kmRate : n(p.kmRate);
@@ -2066,10 +2360,13 @@ function computePrice(s, p) {
   }
 
   // материали
+  if (protectMeters) {
+    add(`Велпапе / автопласт — ${protectMeters} м × ${n(p.protectPricePerM)} ${p.currency}/м`, protectMeters * n(p.protectPricePerM), true);
+  }
   if (rolls) add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(3)} ${p.currency}/м`, rolls * n(p.stretchRollPrice), true);
 
   // праг
-  const floor = n(p.minPrice[s.service]);
+  const floor = n(p.minPrice[s.service === "disposal" ? "local" : s.service]);
   if (total < floor) {
     lines.push({
       label: "Изравняване до минимум",
@@ -2082,6 +2379,14 @@ function computePrice(s, p) {
     lines,
     vol,
     weight,
+    isDisposal,
+    wasteType,
+    sacks,
+    fillManHours,
+    tons,
+    landfillKm,
+    disposalTrucksN,
+    disposalTotalCrew,
     payload,
     weightLimited,
     tripsByVol,
@@ -2089,6 +2394,7 @@ function computePrice(s, p) {
     manHours,
     crew,
     clockHours,
+    workDays,
     trips,
     cap,
     chosen,
@@ -2102,12 +2408,20 @@ function computePrice(s, p) {
     disHours,
     disManHours,
     disCrew,
+    asmCrew,
+    disOnlyHours,
+    asmOnlyHours,
+    disOnlyManHours,
+    asmOnlyManHours,
     work,
     wrapMeters,
     wrapHours,
     wrapManHours,
     rolls,
+    protectMeters,
+    protectManHours,
     handlingClock,
+    handlingManHours,
     loadClock,
     unloadClock,
     travelDays,
@@ -2127,6 +2441,11 @@ function computePrice(s, p) {
  *  Всяка показана калкулация се записва автоматично, дори без контакти.
  *  Ключ: calc:<timestamp>-<rand>. Споделено хранилище → достъпно за Корект.
  * =================================================================== */
+const WASTE_LABEL = {
+  household: "битов",
+  construction: "строителен",
+  mixed: "смесен"
+};
 const CALC_PREFIX = "calc:";
 
 /* --- Устойчив слой над хранилището ---------------------------------
@@ -2200,6 +2519,10 @@ function mergeParams(saved) {
       ...(saved.truck || {})
     },
     // само познатите прагове — старо "intercity: 350" от запазени настройки се игнорира
+    landfillFees: {
+      ...d.landfillFees,
+      ...(saved.landfillFees || {})
+    },
     minPrice: {
       local: saved.minPrice?.local ?? d.minPrice.local,
       international: saved.minPrice?.international ?? d.minPrice.international
@@ -2259,7 +2582,7 @@ async function fetchParamsFromSheet(endpoint) {
 async function saveParams(p) {
   return storageSet(PARAMS_KEY, JSON.stringify(p));
 }
-function buildRecord(s, p, r, id) {
+function buildRecord(s, p, r, id, calcNumber) {
   const items = Object.entries(s.qty).filter(([, cnt]) => cnt > 0).map(([id, cnt]) => ({
     id,
     label: ITEM_INDEX[id]?.label || id,
@@ -2268,6 +2591,7 @@ function buildRecord(s, p, r, id) {
   }));
   return {
     id: id || null,
+    calcNumber: calcNumber || null,
     createdAt: new Date().toISOString(),
     service: s.service,
     city: s.city || null,
@@ -2278,9 +2602,13 @@ function buildRecord(s, p, r, id) {
     totalKm: r.totalKm || 0,
     volumeM3: +r.vol.toFixed(2),
     weightKg: r.weight,
+    sacks: r.sacks || 0,
+    landfillKm: r.isDisposal ? r.landfillKm : null,
+    wasteType: r.isDisposal ? WASTE_LABEL[r.wasteType] : null,
     trips: r.trips,
     crew: r.crew,
     hours: +r.clockHours.toFixed(2),
+    workDays: r.workDays,
     manHours: +r.manHours.toFixed(2),
     truck: r.chosen?.name || null,
     isCourse: r.isCourse,
@@ -2298,11 +2626,15 @@ function buildRecord(s, p, r, id) {
     disassembly: Object.entries(s.dis || {}).filter(([, v]) => v).map(([id]) => ITEM_INDEX[id]?.label || id),
     disHours: +r.disHours.toFixed(2),
     disManHours: +r.disManHours.toFixed(2),
+    disassemblyHours: +r.disOnlyHours.toFixed(2),
+    assemblyHours: +r.asmOnlyHours.toFixed(2),
     courseMode: r.isCourse ? r.dayCrewMode ? "пътуваща бригада" : r.localCrewMode ? `местен екип (${r.baseCity})` : r.selfUnloadMode ? "клиентът разтоварва сам" : "почасово" : null,
     nights: r.nights || 0,
     travelDays: r.travelDays || 0,
     assembly: Object.entries(s.asm || {}).filter(([, v]) => v).map(([id]) => ITEM_INDEX[id]?.label || id),
     wrapMeters: r.wrapMeters,
+    protectMeters: r.protectMeters,
+    protectMeters: r.protectMeters,
     stretchRolls: r.rolls,
     items,
     breakdown: r.lines,
@@ -2337,6 +2669,20 @@ async function pushToSheet(record, endpoint) {
     return false;
   }
 }
+const CALC_COUNTER_KEY = "counter:calc";
+
+// поредните номера на калкулациите (обща бройка, споделена между устройствата)
+async function nextCalcNumber() {
+  try {
+    const cur = await storageGet(CALC_COUNTER_KEY);
+    const n = cur ? parseInt(cur, 10) || 0 : 0;
+    const next = n + 1;
+    await storageSet(CALC_COUNTER_KEY, String(next));
+    return next;
+  } catch (e) {
+    return null; // без номер, ако хранилището не е налично
+  }
+}
 async function saveCalc(key, record) {
   return storageSet(key, JSON.stringify(record));
 }
@@ -2346,9 +2692,13 @@ async function loadCalcs() {
   for (const k of keys) {
     try {
       const val = await storageGet(k);
-      if (val) out.push({
+      if (!val) continue;
+      const rec = JSON.parse(val);
+      // пропускаме всичко, което не е истинска калкулация (напр. служебни ключове)
+      if (!rec || typeof rec !== "object" || !rec.createdAt || typeof rec.total !== "number") continue;
+      out.push({
         key: k,
-        ...JSON.parse(val)
+        ...rec
       });
     } catch (e) {/* пропускаме повреден запис */}
   }
@@ -2802,11 +3152,19 @@ function SettingsPanel({
     }),
     suffix: "×"
   }), /*#__PURE__*/React.createElement(Num, {
-    label: "Хора на демонтаж",
+    label: "Хора на разглобяване",
     value: p.disCrew,
     step: 1,
     onChange: v => upd({
       disCrew: v
+    }),
+    suffix: "души"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Хора на сглобяване",
+    value: p.asmCrew,
+    step: 1,
+    onChange: v => upd({
+      asmCrew: v
     }),
     suffix: "души"
   }), /*#__PURE__*/React.createElement(Num, {
@@ -2866,6 +3224,22 @@ function SettingsPanel({
     }),
     suffix: "м/чч"
   }), /*#__PURE__*/React.createElement(Num, {
+    label: "Велпапе / автопласт",
+    value: p.protectPricePerM,
+    step: 0.05,
+    onChange: v => upd({
+      protectPricePerM: v
+    }),
+    suffix: "€/м"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Скорост велпапе",
+    value: p.protectMPerManHour,
+    step: 5,
+    onChange: v => upd({
+      protectMPerManHour: v
+    }),
+    suffix: "м/чч"
+  }), /*#__PURE__*/React.createElement(Num, {
     label: "Праг междуградско",
     value: p.intercityThresholdKm,
     step: 5,
@@ -2889,14 +3263,6 @@ function SettingsPanel({
       unloadHours: v
     }),
     suffix: "ч"
-  }), /*#__PURE__*/React.createElement(Num, {
-    label: "Дневна ставка",
-    value: p.workerDayRate,
-    step: 1,
-    onChange: v => upd({
-      workerDayRate: v
-    }),
-    suffix: "€/ден"
   }), /*#__PURE__*/React.createElement(Num, {
     label: "Пътуват (без шофьор)",
     value: p.travelCrew,
@@ -2990,6 +3356,115 @@ function SettingsPanel({
   })), /*#__PURE__*/React.createElement("p", {
     className: "text-[11px] text-slate-400 mt-1"
   }, "Стреч: ", (Number(p.stretchRollPrice) / Number(p.stretchRollM || 1)).toFixed(3), " ", p.currency, "/м"), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2"
+  }, "Изхвърляне на отпадък"), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 md:grid-cols-4 gap-3 mb-2"
+  }, /*#__PURE__*/React.createElement(Num, {
+    label: "Пълнене на чувал",
+    value: p.fillMinPerSack,
+    step: 0.5,
+    onChange: v => upd({
+      fillMinPerSack: v
+    }),
+    suffix: "мин"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Изсипване на курс",
+    value: p.dumpHoursPerTrip,
+    step: 0.1,
+    onChange: v => upd({
+      dumpHoursPerTrip: v
+    }),
+    suffix: "ч"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "До сметището",
+    value: p.landfillKm,
+    step: 1,
+    onChange: v => upd({
+      landfillKm: v
+    }),
+    suffix: "км"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Ставка изхвърляне",
+    value: p.disposalWorkerRate,
+    step: 1,
+    onChange: v => upd({
+      disposalWorkerRate: v
+    }),
+    suffix: "€/ч"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Макс. хора",
+    value: p.disposalMaxWorkers,
+    step: 1,
+    onChange: v => upd({
+      disposalMaxWorkers: v
+    }),
+    suffix: "души"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Макс. камион за изхвърляне",
+    value: p.disposalMaxPayloadKg,
+    step: 500,
+    onChange: v => upd({
+      disposalMaxPayloadKg: v
+    }),
+    suffix: "кг"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Такса битов",
+    value: (p.landfillFees || {}).household,
+    step: 5,
+    onChange: v => upd({
+      landfillFees: {
+        ...p.landfillFees,
+        household: v
+      }
+    }),
+    suffix: "€/курс"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Такса строителен",
+    value: (p.landfillFees || {}).construction,
+    step: 5,
+    onChange: v => upd({
+      landfillFees: {
+        ...p.landfillFees,
+        construction: v
+      }
+    }),
+    suffix: "€/курс"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Такса смесен",
+    value: (p.landfillFees || {}).mixed,
+    step: 5,
+    onChange: v => upd({
+      landfillFees: {
+        ...p.landfillFees,
+        mixed: v
+      }
+    }),
+    suffix: "€/курс"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Цена чувал",
+    value: p.sackPrice,
+    step: 0.05,
+    onChange: v => upd({
+      sackPrice: v
+    }),
+    suffix: "€/бр."
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2"
+  }, "Реални разстояния (Google Maps)"), /*#__PURE__*/React.createElement("label", {
+    className: "block"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-[11px] text-slate-500"
+  }, "Routes API ключ — оставете празно за изчисление по права линия"), /*#__PURE__*/React.createElement("input", {
+    value: p.mapsApiKey || "",
+    onChange: e => upd({
+      mapsApiKey: e.target.value
+    }),
+    placeholder: "AIza...",
+    type: "password",
+    className: "w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1"
+  })), /*#__PURE__*/React.createElement("p", {
+    className: "text-[11px] text-slate-400 mt-1"
+  }, "С ключ разстоянията се теглят по реален път от Google. Резултатите се запомнят, за да не се хабят заявки."), /*#__PURE__*/React.createElement("div", {
     className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2"
   }, "Google Sheet база данни"), /*#__PURE__*/React.createElement("label", {
     className: "block"
@@ -3089,10 +3564,12 @@ function AddressBlock({
 }
 const STEPS = ["Услуга", "Локация", "Вещи и детайли", "Цена"];
 function LogPanel({
-  onClose
+  onClose,
+  p
 }) {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState(false);
+  const [confirming, setConfirming] = useState(null);
   const refresh = async () => {
     setRows(null);
     const d = await loadCalcs();
@@ -3102,6 +3579,18 @@ function LogPanel({
   useEffect(() => {
     refresh();
   }, []);
+  const confirmRow = async row => {
+    setConfirming(row.key);
+    const {
+      key,
+      ...record
+    } = row;
+    record.status = "потвърдена";
+    pushToSheet(record, p?.sheetEndpoint);
+    await saveCalc(key, record);
+    await refresh();
+    setConfirming(null);
+  };
   const download = () => {
     const blob = new Blob(["\uFEFF" + toCSV(rows || [])], {
       type: "text/csv;charset=utf-8"
@@ -3113,6 +3602,7 @@ function LogPanel({
   };
   const sum = (rows || []).reduce((t, r) => t + (r.total || 0), 0);
   const withContact = (rows || []).filter(r => r.contact).length;
+  const displayNum = r => r.calcNumber ? `№${r.calcNumber}` : r.key.slice(-5);
   return /*#__PURE__*/React.createElement("div", {
     className: "rounded-2xl border-2 bg-white p-5 mb-4",
     style: {
@@ -3166,6 +3656,8 @@ function LogPanel({
     className: "text-slate-400 text-left"
   }, /*#__PURE__*/React.createElement("th", {
     className: "py-1.5 px-1 font-medium"
+  }, "№"), /*#__PURE__*/React.createElement("th", {
+    className: "py-1.5 px-1 font-medium"
   }, "Дата"), /*#__PURE__*/React.createElement("th", {
     className: "py-1.5 px-1 font-medium"
   }, "Маршрут"), /*#__PURE__*/React.createElement("th", {
@@ -3174,10 +3666,17 @@ function LogPanel({
     className: "py-1.5 px-1 font-medium text-right"
   }, "Цена"), /*#__PURE__*/React.createElement("th", {
     className: "py-1.5 px-1 font-medium"
-  }, "Контакт"))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => /*#__PURE__*/React.createElement("tr", {
+  }, "Статус"), /*#__PURE__*/React.createElement("th", {
+    className: "py-1.5 px-1 font-medium"
+  }))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => /*#__PURE__*/React.createElement("tr", {
     key: r.key,
     className: "border-t border-slate-100"
   }, /*#__PURE__*/React.createElement("td", {
+    className: "py-1.5 px-1 font-semibold whitespace-nowrap",
+    style: {
+      color: ink
+    }
+  }, displayNum(r)), /*#__PURE__*/React.createElement("td", {
     className: "py-1.5 px-1 text-slate-500 whitespace-nowrap"
   }, new Date(r.createdAt).toLocaleDateString("bg-BG"), " ", new Date(r.createdAt).toLocaleTimeString("bg-BG", {
     hour: "2-digit",
@@ -3192,10 +3691,25 @@ function LogPanel({
       color: ink
     }
   }, r.total, " €"), /*#__PURE__*/React.createElement("td", {
-    className: "py-1.5 px-1 text-slate-500"
-  }, r.contact ? `${r.contact.name || ""} ${r.contact.phone || ""}`.trim() : "—"))))))), /*#__PURE__*/React.createElement("p", {
+    className: "py-1.5 px-1 whitespace-nowrap"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "px-2 py-0.5 rounded-full text-[11px]",
+    style: {
+      background: r.status === "потвърдена" ? "#dcfce7" : r.status === "заявка" ? "#fff8ef" : "#f1f5f9",
+      color: r.status === "потвърдена" ? "#166534" : r.status === "заявка" ? accent : "#64748b"
+    }
+  }, r.status || "калкулация")), /*#__PURE__*/React.createElement("td", {
+    className: "py-1.5 px-1 whitespace-nowrap"
+  }, r.status !== "потвърдена" && /*#__PURE__*/React.createElement("button", {
+    onClick: () => confirmRow(r),
+    disabled: confirming === r.key,
+    className: "text-[11px] font-semibold px-2 py-1 rounded-full text-white disabled:opacity-50",
+    style: {
+      background: ink
+    }
+  }, confirming === r.key ? "…" : "Потвърди")))))))), /*#__PURE__*/React.createElement("p", {
     className: "text-[11px] text-slate-400 mt-3"
-  }, getStorageMode() === "shared" ? "Записите се пазят в споделено хранилище и са видими за всички, които ползват калкулатора." : getStorageMode() === "personal" ? "Записите се пазят локално за това устройство. За обща база свържете Google Sheet от ⚙ Параметри." : "За трайна база свържете Google Sheet от ⚙ Параметри."));
+  }, getStorageMode() === "shared" ? "Записите се пазят в браузъра на този сайт и се виждат от всеки, който го отвори на това устройство." : getStorageMode() === "personal" ? "Записите се пазят локално за това устройство и този браузър." : "Тази среда не пази записи трайно."));
 }
 function KorektCalculator() {
   const [step, setStep] = useState(0);
@@ -3218,10 +3732,15 @@ function KorektCalculator() {
     courseMode: "hourly",
     baseCity: "",
     forceCar: false,
+    weFill: true,
+    landfillKm: 0,
+    wasteType: "household",
+    disposalTrucks: 1,
     qty: {},
     dis: {},
     asm: {},
     wrap: {},
+    protect: {},
     pickup: {
       building: "Апартамент",
       floor: 0,
@@ -3267,6 +3786,14 @@ function KorektCalculator() {
     lines,
     vol,
     weight,
+    isDisposal,
+    wasteType,
+    sacks,
+    fillManHours,
+    tons,
+    landfillKm,
+    disposalTrucksN,
+    disposalTotalCrew,
     payload,
     weightLimited,
     tripsByVol,
@@ -3274,6 +3801,7 @@ function KorektCalculator() {
     manHours,
     crew,
     clockHours,
+    workDays,
     trips,
     chosen,
     oneWayKm,
@@ -3285,9 +3813,14 @@ function KorektCalculator() {
     isCourse,
     disHours,
     disCrew,
+    asmCrew,
+    disOnlyHours,
+    asmOnlyHours,
     wrapMeters,
     wrapHours,
     rolls,
+    protectMeters,
+    protectManHours,
     travelDays,
     dayCrewMode,
     localCrewMode,
@@ -3303,6 +3836,23 @@ function KorektCalculator() {
 
   // --- зареждане и автоматичен запис на ПАРАМЕТРИТЕ ---
   const [paramsLoaded, setParamsLoaded] = useState(false);
+  const [, forceRedraw] = useState(0); // за преизчисление след като Google върне разстояние
+
+  // Ако има ключ и са избрани два града — теглим реалното разстояние по път
+  useEffect(() => {
+    if (s.service !== "intercity" || !p.mapsApiKey) return;
+    const a = findCity(s.pickupCity),
+      b = findCity(s.dropoffCity);
+    if (!a || !b || a === b) return;
+    if (routesCache.has(routesCacheKey(a, b))) return; // вече го знаем
+    let alive = true;
+    fetchRealDistanceKm(a, b, p.mapsApiKey).then(km => {
+      if (alive && km != null) forceRedraw(x => x + 1); // резултатът вече е в кеша
+    });
+    return () => {
+      alive = false;
+    };
+  }, [s.service, s.pickupCity, s.dropoffCity, p.mapsApiKey]);
   const [paramSave, setParamSave] = useState("idle"); // idle | saving | saved | error
 
   useEffect(() => {
@@ -3338,6 +3888,8 @@ function KorektCalculator() {
   const [showLog, setShowLog] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
   const recordKey = useRef(null);
+  const recordNumber = useRef(null); // поредният номер на тази калкулация (генерира се веднъж)
+  const [calcNumberState, setCalcNumberState] = useState(null); // за показване в резултата
 
   // Всяка калкулация се пази автоматично — без клиентът да прави нищо.
   // Записът се обновява при промяна, вместо да се дублира.
@@ -3347,9 +3899,13 @@ function KorektCalculator() {
     if (!s.service || r.vol <= 0 || r.total <= 0) return;
     if (!recordKey.current) {
       recordKey.current = `${CALC_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      nextCalcNumber().then(num => {
+        recordNumber.current = num;
+        setCalcNumberState(num);
+      });
     }
     const key = recordKey.current;
-    const rec = buildRecord(s, p, r, key);
+    const rec = buildRecord(s, p, r, key, recordNumber.current);
     if (s.name || s.phone || s.email) {
       rec.contact = {
         name: s.name,
@@ -3398,7 +3954,7 @@ function KorektCalculator() {
   const submitRequest = async () => {
     const key = recordKey.current || `${CALC_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     recordKey.current = key;
-    const rec = buildRecord(s, p, r, key);
+    const rec = buildRecord(s, p, r, key, recordNumber.current);
     rec.contact = {
       name: s.name,
       phone: s.phone,
@@ -3411,7 +3967,7 @@ function KorektCalculator() {
     setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
     alert(ok ? "Заявката е записана. Ще се свържем с Вас." : "Заявката не можа да се запише автоматично. Моля, обадете се на " + p.phone + ".");
   };
-  const canNext = step === 0 && s.service || step === 1 && (s.service === "local" ? s.city && (!NEIGHBORHOODS[s.city] || s.pickupHood.trim() && s.dropoffHood.trim()) : s.service === "intercity" ? !!findCity(s.pickupCity) && !!findCity(s.dropoffCity) : s.country) || step === 2 && vol > 0;
+  const canNext = step === 0 && s.service || step === 1 && (s.service === "disposal" ? !!s.city : s.service === "local" ? s.city && (!NEIGHBORHOODS[s.city] || s.pickupHood.trim() && s.dropoffHood.trim()) : s.service === "intercity" ? !!findCity(s.pickupCity) && !!findCity(s.dropoffCity) : s.country) || step === 2 && vol > 0;
   return /*#__PURE__*/React.createElement("div", {
     className: "min-h-screen w-full",
     style: {
@@ -3456,7 +4012,8 @@ function KorektCalculator() {
       background: ink
     }
   }, p.phone))), showLog && /*#__PURE__*/React.createElement(LogPanel, {
-    onClose: () => setShowLog(false)
+    onClose: () => setShowLog(false),
+    p: p
   }), showSettings && /*#__PURE__*/React.createElement(SettingsPanel, {
     p: p,
     setP: setP,
@@ -3502,6 +4059,11 @@ function KorektCalculator() {
     t: "Международно",
     d: "Транспорт от и за ЕС",
     m: p.minPrice.international
+  }, {
+    id: "disposal",
+    t: "Изхвърляне на отпадък",
+    d: "Изнасяне и извозване до сметище",
+    m: 0
   }].map(o => /*#__PURE__*/React.createElement("button", {
     key: o.id,
     onClick: () => {
@@ -3543,7 +4105,99 @@ function KorektCalculator() {
     style: {
       color: ink
     }
-  }, "Локация"), s.service === "local" && /*#__PURE__*/React.createElement("div", {
+  }, "Локация"), s.service === "disposal" && /*#__PURE__*/React.createElement("div", {
+    className: "space-y-4"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "block text-sm font-medium text-slate-600 mb-2"
+  }, "В кой град?"), /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap gap-2 mb-3"
+  }, Object.keys(NEIGHBORHOODS).map(g => /*#__PURE__*/React.createElement(Pill, {
+    key: g,
+    active: s.city === g,
+    onClick: () => set({
+      city: g,
+      pickupHood: ""
+    })
+  }, g))), s.city && NEIGHBORHOODS[s.city] && /*#__PURE__*/React.createElement(HoodInput, {
+    city: s.city,
+    value: s.pickupHood,
+    onChange: v => set({
+      pickupHood: v
+    }),
+    placeholder: "Квартал, откъдето се изнася"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "rounded-2xl border border-slate-200 bg-white p-5"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "block text-sm font-medium text-slate-600 mb-1"
+  }, "Вид отпадък"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-slate-400 mb-3"
+  }, "Определя на кое сметище отива и каква е таксата."), /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap gap-2"
+  }, [["household", "Битов"], ["construction", "Строителен"], ["mixed", "Смесен"]].map(([k, label]) => /*#__PURE__*/React.createElement(Pill, {
+    key: k,
+    active: s.wasteType === k,
+    onClick: () => set({
+      wasteType: k
+    })
+  }, label))), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-slate-500 mt-2"
+  }, "Такса: ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: ink
+    }
+  }, (p.landfillFees || {})[s.wasteType] || 0, " ", p.currency), " на камион"), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs mt-1",
+    style: {
+      color: accent
+    }
+  }, "🚚 Изхвърлянето се вози само с малки камиони, не ТИР (до ", p.disposalMaxPayloadKg, " кг)")), /*#__PURE__*/React.createElement("div", {
+    className: "rounded-2xl border border-slate-200 bg-white p-5"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "block text-sm font-medium text-slate-600 mb-1"
+  }, "Разстояние до сметището"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-slate-400 mb-3"
+  }, "Еднопосочно. Смята се отиване и връщане за всеки курс."), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-3"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "range",
+    min: "3",
+    max: "60",
+    value: s.landfillKm || p.landfillKm,
+    onChange: e => set({
+      landfillKm: parseInt(e.target.value)
+    }),
+    className: "flex-1 accent-orange-500"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "font-bold w-16 text-right",
+    style: {
+      color: ink
+    }
+  }, s.landfillKm || p.landfillKm, " км"))), /*#__PURE__*/React.createElement("div", {
+    className: "rounded-2xl border border-slate-200 bg-white p-5"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "block text-sm font-medium text-slate-600 mb-1"
+  }, "Брой камиони (паралелно)"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-slate-400 mb-3"
+  }, "Повече камиони и хора не променят общата цена — само календарното време за изпълнение."), /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap gap-2"
+  }, [1, 2, 3].map(n => /*#__PURE__*/React.createElement(Pill, {
+    key: n,
+    active: (s.disposalTrucks || 1) === n,
+    onClick: () => set({
+      disposalTrucks: n
+    })
+  }, n, " камион", n === 1 ? "" : n === 2 ? "а" : "а"))), clockHours > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-slate-500 mt-2"
+  }, "Очаквано време: ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: ink
+    }
+  }, clockHours.toFixed(1), " ч"), " ", "(≈ ", (clockHours / 8).toFixed(1), " работни дни при 8-часов ден)", disposalTotalCrew > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, " · общо ", disposalTotalCrew, " души")), crew * (s.disposalTrucks || 1) > n(p.disposalMaxWorkers || 8) && /*#__PURE__*/React.createElement("div", {
+    className: "text-xs mt-1",
+    style: {
+      color: accent
+    }
+  }, "⚠️ Ограничени сте до ", p.disposalMaxWorkers, " души общо в ", s.city || "този град", " — повече камиони няма да добавят повече хора."))), s.service === "local" && /*#__PURE__*/React.createElement("div", {
     className: "space-y-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "block text-sm font-medium text-slate-600 mb-2"
@@ -3731,7 +4385,7 @@ function KorektCalculator() {
       }, it.m3, " м³ · ", it.kg, " кг/бр", it.surcharge ? ` · спец. +${it.surcharge}${p.currency}` : "", cnt > 0 ? ` · = ${(cnt * it.m3).toFixed(2)} м³ / ${cnt * it.kg} кг` : "")), /*#__PURE__*/React.createElement(Stepper, {
         value: cnt,
         onChange: v => setQty(it.id, v)
-      })), cnt > 0 && (it.dis || it.asm || it.wrap) && /*#__PURE__*/React.createElement("div", {
+      })), cnt > 0 && (it.dis || it.asm || it.wrap || it.protect) && /*#__PURE__*/React.createElement("div", {
         className: "flex flex-wrap gap-x-4 gap-y-1 mt-1.5"
       }, it.dis && /*#__PURE__*/React.createElement("label", {
         className: "flex items-center gap-1.5 cursor-pointer"
@@ -3757,7 +4411,33 @@ function KorektCalculator() {
         style: {
           color: s.asm[it.id] ? accent : "#94a3b8"
         }
-      }, "🔩 сглоби", s.asm[it.id] ? ` +${(it.asm * cnt).toFixed(1)} чч` : "")), it.wrap && /*#__PURE__*/React.createElement("label", {
+      }, "🔩 сглоби", s.asm[it.id] ? ` +${(it.asm * cnt).toFixed(1)} чч` : "")), it.protect && /*#__PURE__*/React.createElement("label", {
+        className: `flex items-center gap-1.5 ${it.protectReq ? "" : "cursor-pointer"}`
+      }, /*#__PURE__*/React.createElement("input", {
+        type: "checkbox",
+        checked: it.protectReq || !!s.protect[it.id],
+        disabled: it.protectReq,
+        onChange: () => toggle("protect", it.id),
+        className: "w-4 h-4 accent-orange-500"
+      }), /*#__PURE__*/React.createElement("span", {
+        className: "text-xs",
+        style: {
+          color: it.protectReq || s.protect[it.id] ? accent : "#94a3b8"
+        }
+      }, "🛡 велпапе ", it.protect * cnt, " м", it.protectReq ? " (задължително)" : "")), it.protect && /*#__PURE__*/React.createElement("label", {
+        className: `flex items-center gap-1.5 ${it.protectReq ? "" : "cursor-pointer"}`
+      }, /*#__PURE__*/React.createElement("input", {
+        type: "checkbox",
+        checked: it.protectReq || !!s.protect[it.id],
+        disabled: it.protectReq,
+        onChange: () => toggle("protect", it.id),
+        className: "w-4 h-4 accent-orange-500"
+      }), /*#__PURE__*/React.createElement("span", {
+        className: "text-xs",
+        style: {
+          color: it.protectReq || s.protect[it.id] ? accent : "#94a3b8"
+        }
+      }, "🛡 велпапе ", it.protect * cnt, " м", it.protectReq ? " (задължително)" : "")), it.wrap && /*#__PURE__*/React.createElement("label", {
         className: `flex items-center gap-1.5 ${it.wrapReq ? "" : "cursor-pointer"}`
       }, /*#__PURE__*/React.createElement("input", {
         type: "checkbox",
@@ -3787,7 +4467,23 @@ function KorektCalculator() {
     style: {
       color: ink
     }
-  }, vol.toFixed(1), " м³ · ", weight, " кг · ", trips, " курс", trips === 1 ? "" : "а", disHours > 0 ? ` · ${disHours.toFixed(1)} ч × ${disCrew}` : "", wrapMeters > 0 ? ` · ${rolls.toFixed(1)} рол.` : ""))), weightLimited && /*#__PURE__*/React.createElement("div", {
+  }, vol.toFixed(1), " м³ · ", weight, " кг · ", trips, " курс", trips === 1 ? "" : "а", disOnlyHours > 0 ? ` · разгл. ${disOnlyHours.toFixed(1)} ч` : "", asmOnlyHours > 0 ? ` · сглоб. ${asmOnlyHours.toFixed(1)} ч` : "", wrapMeters > 0 ? ` · ${rolls.toFixed(1)} рол.` : ""))), s.service === "disposal" && sacks > 0 && /*#__PURE__*/React.createElement("label", {
+    className: "flex items-center justify-between rounded-xl border border-slate-200 p-4 bg-white cursor-pointer"
+  }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("span", {
+    className: "text-sm font-medium block",
+    style: {
+      color: ink
+    }
+  }, "Ние пълним чувалите"), /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-slate-500"
+  }, sacks, " чувала × ", p.fillMinPerSack, " мин = ", fillManHours.toFixed(1), " чч", !s.weFill && " — в момента не се начислява")), /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: !!s.weFill,
+    onChange: e => set({
+      weFill: e.target.checked
+    }),
+    className: "w-5 h-5 accent-orange-500"
+  })), weightLimited && /*#__PURE__*/React.createElement("div", {
     className: "rounded-xl p-3 text-sm",
     style: {
       background: "#fff8ef",
@@ -3828,7 +4524,7 @@ function KorektCalculator() {
     }
   }, "Наши хора пътуват (шофьор + ", p.travelCrew, ")"), /*#__PURE__*/React.createElement("span", {
     className: "text-xs text-slate-500"
-  }, "Придружаващият се плаща на ден, не на час — ", travelDays, " ", travelDays === 1 ? "ден" : "дни", " × ", p.workerDayRate, " ", p.currency))), /*#__PURE__*/React.createElement("label", {
+  }, "Придружаващият се плаща за реалните часове (път + работа) — не за товарене/разтоварване само"))), /*#__PURE__*/React.createElement("label", {
     className: "flex items-start gap-3 rounded-xl border p-3 cursor-pointer",
     style: {
       borderColor: s.courseMode === "localCrew" ? accent : "#e2e8f0"
@@ -3944,12 +4640,12 @@ function KorektCalculator() {
   }, t.name, " · ", t.cap.toFixed(0), " м³"))), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-slate-400 mt-2"
   }, "По-голям камион = по-малко курсове и по-малко пробег.")), /*#__PURE__*/React.createElement(AddressBlock, {
-    title: "Адрес на товарене",
+    title: isDisposal ? "Адрес, откъдето се изнася" : "Адрес на товарене",
     data: s.pickup,
     onChange: d => set({
       pickup: d
     })
-  }), /*#__PURE__*/React.createElement(AddressBlock, {
+  }), !isDisposal && /*#__PURE__*/React.createElement(AddressBlock, {
     title: "Адрес на разтоварване",
     data: s.dropoff,
     onChange: d => set({
@@ -3964,19 +4660,41 @@ function KorektCalculator() {
     }
   }, "Опаковане"), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-slate-400"
-  }, "Матраците и техниката се опаковат задължително със стреч фолио. За останалите мебели отметнете „📦 стреч\" при вещта."), wrapMeters > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "Матраците и техниката се опаковат задължително със стреч фолио. Огледалата, картините и телевизорите — с велпапе или автопласт. За останалите вещи отметнете „📦 стреч\" или „🛡 велпапе\" при вещта."), wrapMeters > 0 && /*#__PURE__*/React.createElement("div", {
     className: "text-xs mt-2",
     style: {
       color: ink
     }
-  }, "Общо ", /*#__PURE__*/React.createElement("b", null, wrapMeters, " м"), " → ", /*#__PURE__*/React.createElement("b", null, rolls.toFixed(1), " ролки"), " × ", p.stretchRollPrice, " ", p.currency, " · труд ", wrapHours.toFixed(1), " чч"))), step === 3 && /*#__PURE__*/React.createElement("div", {
+  }, "Стреч: ", /*#__PURE__*/React.createElement("b", null, wrapMeters, " м"), " → ", /*#__PURE__*/React.createElement("b", null, rolls.toFixed(1), " ролки"), " × ", p.stretchRollPrice, " ", p.currency), protectMeters > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "text-xs mt-1",
+    style: {
+      color: ink
+    }
+  }, "Велпапе / автопласт: ", /*#__PURE__*/React.createElement("b", null, protectMeters, " м"), " × ", p.protectPricePerM, " ", p.currency, "/м")), /*#__PURE__*/React.createElement("div", {
+    className: "rounded-xl border border-slate-200 bg-white p-4"
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-slate-500"
+  }, "Ако Ви трябват кашони, тиксо, стреч фолио или друг опаковъчен материал, може да разгледате", " ", /*#__PURE__*/React.createElement("a", {
+    href: "https://www.korekt-bg.com/magazin/kategorii/packaging-materials",
+    target: "_blank",
+    rel: "noopener noreferrer",
+    className: "underline font-medium",
+    style: {
+      color: ink
+    }
+  }, "онлайн магазина на Корект"), "."))), step === 3 && /*#__PURE__*/React.createElement("div", {
     className: "space-y-4"
   }, /*#__PURE__*/React.createElement("div", {
     className: "rounded-2xl p-6 text-white",
     style: {
       background: ink
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, calcNumberState && /*#__PURE__*/React.createElement("div", {
+    className: "inline-block text-xs font-semibold px-2.5 py-1 rounded-full mb-2",
+    style: {
+      background: accent
+    }
+  }, "Калкулация №", calcNumberState), /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between items-start"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "text-sm opacity-80"
@@ -3997,8 +4715,8 @@ function KorektCalculator() {
       color: accent
     }
   }, weight, " кг"))), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-3 gap-2 mt-4"
-  }, [["Време труд", `${manHours.toFixed(1)} чч`], ["Бригада", `${crew} души${crewByProtocol ? " (протокол)" : ""} · ${clockHours.toFixed(1)} ч`], ["Курсове", `${trips}`]].map(([k, v]) => /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-2 mt-4"
+  }, [["Време труд", `${manHours.toFixed(1)} чч`], ["Бригада", `${isDisposal ? disposalTotalCrew : crew} души${crewByProtocol ? " (протокол)" : ""} · ${clockHours.toFixed(1)} ч`], ["Курсове", `${trips}`], ["Дни за изпълнение", `${workDays} ${workDays === 1 ? "ден" : "дни"}${workDays > 1 ? ` (макс. ${p.dayHours} ч/ден)` : ""}`]].map(([k, v]) => /*#__PURE__*/React.createElement("div", {
     key: k,
     className: "rounded-xl px-3 py-2",
     style: {
@@ -4013,7 +4731,7 @@ function KorektCalculator() {
     style: {
       background: "rgba(255,255,255,0.08)"
     }
-  }, "🚚 ", chosen?.name, " · ", !isCourse ? /*#__PURE__*/React.createElement(React.Fragment, null, "път ", /*#__PURE__*/React.createElement("b", null, totalKm, " км"), " (адрес→адрес)") : /*#__PURE__*/React.createElement(React.Fragment, null, "разстояние ", oneWayKm, " км × ", trips, " курс", trips === 1 ? "" : "а", " двупосочно = ", /*#__PURE__*/React.createElement("b", null, totalKm, " км")), " · ≈ ", fmtTime(driveHours)), /*#__PURE__*/React.createElement("div", {
+  }, "🚚 ", chosen?.name, " · ", isDisposal ? /*#__PURE__*/React.createElement(React.Fragment, null, "до сметището ", /*#__PURE__*/React.createElement("b", null, landfillKm, " км"), " (двупосочно ", totalKm, " км", disposalTrucksN > 1 ? `, ${disposalTrucksN} камиона` : "", ")") : !isCourse ? /*#__PURE__*/React.createElement(React.Fragment, null, "път ", /*#__PURE__*/React.createElement("b", null, totalKm, " км"), " (адрес→адрес)") : /*#__PURE__*/React.createElement(React.Fragment, null, "разстояние ", oneWayKm, " км × ", trips, " курс", trips === 1 ? "" : "а", " двупосочно = ", /*#__PURE__*/React.createElement("b", null, totalKm, " км")), " ", "· ≈ ", fmtTime(isDisposal ? driveHours / disposalTrucksN : driveHours)), /*#__PURE__*/React.createElement("div", {
     className: "text-xs opacity-70 mt-3"
   }, "Ориентировъчна цена. За точна оферта при по-сложни премествания препоръчваме безплатен оглед.", saveState === "saving" && /*#__PURE__*/React.createElement("span", {
     className: "ml-1"
@@ -4041,7 +4759,7 @@ function KorektCalculator() {
     style: {
       color: ink
     }
-  }, s.service === "local" ? "Градско преместване" : s.service === "intercity" ? "Междуградско" : "Международно")), /*#__PURE__*/React.createElement("div", {
+  }, s.service === "local" ? "Градско преместване" : s.service === "intercity" ? "Междуградско" : s.service === "disposal" ? "Изхвърляне на отпадък" : "Международно")), /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between gap-3"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-slate-500"
@@ -4050,7 +4768,7 @@ function KorektCalculator() {
     style: {
       color: ink
     }
-  }, s.service === "local" ? NEIGHBORHOODS[s.city] ? `${s.city}: ${s.pickupHood} → ${s.dropoffHood} (${oneWayKm} км)` : `${s.city} (${oneWayKm} км)` : s.service === "intercity" ? `${s.pickupCity} → ${s.dropoffCity} (${oneWayKm} км, център до център)` : `${s.country} (${oneWayKm} км)`)), isCourse && /*#__PURE__*/React.createElement("div", {
+  }, s.service === "local" ? NEIGHBORHOODS[s.city] ? `${s.city}: ${s.pickupHood} → ${s.dropoffHood} (${oneWayKm} км)` : `${s.city} (${oneWayKm} км)` : s.service === "disposal" ? `${s.city}${s.pickupHood ? ", " + s.pickupHood : ""} → сметище (${landfillKm} км)` : s.service === "intercity" ? `${s.pickupCity} → ${s.dropoffCity} (${oneWayKm} км, център до център)` : `${s.country} (${oneWayKm} км)`)), isCourse && /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between gap-3"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-slate-500"
@@ -4088,6 +4806,7 @@ function KorektCalculator() {
     if (s.dis[id] && it.dis) tags.push("разглобяване");
     if (s.asm[id] && it.asm) tags.push("сглобяване");
     if (it.wrapReq) tags.push("стреч (задълж.)");else if (s.wrap[id] && it.wrap) tags.push("стреч");
+    if (it.protectReq) tags.push("велпапе (задълж.)");else if (s.protect[id] && it.protect) tags.push("велпапе");
     return /*#__PURE__*/React.createElement("div", {
       key: id,
       className: "flex justify-between gap-3 text-sm"
@@ -4106,9 +4825,9 @@ function KorektCalculator() {
     style: {
       color: ink
     }
-  }, /*#__PURE__*/React.createElement("span", null, "Общо ", vol.toFixed(1), " м³ · ", weight, " кг · ", trips, " курс", trips === 1 ? "" : "а", " · бригада ", crew, " души")), (disHours > 0 || wrapMeters > 0) && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, "Общо ", vol.toFixed(1), " м³ · ", weight, " кг · ", trips, " курс", trips === 1 ? "" : "а", " · бригада ", isDisposal ? disposalTotalCrew : crew, " души", workDays > 1 ? ` · ${workDays} дни за изпълнение (макс. ${p.dayHours} ч/ден)` : "")), (disHours > 0 || wrapMeters > 0) && /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-slate-500 mt-2 leading-relaxed"
-  }, disHours > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, "Разглобяване и сглобяване: ", disHours.toFixed(1), " ч с ", disCrew, " души. "), wrapMeters > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, "Опаковане със стреч: ", wrapMeters, " м."))), /*#__PURE__*/React.createElement("div", {
+  }, disOnlyHours > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, "Разглобяване: ", disOnlyHours.toFixed(1), " ч с ", disCrew, " души. "), asmOnlyHours > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, "Сглобяване: ", asmOnlyHours.toFixed(1), " ч с ", asmCrew, " души. "), wrapMeters > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, "Опаковане със стреч: ", wrapMeters, " м. "), protectMeters > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, "Велпапе/автопласт: ", protectMeters, " м."))), /*#__PURE__*/React.createElement("div", {
     className: "rounded-2xl border border-slate-200 bg-white p-5"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-sm font-semibold mb-3",
