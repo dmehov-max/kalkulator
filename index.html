@@ -240,6 +240,8 @@ const DEFAULTS = {
   },
   sheetEndpoint: "",
   // URL на Apps Script уеб приложението (Google Sheet база)
+  mapsApiKey: "",
+  // Google Maps Routes API ключ — за реални пътни разстояния
 
   phone: "0700 1 4485",
   phoneHref: "tel:+35970014485"
@@ -1950,7 +1952,86 @@ function baseOnRoute(from, base, to, roadFactor, tolerance) {
   if (direct == null || a == null || b == null) return false;
   return a + b <= direct * (tolerance || 1.1);
 }
+
+/* Реални пътни разстояния (км, еднопосочно) за маршрути, където изчислението
+   по права линия се разминава — напр. планински обходи. Имат превес над формулата.
+   Посоката няма значение — записвай ги в какъвто ред е удобно. */
+const REAL_DISTANCES_RAW = {
+  "София|Банско": 160
+};
+function realDistanceKey(a, b) {
+  return [a, b].sort((x, y) => x.localeCompare(y, "bg")).join("|");
+}
+
+// нормализираме ключовете веднъж, за да е без значение в какъв ред са записани
+const REAL_DISTANCES = Object.fromEntries(Object.entries(REAL_DISTANCES_RAW).map(([k, v]) => {
+  const [a, b] = k.split("|");
+  return [realDistanceKey(a, b), v];
+}));
+function lookupRealDistance(cityA, cityB) {
+  if (!cityA || !cityB) return null;
+  const direct = REAL_DISTANCES[realDistanceKey(cityA, cityB)];
+  if (direct != null) return direct;
+  // толерантно спрямо непълно въведени имена
+  const a = findCity(cityA),
+    b = findCity(cityB);
+  if (!a || !b) return null;
+  const viaMatch = REAL_DISTANCES[realDistanceKey(a, b)];
+  return viaMatch != null ? viaMatch : null;
+}
+
+/* --- Реални разстояния през Google Routes API (по избор) ---------------
+   Ако е зададен ключ в ⚙ Параметри, калкулаторът пита Google за реалния
+   маршрут по път. Резултатите се кешират, за да не се хабят заявки. */
+const routesCache = new Map();
+function routesCacheKey(a, b) {
+  return [a, b].sort((x, y) => x.localeCompare(y, "bg")).join("|");
+}
+async function fetchRealDistanceKm(cityA, cityB, apiKey) {
+  if (!apiKey || !cityA || !cityB) return null;
+  const ck = routesCacheKey(cityA, cityB);
+  if (routesCache.has(ck)) return routesCache.get(ck);
+  try {
+    const res = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "routes.distanceMeters"
+      },
+      body: JSON.stringify({
+        origin: {
+          address: `${cityA}, България`
+        },
+        destination: {
+          address: `${cityB}, България`
+        },
+        travelMode: "DRIVE"
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const meters = data?.routes?.[0]?.distanceMeters;
+    if (!meters) return null;
+    const km = Math.round(meters / 1000);
+    routesCache.set(ck, km);
+    return km;
+  } catch (e) {
+    return null; // при проблем си остава изчислението по формулата
+  }
+}
 function estimateKmAny(cityA, hoodA, cityB, hoodB, roadFactor) {
+  // 1) ръчно заложено реално разстояние (най-висок приоритет)
+  const real = lookupRealDistance(cityA, cityB);
+  if (real != null) return real;
+  // 2) вече изтеглено от Google Routes API
+  const a0 = findCity(cityA),
+    b0 = findCity(cityB);
+  if (a0 && b0) {
+    const cached = routesCache.get(routesCacheKey(a0, b0));
+    if (cached != null) return cached;
+  }
+  // 3) изчисление по права линия
   const a = pointFor(cityA, hoodA),
     b = pointFor(cityB, hoodB);
   if (!a || !b) return null;
@@ -2588,7 +2669,7 @@ async function pushToSheet(record, endpoint) {
     return false;
   }
 }
-const CALC_COUNTER_KEY = "calc:counter";
+const CALC_COUNTER_KEY = "counter:calc";
 
 // поредните номера на калкулациите (обща бройка, споделена между устройствата)
 async function nextCalcNumber() {
@@ -2611,9 +2692,13 @@ async function loadCalcs() {
   for (const k of keys) {
     try {
       const val = await storageGet(k);
-      if (val) out.push({
+      if (!val) continue;
+      const rec = JSON.parse(val);
+      // пропускаме всичко, което не е истинска калкулация (напр. служебни ключове)
+      if (!rec || typeof rec !== "object" || !rec.createdAt || typeof rec.total !== "number") continue;
+      out.push({
         key: k,
-        ...JSON.parse(val)
+        ...rec
       });
     } catch (e) {/* пропускаме повреден запис */}
   }
@@ -3365,6 +3450,22 @@ function SettingsPanel({
     suffix: "€/бр."
   })), /*#__PURE__*/React.createElement("div", {
     className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2"
+  }, "Реални разстояния (Google Maps)"), /*#__PURE__*/React.createElement("label", {
+    className: "block"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-[11px] text-slate-500"
+  }, "Routes API ключ — оставете празно за изчисление по права линия"), /*#__PURE__*/React.createElement("input", {
+    value: p.mapsApiKey || "",
+    onChange: e => upd({
+      mapsApiKey: e.target.value
+    }),
+    placeholder: "AIza...",
+    type: "password",
+    className: "w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1"
+  })), /*#__PURE__*/React.createElement("p", {
+    className: "text-[11px] text-slate-400 mt-1"
+  }, "С ключ разстоянията се теглят по реален път от Google. Резултатите се запомнят, за да не се хабят заявки."), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2"
   }, "Google Sheet база данни"), /*#__PURE__*/React.createElement("label", {
     className: "block"
   }, /*#__PURE__*/React.createElement("span", {
@@ -3735,6 +3836,23 @@ function KorektCalculator() {
 
   // --- зареждане и автоматичен запис на ПАРАМЕТРИТЕ ---
   const [paramsLoaded, setParamsLoaded] = useState(false);
+  const [, forceRedraw] = useState(0); // за преизчисление след като Google върне разстояние
+
+  // Ако има ключ и са избрани два града — теглим реалното разстояние по път
+  useEffect(() => {
+    if (s.service !== "intercity" || !p.mapsApiKey) return;
+    const a = findCity(s.pickupCity),
+      b = findCity(s.dropoffCity);
+    if (!a || !b || a === b) return;
+    if (routesCache.has(routesCacheKey(a, b))) return; // вече го знаем
+    let alive = true;
+    fetchRealDistanceKm(a, b, p.mapsApiKey).then(km => {
+      if (alive && km != null) forceRedraw(x => x + 1); // резултатът вече е в кеша
+    });
+    return () => {
+      alive = false;
+    };
+  }, [s.service, s.pickupCity, s.dropoffCity, p.mapsApiKey]);
   const [paramSave, setParamSave] = useState("idle"); // idle | saving | saved | error
 
   useEffect(() => {
