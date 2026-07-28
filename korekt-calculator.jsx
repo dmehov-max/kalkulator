@@ -100,7 +100,7 @@ const DEFAULTS = {
   mapsApiKey: "",        // Google Maps Routes API ключ — за реални пътни разстояния
 
   phone: "0882 944 098",
-  phoneHref: "tel:+35970014485",
+  phoneHref: "tel:+359882944098",
 };
 
 /* -------- Каталог с вещи -------- */
@@ -1432,7 +1432,7 @@ function HoodInput({ city, value, onChange, placeholder }) {
   );
 }
 
-function SettingsPanel({ p, setP, saveState }) {
+function SettingsPanel({ p, setP, saveState, onSave }) {
   const upd = (patch) => setP({ ...p, ...patch });
 
   const exportParams = () => {
@@ -1597,6 +1597,9 @@ function SettingsPanel({ p, setP, saveState }) {
       </label>
 
       <div className="flex flex-wrap items-center gap-2 mt-4">
+        <button onClick={onSave} disabled={saveState === "saving"} className="text-xs font-semibold px-3 py-1.5 rounded-full text-white disabled:opacity-60" style={{ background: accent }}>
+          💾 Запази
+        </button>
         <button onClick={exportParams} className="text-xs font-semibold px-3 py-1.5 rounded-full text-white" style={{ background: ink }}>
           ⬇ Свали настройките
         </button>
@@ -1837,6 +1840,13 @@ export default function KorektCalculator() {
     return () => clearTimeout(t);
   }, [p, paramsLoaded]);
 
+  const forceSaveParams = async () => {
+    setParamSave("saving");
+    const okLocal = await saveParams(p);
+    const okSheet = await pushParamsToSheet(p, p.sheetEndpoint);
+    setParamSave(okSheet ? "saved-sheet" : okLocal ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
+  };
+
   // --- автоматичен запис на калкулацията при показване на цената ---
   const [showLog, setShowLog] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
@@ -1932,7 +1942,7 @@ export default function KorektCalculator() {
         </div>
 
         {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} />}
-        {showSettings && <SettingsPanel p={p} setP={setP} saveState={paramSave} />}
+        {showSettings && <SettingsPanel p={p} setP={setP} saveState={paramSave} onSave={forceSaveParams} />}
 
         <div className="flex gap-2 mb-8">
           {STEPS.map((label, i) => (
