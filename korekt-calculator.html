@@ -2797,7 +2797,8 @@ function HoodInput({
 function SettingsPanel({
   p,
   setP,
-  saveState
+  saveState,
+  onSave
 }) {
   const upd = patch => setP({
     ...p,
@@ -3364,6 +3365,13 @@ function SettingsPanel({
   })), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap items-center gap-2 mt-4"
   }, /*#__PURE__*/React.createElement("button", {
+    onClick: onSave,
+    disabled: saveState === "saving",
+    className: "text-xs font-semibold px-3 py-1.5 rounded-full text-white disabled:opacity-60",
+    style: {
+      background: accent
+    }
+  }, "💾 Запази"), /*#__PURE__*/React.createElement("button", {
     onClick: exportParams,
     className: "text-xs font-semibold px-3 py-1.5 rounded-full text-white",
     style: {
@@ -3711,6 +3719,12 @@ function KorektCalculator() {
     }, 600);
     return () => clearTimeout(t);
   }, [p, paramsLoaded]);
+  const forceSaveParams = async () => {
+    setParamSave("saving");
+    const okLocal = await saveParams(p);
+    const okSheet = await pushParamsToSheet(p, p.sheetEndpoint);
+    setParamSave(okSheet ? "saved-sheet" : okLocal ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
+  };
 
   // --- автоматичен запис на калкулацията при показване на цената ---
   const [showLog, setShowLog] = useState(false);
@@ -3838,7 +3852,8 @@ function KorektCalculator() {
   }), showSettings && /*#__PURE__*/React.createElement(SettingsPanel, {
     p: p,
     setP: setP,
-    saveState: paramSave
+    saveState: paramSave,
+    onSave: forceSaveParams
   }), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-2 mb-8"
   }, STEPS.map((label, i) => /*#__PURE__*/React.createElement("div", {
