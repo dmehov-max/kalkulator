@@ -27,7 +27,7 @@ const engineSrc =
   `\nexport { DEFAULTS, CATALOG, ITEM_INDEX, totalVolume, countKind, NEIGHBORHOODS,
   haversineKm, normHood, findHood, cityCenter, estimateKm, crewFor, ownTruck,
   fleetFor, tripsFor, bestTruck, computePrice, totalWeight, findCity, protectMetersFor, BASES, nearestBase, baseOnRoute, mergeParams, buildRecord, toCSV, disHoursFor, wrapMetersFor, CITIES, estimateKmAny, pointFor,
-  saveCalc, loadCalcs, saveParams, loadParams, CALC_PREFIX, PARAMS_KEY, fetchParamsFromSupabase, pushParamsToSupabase, pushCalcToSupabase, fetchCalcsFromSupabase, fetchCatalogItemsFromSupabase, pushCatalogItemToSupabase, applyExtraCatalogItems, nextCalcNumber, CALC_COUNTER_KEY, fetchRealDistanceKm, routesCache, ROUTES_CACHE_KEY,
+  saveCalc, loadCalcs, saveParams, loadParams, CALC_PREFIX, PARAMS_KEY, fetchParamsFromSupabase, pushParamsToSupabase, pushCalcToSupabase, fetchCalcsFromSupabase, fetchCatalogItemsFromSupabase, pushCatalogItemToSupabase, applyExtraCatalogItems, nextCalcNumber, CALC_COUNTER_KEY, fetchRealDistanceKm, routesCache, ROUTES_CACHE_KEY, roundHalf,
   storageSet, storageGet, storageList, getStorageMode, hasStorage };\n`;
 
 const tmp = path.join(os.tmpdir(), `korekt-engine-${Date.now()}.mjs`);
@@ -796,6 +796,25 @@ test("демонтаж: коефициентът от параметрите с�
   const двоен = calc({ qty: { wardrobe3: 1 }, dis: { wardrobe3: true } }, { ...P, disFactor: 2 });
   near(двоен.disHours, базов.disHours * 2, 0.01);
 });
+/* --- Закръгляне на часовете в разбивката (нагоре до половин час) --- */
+test("закръгляне: 0.4 → 0.5, 1.2 → 1.5, 1.6 → 2", () => {
+  near(E.roundHalf(0.4), 0.5, 0.001);
+  near(E.roundHalf(1.2), 1.5, 0.001);
+  near(E.roundHalf(1.6), 2, 0.001);
+});
+test("закръгляне: вече кръгло число не се променя", () => {
+  eq(E.roundHalf(2), 2);
+  eq(E.roundHalf(1.5), 1.5);
+  eq(E.roundHalf(0), 0);
+});
+test("закръгляне: показаните часове в перото за пренасяне съвпадат с таксуваните", () => {
+  const r = calc({ qty: { boxM: 7 }, pickupHood: "Център", dropoffHood: "Младост" });
+  const line = r.lines.find((l) => l.label.startsWith("Пренасяне"));
+  ok(line, "липсва перо за пренасяне");
+  const shown = parseFloat(line.label.match(/([\d.]+) ч/)[1]);
+  eq(shown * 2, Math.round(shown * 2), "показаните часове трябва да са кратни на 0.5:");
+  near(line.amount, shown * r.crew * P.workerRate, 1, "цената трябва да отговаря на показаните часове:");
+});
 test("демонтаж: показва се като отделно перо в разбивката", () => {
   const r = calc({ qty: { wardrobe3: 1 }, dis: { wardrobe3: true } });
   const line = r.lines.find((l) => l.label.startsWith("Разглобяване"));
@@ -806,7 +825,9 @@ test("опаковането е отделно перо", () => {
   const r = calc({ qty: { mattress: 1 } });
   const line = r.lines.find((l) => l.label.startsWith("Опаковане"));
   ok(line, "липсва перо за опаковане");
-  eq(line.amount, Math.round(r.wrapManHours * P.workerRate));
+  // часовете в перото са закръглени нагоре до половин час преди таксуване
+  const closeHalf = Math.ceil((r.wrapManHours + r.protectManHours) * 2) / 2;
+  eq(line.amount, Math.round(closeHalf * P.workerRate));
 });
 
 /* --- Сглобяване --- */

@@ -733,6 +733,8 @@ function estimateKmAny(cityA, hoodA, cityB, hoodB, roadFactor) {
 }
 
 const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+// закръгля показаните/таксувани часове нагоре до половин час: 0.4→0.5, 1.2→1.5, 1.6→2
+const roundHalf = (h) => Math.ceil(n(h) * 2) / 2;
 const crewFor = (vol, p) => (p.crewTiers.find((t) => vol <= t.maxM3) || { crew: 4 }).crew;
 
 function ownTruck(p) {
@@ -994,14 +996,18 @@ function computePrice(s, p) {
     handlingClock = jobClock; // само престоят на камиона — за него се таксува транспортът
     handlingManHours = jobClock * totalCrew;
     if (fillManHours) {
-      add(`Пълнене на ${sacks} чувала — ${fillManHours.toFixed(1)} чч × ${disposalRate} ${p.currency}/ч`,
-          fillManHours * disposalRate);
+      const h = roundHalf(fillManHours);
+      add(`Пълнене на ${sacks} чувала — ${h.toFixed(1)} чч × ${disposalRate} ${p.currency}/ч`,
+          h * disposalRate);
     }
     if (sacks > 0) {
       add(`Чували — ${sacks} бр. × ${n(p.sackPrice)} ${p.currency}/бр.`, sacks * n(p.sackPrice), true);
     }
-    add(`Изнасяне, извозване и изсипване${trucksN > 1 ? ` (${trucksN} камиона)` : ""} — ${jobClock.toFixed(1)} ч × ${totalCrew} души × ${disposalRate} ${p.currency}/ч`,
-        handlingManHours * disposalRate);
+    {
+      const h = roundHalf(jobClock);
+      add(`Изнасяне, извозване и изсипване${trucksN > 1 ? ` (${trucksN} камиона)` : ""} — ${h.toFixed(1)} ч × ${totalCrew} души × ${disposalRate} ${p.currency}/ч`,
+          h * totalCrew * disposalRate);
+    }
   } else if (isLabourOnly) {
     // само хамали — клиентът осигурява транспорта за багажа.
     // Ако работата е в друг град, се плаща кола за хората + времето за път.
@@ -1015,11 +1021,15 @@ function computePrice(s, p) {
 
     handlingClock = jobClock + travelH;
     handlingManHours = handlingClock * crew;
-    add(`Товарене и пренасяне — ${jobClock.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-        jobClock * crew * n(p.workerRate));
+    {
+      const h = roundHalf(jobClock);
+      add(`Товарене и пренасяне — ${h.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
+          h * crew * n(p.workerRate));
+    }
     if (travelH > 0) {
-      add(`Път на бригадата (${labourBaseCity} → ${s.city}) — ${travelH.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-          travelH * crew * n(p.workerRate));
+      const h = roundHalf(travelH);
+      add(`Път на бригадата (${labourBaseCity} → ${s.city}) — ${h.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
+          h * crew * n(p.workerRate));
     }
     // кола за бригадата — винаги, с минимална такса дори в рамките на града
     const carKmFee = labourKm ? 2 * labourKm * n(p.carRatePerKm) : 0;
@@ -1040,11 +1050,15 @@ function computePrice(s, p) {
     handlingClock = jobClock + travelH;
     handlingManHours = handlingClock * crew;
     const jobRate = isAssembly ? disAsmRate : n(p.workerRate); // монтажът е квалифициран труд
-    add(`${isAssembly ? "Монтаж на мебели" : "Товарене/разтоварване"} — ${jobClock.toFixed(1)} ч × ${crew} души × ${jobRate} ${p.currency}/ч`,
-        jobClock * crew * jobRate);
+    {
+      const h = roundHalf(jobClock);
+      add(`${isAssembly ? "Монтаж на мебели" : "Товарене/разтоварване"} — ${h.toFixed(1)} ч × ${crew} души × ${jobRate} ${p.currency}/ч`,
+          h * crew * jobRate);
+    }
     if (travelH > 0) {
-      add(`Път на бригадата (${labourBaseCity} → ${s.city}) — ${travelH.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-          travelH * crew * n(p.workerRate));
+      const h = roundHalf(travelH);
+      add(`Път на бригадата (${labourBaseCity} → ${s.city}) — ${h.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
+          h * crew * n(p.workerRate));
     }
     const carKmFee = labourKm ? 2 * labourKm * n(p.carRatePerKm) : 0;
     const carFee = Math.max(carKmFee, n(p.labourMinCarFee || 0));
@@ -1058,16 +1072,21 @@ function computePrice(s, p) {
     // клиентът разтоварва сам — плаща се само товаренето при него
     handlingManHours = loadClock * crew;
     handlingClock = loadClock;
-    add(`Товарене (${s.pickupCity}) — ${loadClock.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-        handlingManHours * n(p.workerRate));
+    {
+      const h = roundHalf(loadClock);
+      add(`Товарене (${s.pickupCity}) — ${h.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
+          h * crew * n(p.workerRate));
+    }
   } else {
     handlingManHours = handlingClock * crew;
     if (isCourse) {
-      add(`Товарене — ${loadClock.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`, loadClock * crew * n(p.workerRate));
-      add(`Разтоварване — ${unloadClock.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`, unloadClock * crew * n(p.workerRate));
+      const hL = roundHalf(loadClock), hU = roundHalf(unloadClock);
+      add(`Товарене — ${hL.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`, hL * crew * n(p.workerRate));
+      add(`Разтоварване — ${hU.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`, hU * crew * n(p.workerRate));
     } else {
-      add(`Пренасяне и път — ${handlingClock.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-          handlingManHours * n(p.workerRate));
+      const h = roundHalf(handlingClock);
+      add(`Пренасяне и път — ${h.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
+          h * crew * n(p.workerRate));
     }
   }
 
@@ -1084,18 +1103,20 @@ function computePrice(s, p) {
 
   // 2) РАЗГЛОБЯВАНЕ/СГЛОБЯВАНЕ — реални часове × хора по демонтажа, квалифициран труд (камионът чака, но не се таксува)
   if (disOnlyManHours) {
-    add(`Разглобяване (${s.pickupHood || s.pickupCity || "товарене"}) — ${disOnlyHours.toFixed(1)} ч × ${disCrew} души × ${disAsmRate} ${p.currency}/ч`,
-        disOnlyManHours * disAsmRate);
+    const h = roundHalf(disOnlyHours);
+    add(`Разглобяване (${s.pickupHood || s.pickupCity || "товарене"}) — ${h.toFixed(1)} ч × ${disCrew} души × ${disAsmRate} ${p.currency}/ч`,
+        h * disCrew * disAsmRate);
   }
   if (asmOnlyManHours) {
-    add(`Сглобяване (${s.dropoffHood || s.dropoffCity || "разтоварване"}) — ${asmOnlyHours.toFixed(1)} ч × ${asmCrew} души × ${disAsmRate} ${p.currency}/ч`,
-        asmOnlyManHours * disAsmRate);
+    const h = roundHalf(asmOnlyHours);
+    add(`Сглобяване (${s.dropoffHood || s.dropoffCity || "разтоварване"}) — ${h.toFixed(1)} ч × ${asmCrew} души × ${disAsmRate} ${p.currency}/ч`,
+        h * asmCrew * disAsmRate);
   }
 
   // 3) ОПАКОВАНЕ — човекочаса
   if (wrapManHours + protectManHours) {
-    const общо = wrapManHours + protectManHours;
-    add(`Опаковане — ${общо.toFixed(1)} чч × ${n(p.workerRate)} ${p.currency}/ч`, общо * n(p.workerRate));
+    const h = roundHalf(wrapManHours + protectManHours);
+    add(`Опаковане — ${h.toFixed(1)} чч × ${n(p.workerRate)} ${p.currency}/ч`, h * n(p.workerRate));
   }
 
   // 3.5) НОСЕНЕ НА ДЪЛГО РАЗСТОЯНИЕ до/от камиона — реално добавено време, не само такса
@@ -1108,8 +1129,9 @@ function computePrice(s, p) {
   const carryHoursTot = carryExtraHoursFor(s.pickup) + (skipDropoffCarry ? 0 : carryExtraHoursFor(s.dropoff));
   const carryManHours = carryHoursTot * crew;
   if (carryHoursTot) {
-    add(`Носене на дълго разстояние до камиона — ${carryHoursTot.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-        carryManHours * n(p.workerRate));
+    const h = roundHalf(carryHoursTot);
+    add(`Носене на дълго разстояние до камиона — ${h.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
+        h * crew * n(p.workerRate));
   }
 
   const manHours = handlingManHours + disManHours + wrapManHours + protectManHours + fillManHours + carryManHours;
@@ -1153,7 +1175,7 @@ function computePrice(s, p) {
   if (usesFieldCrew) {
     // без транспортно перо
   } else if (isDisposal) {
-    const totalTruckHours = handlingClock * disposalTrucksN; // сума от часовете на всички камиони
+    const totalTruckHours = roundHalf(handlingClock * disposalTrucksN); // сума от часовете на всички камиони
     add(`Транспорт${disposalTrucksN > 1 ? ` (${disposalTrucksN} камиона)` : ""} — ${totalTruckHours.toFixed(1)} ч × ${n(p.truckRate)} ${p.currency}/ч (${totalKm} км до сметището)`,
         totalTruckHours * n(p.truckRate));
     const fee = n((p.landfillFees || {})[wasteType]);
@@ -1161,7 +1183,8 @@ function computePrice(s, p) {
       add(`Такса сметище (${WASTE_LABEL[wasteType]}) — ${trips} курс${trips === 1 ? "" : "а"} × ${fee} ${p.currency}`, trips * fee);
     }
   } else if (!isCourse) {
-    add(`Транспорт — ${handlingClock.toFixed(1)} ч × ${n(p.truckRate)} ${p.currency}/ч`, handlingClock * n(p.truckRate));
+    const h = roundHalf(handlingClock);
+    add(`Транспорт — ${h.toFixed(1)} ч × ${n(p.truckRate)} ${p.currency}/ч`, h * n(p.truckRate));
   } else {
     const rate = chosen ? chosen.kmRate : n(p.kmRate);
     if (totalKm) add(`Транспорт — ${totalKm} км × ${rate} ${p.currency}/км`, totalKm * rate);
