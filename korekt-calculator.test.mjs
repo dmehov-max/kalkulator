@@ -27,7 +27,7 @@ const engineSrc =
   `\nexport { DEFAULTS, CATALOG, ITEM_INDEX, totalVolume, countKind, NEIGHBORHOODS,
   haversineKm, normHood, findHood, cityCenter, estimateKm, crewFor, ownTruck,
   fleetFor, tripsFor, bestTruck, computePrice, totalWeight, findCity, protectMetersFor, BASES, nearestBase, baseOnRoute, mergeParams, buildRecord, toCSV, disHoursFor, wrapMetersFor, CITIES, estimateKmAny, pointFor,
-  saveCalc, loadCalcs, saveParams, loadParams, CALC_PREFIX, PARAMS_KEY, fetchParamsFromSupabase, pushParamsToSupabase, pushCalcToSupabase, fetchCalcsFromSupabase, nextCalcNumber, CALC_COUNTER_KEY, fetchRealDistanceKm, routesCache, ROUTES_CACHE_KEY,
+  saveCalc, loadCalcs, saveParams, loadParams, CALC_PREFIX, PARAMS_KEY, fetchParamsFromSupabase, pushParamsToSupabase, pushCalcToSupabase, fetchCalcsFromSupabase, fetchCatalogItemsFromSupabase, pushCatalogItemToSupabase, applyExtraCatalogItems, nextCalcNumber, CALC_COUNTER_KEY, fetchRealDistanceKm, routesCache, ROUTES_CACHE_KEY,
   storageSet, storageGet, storageList, getStorageMode, hasStorage };\n`;
 
 const tmp = path.join(os.tmpdir(), `korekt-engine-${Date.now()}.mjs`);
@@ -1373,6 +1373,43 @@ test("велпапе: вдига цената", () => {
   ok(с.protectMeters > 0);
 });
 
+/* --- Носене на дълго разстояние до камиона --- */
+test("носене: под прага не добавя нищо", () => {
+  const r = calc({ qty: { boxL: 5 }, pickup: { ...addr(), carryDistanceM: 15 } });
+  const без = calc({ qty: { boxL: 5 } });
+  eq(r.carryHoursTot, 0);
+  eq(r.total, без.total, "цената не бива да се променя:");
+});
+test("носене: над прага добавя реално време, не само пари", () => {
+  const r = calc({ qty: { boxL: 5 }, pickup: { ...addr(), carryDistanceM: 35 } }); // 15м над прага → 2×5мин
+  near(r.carryHoursTot, 10 / 60, 0.01, "часове носене:");
+  ok(r.lines.some((l) => l.label.startsWith("Носене на дълго разстояние")), "трябва да има перо:");
+  const без = calc({ qty: { boxL: 5 } });
+  ok(r.clockHours > без.clockHours, "трябва да удължи престоя:");
+  ok(r.manHours > без.manHours, "трябва да вдигне човекочасовете:");
+});
+test("носене: стъпва на всеки 10м (закръгля нагоре)", () => {
+  const десет = calc({ qty: { boxL: 5 }, pickup: { ...addr(), carryDistanceM: 30 } }); // точно 10 над прага
+  const единайсет = calc({ qty: { boxL: 5 }, pickup: { ...addr(), carryDistanceM: 31 } }); // 11 над прага → 2 сегмента
+  near(десет.carryHoursTot, 5 / 60, 0.01);
+  near(единайсет.carryHoursTot, 10 / 60, 0.01);
+});
+test("носене: важи и за адреса на разтоварване при обикновено градско", () => {
+  const r = calc({ qty: { boxL: 5 }, dropoff: { ...addr(), carryDistanceM: 35 } });
+  ok(r.carryHoursTot > 0, "разтоварването трябва да брои носенето:");
+});
+test("носене: не се брои на разтоварване при самостоятелно разтоварване от клиента", () => {
+  const r = calc({
+    service: "intercity", pickupCity: "София", dropoffCity: "Пловдив", courseMode: "selfUnload",
+    qty: { boxL: 5 }, dropoff: { ...addr(), carryDistanceM: 35 },
+  });
+  eq(r.carryHoursTot, 0, "клиентът разтоварва сам — не е наша грижа:");
+});
+test("носене: параметрите се четат от p", () => {
+  const r = calc({ qty: { boxL: 5 }, pickup: { ...addr(), carryDistanceM: 50 } }, { ...P, carryFreeDistanceM: 40, carryExtraMinPer10m: 20 });
+  near(r.carryHoursTot, 20 / 60, 0.01, "10м над нов праг × 20 мин:");
+});
+
 /* --- Минимални цени --- */
 test("минимум: градско не пада под прага", () => {
   const r = calc({ qty: { boxS: 1 }, pickupHood: "Център", dropoffHood: "Център" });
@@ -1682,6 +1719,31 @@ testAsync("калкулации: мрежова грешка при изтегл
   globalThis.fetch = async () => { throw new Error("няма мрежа"); };
   eq((await E.fetchCalcsFromSupabase("https://x.supabase.co", "key")).length, 0);
   delete globalThis.fetch;
+});
+
+testAsync("каталог от базата: изтегляне на артикули, добавени от колеги", async () => {
+  globalThis.fetch = async () => ({ ok: true, json: async () => ([{ id: "cat:1", group_name: "Спалня", label: "Тест", m3: 0.3, kg: 10 }]) });
+  const rows = await E.fetchCatalogItemsFromSupabase("https://x.supabase.co", "key");
+  eq(rows.length, 1);
+  eq(rows[0].label, "Тест");
+  delete globalThis.fetch;
+  eq((await E.fetchCatalogItemsFromSupabase("", "")).length, 0, "без връзка — празен списък:");
+});
+testAsync("каталог от базата: изпращане изисква ID", async () => {
+  eq(await E.pushCatalogItemToSupabase({ label: "х", m3: 1, kg: 1 }, "https://x.supabase.co", "key"), false);
+});
+testAsync("каталог от базата: артикулите се вливат в съществуваща група и участват в цената", async () => {
+  eq(E.ITEM_INDEX["custom:test-desk-lamp"], undefined, "не трябва да съществува преди добавянето:");
+  E.applyExtraCatalogItems([{ id: "custom:test-desk-lamp", group_name: "Спалня", label: "Тестова лампа", m3: 0.05, kg: 2 }]);
+  ok(E.ITEM_INDEX["custom:test-desk-lamp"], "трябва да е в индекса:");
+  const grp = E.CATALOG.find((g) => g.group === "Спалня");
+  ok(grp.items.some((i) => i.id === "custom:test-desk-lamp"), "трябва да е в групата:");
+  const r = calc({ qty: { "custom:test-desk-lamp": 3 } });
+  near(r.vol, 0.15, 0.01, "обемът трябва да включва новия артикул:");
+});
+testAsync("каталог от базата: непозната група се пропуска безопасно", async () => {
+  E.applyExtraCatalogItems([{ id: "custom:test-nogroup", group_name: "Несъществуваща", label: "х", m3: 1, kg: 1 }]);
+  eq(E.ITEM_INDEX["custom:test-nogroup"], undefined);
 });
 
 

@@ -57,6 +57,10 @@ const DEFAULTS = {
   appliancePerFloor: 3,  // €/етаж на нормален уред (пералня/хладилник)
   heavyAppliancePerFloor: 5, // €/етаж на нестандартен уред (двуврат хлад., Miele)
 
+  // Носене на дълго разстояние до/от камиона (на адрес) — реално време, не само такса
+  carryFreeDistanceM: 20,   // м — до толкова разстояние не се брои допълнително
+  carryExtraMinPer10m: 5,   // допълнителни минути труд на екипа на всеки 10 м над прага
+
   // ИЗХВЪРЛЯНЕ (извозване до сметище)
   fillMinPerSack: 2,      // минути за пълнене на един чувал
   dumpHoursPerTrip: 0.4,  // разтоварване/изсипване на сметището, на курс
@@ -1063,8 +1067,22 @@ function computePrice(s, p) {
     add(`Опаковане — ${общо.toFixed(1)} чч × ${n(p.workerRate)} ${p.currency}/ч`, общо * n(p.workerRate));
   }
 
-  const manHours = handlingManHours + disManHours + wrapManHours + protectManHours + fillManHours;
-  const clockHours = handlingClock + fillClockElapsed + disHours + (crew ? (wrapManHours + protectManHours) / crew : wrapManHours + protectManHours); // общ престой на обекта
+  // 3.5) НОСЕНЕ НА ДЪЛГО РАЗСТОЯНИЕ до/от камиона — реално добавено време, не само такса
+  const carryExtraHoursFor = (a) => {
+    const extra = Math.max(0, n(a?.carryDistanceM || 0) - n(p.carryFreeDistanceM || 0));
+    if (extra <= 0) return 0;
+    return (Math.ceil(extra / 10) * n(p.carryExtraMinPer10m || 0)) / 60;
+  };
+  const skipDropoffCarry = isDisposal || selfUnloadMode || isLabourOnly;
+  const carryHoursTot = carryExtraHoursFor(s.pickup) + (skipDropoffCarry ? 0 : carryExtraHoursFor(s.dropoff));
+  const carryManHours = carryHoursTot * crew;
+  if (carryHoursTot) {
+    add(`Носене на дълго разстояние до камиона — ${carryHoursTot.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
+        carryManHours * n(p.workerRate));
+  }
+
+  const manHours = handlingManHours + disManHours + wrapManHours + protectManHours + fillManHours + carryManHours;
+  const clockHours = handlingClock + fillClockElapsed + disHours + carryHoursTot + (crew ? (wrapManHours + protectManHours) / crew : wrapManHours + protectManHours); // общ престой на обекта
   // над 10 часа на ден не се работи — толкова дни реално са нужни за изпълнение
   const workDays = Math.max(1, Math.ceil(clockHours / n(p.dayHours || 10)));
 
@@ -1129,7 +1147,7 @@ function computePrice(s, p) {
   const floor = n(p.minPrice[(s.service === "disposal" || s.service === "labour") ? "local" : s.service]);
   if (total < floor) { lines.push({ label: "Изравняване до минимум", amount: floor - total }); total = floor; }
 
-  return { total: Math.round(total), lines, vol, weight, isDisposal, isLabourOnly, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH };
+  return { total: Math.round(total), lines, vol, weight, isDisposal, isLabourOnly, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours };
 }
 
 /* ================= ЗАПИС НА КАЛКУЛАЦИИ (база данни) ================= *
@@ -1269,8 +1287,8 @@ function buildRecord(s, p, r, id, calcNumber) {
     manHours: +r.manHours.toFixed(2),
     truck: r.chosen?.name || null,
     isCourse: r.isCourse,
-    pickup: { floor: s.pickup.floor, elevator: s.pickup.elevator, elevatorType: s.pickup.elevatorType },
-    dropoff: { floor: s.dropoff.floor, elevator: s.dropoff.elevator, elevatorType: s.dropoff.elevatorType },
+    pickup: { floor: s.pickup.floor, elevator: s.pickup.elevator, elevatorType: s.pickup.elevatorType, carryDistanceM: s.pickup.carryDistanceM || 0 },
+    dropoff: { floor: s.dropoff.floor, elevator: s.dropoff.elevator, elevatorType: s.dropoff.elevatorType, carryDistanceM: s.dropoff.carryDistanceM || 0 },
     extras: s.extras,
     disassembly: Object.entries(s.dis || {}).filter(([, v]) => v).map(([id]) => ITEM_INDEX[id]?.label || id),
     disHours: +r.disHours.toFixed(2),
@@ -1320,6 +1338,41 @@ async function fetchCalcsFromSupabase(url, key) {
     const rows = await res.json();
     return rows.map((row) => ({ ...row.data, key: row.id, calcNumber: row.calc_number, status: row.status }));
   } catch (e) { return []; }
+}
+
+// --- Артикули, добавени от колеги (споделен каталог в Supabase) ---
+async function fetchCatalogItemsFromSupabase(url, key) {
+  if (!url || !key) return [];
+  try {
+    const res = await fetch(`${url}/rest/v1/catalog_items?select=id,group_name,label,m3,kg&order=created_at.asc`, { headers: supabaseHeaders(key) });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (e) { return []; }
+}
+
+async function pushCatalogItemToSupabase(item, url, key) {
+  if (!url || !key || !item.id) return false;
+  try {
+    const res = await fetch(`${url}/rest/v1/catalog_items?on_conflict=id`, {
+      method: "POST",
+      headers: supabaseHeaders(key, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
+      body: JSON.stringify({ id: item.id, group_name: item.group, label: item.label, m3: item.m3, kg: item.kg }),
+    });
+    return res.ok;
+  } catch (e) { return false; }
+}
+
+// прибавя артикули от базата към съответната група на каталога, за да участват
+// в изчисленията и интерфейса напълно наравно с вградените (по id в ITEM_INDEX)
+function applyExtraCatalogItems(rows) {
+  for (const row of rows || []) {
+    if (!row || !row.id || ITEM_INDEX[row.id]) continue;
+    const grp = CATALOG.find((g) => g.group === row.group_name);
+    if (!grp) continue;
+    const item = { id: row.id, label: row.label, m3: Number(row.m3) || 0, kg: Number(row.kg) || 0, custom: true };
+    grp.items.push(item);
+    ITEM_INDEX[item.id] = item;
+  }
 }
 
 const CALC_COUNTER_KEY = "counter:calc";
@@ -1637,6 +1690,8 @@ function SettingsPanel({ p, setP, saveState }) {
         <Num label="Уред/етаж" value={p.appliancePerFloor} step={0.5} onChange={(v) => upd({ appliancePerFloor: v })} suffix="€" />
         <Num label="Спец. уред/етаж" value={p.heavyAppliancePerFloor} step={0.5} onChange={(v) => upd({ heavyAppliancePerFloor: v })} suffix="€" />
         <Num label="Плоска база/етаж" value={p.floorFeeNoElevator} step={0.5} onChange={(v) => upd({ floorFeeNoElevator: v })} suffix="€" />
+        <Num label="Безплатно носене до" value={p.carryFreeDistanceM} step={5} onChange={(v) => upd({ carryFreeDistanceM: v })} suffix="м" />
+        <Num label="Мин. на 10м носене" value={p.carryExtraMinPer10m} step={1} onChange={(v) => upd({ carryExtraMinPer10m: v })} suffix="мин" />
         <Num label="Ролка стреч" value={p.stretchRollM} step={1} onChange={(v) => upd({ stretchRollM: v })} suffix="м" />
         <Num label="Цена ролка" value={p.stretchRollPrice} step={0.5} onChange={(v) => upd({ stretchRollPrice: v })} suffix="€" />
         <Num label="Скорост опаковане" value={p.wrapMPerManHour} step={10} onChange={(v) => upd({ wrapMPerManHour: v })} suffix="м/чч" />
@@ -1765,6 +1820,61 @@ function AddressBlock({ title, data, onChange }) {
             </div>
           </div>
         </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-2">Разстояние пеша до камиона (м)</label>
+          <Stepper value={data.carryDistanceM || 0} onChange={(v) => onChange({ ...data, carryDistanceM: v })} />
+          <p className="text-[11px] text-slate-400 mt-1">Над 20 м се брои допълнително време за носене.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// малка форма за добавяне на артикул, който липсва в каталога — вижда се от всички колеги
+function AddCatalogItem({ group, p, onAdded }) {
+  const [open, setOpen] = useState(false);
+  const [label, setLabel] = useState("");
+  const [m3, setM3] = useState("");
+  const [kg, setKg] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    const m3n = parseFloat(String(m3).replace(",", "."));
+    const kgn = parseFloat(String(kg).replace(",", "."));
+    if (!label.trim() || !(m3n > 0) || !(kgn > 0)) return;
+    setSaving(true);
+    const id = `custom:${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const item = { id, group, label: label.trim(), m3: m3n, kg: kgn };
+    applyExtraCatalogItems([{ id, group_name: group, label: item.label, m3: item.m3, kg: item.kg }]);
+    await pushCatalogItemToSupabase(item, p.supabaseUrl, p.supabaseKey);
+    setSaving(false);
+    setLabel(""); setM3(""); setKg(""); setOpen(false);
+    onAdded(id);
+  };
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="w-full text-left py-2.5 text-xs font-medium" style={{ color: accent }}>
+        ＋ Добави артикул, който липсва
+      </button>
+    );
+  }
+  return (
+    <div className="py-2.5 space-y-2">
+      <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Име на артикула" autoFocus
+        className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
+      <div className="flex gap-2">
+        <input value={m3} onChange={(e) => setM3(e.target.value)} placeholder="обем м³" inputMode="decimal"
+          className="w-1/2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
+        <input value={kg} onChange={(e) => setKg(e.target.value)} placeholder="тегло кг" inputMode="decimal"
+          className="w-1/2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
+      </div>
+      <div className="flex gap-2">
+        <button onClick={submit} disabled={saving}
+          className="text-xs font-semibold px-3 py-1.5 rounded-full text-white disabled:opacity-60" style={{ background: accent }}>
+          {saving ? "Добавяне…" : "Добави"}
+        </button>
+        <button onClick={() => setOpen(false)} className="text-xs text-slate-500">Отказ</button>
       </div>
     </div>
   );
@@ -2042,8 +2152,8 @@ export default function KorektCalculator() {
   const [itemSearch, setItemSearch] = useState("");
   const [s, setS] = useState({
     service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {},
-    pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger" },
-    dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger" },
+    pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
+    dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
     extras: { packing: false, materials: false, disassembly: false },
     name: "", phone: "", email: "",
   });
@@ -2092,6 +2202,8 @@ export default function KorektCalculator() {
       if (cfg.supabaseUrl && cfg.supabaseKey) {
         const remote = await fetchParamsFromSupabase(cfg.supabaseUrl, cfg.supabaseKey);
         if (alive && remote) setP(remote);
+        const extraItems = await fetchCatalogItemsFromSupabase(cfg.supabaseUrl, cfg.supabaseKey);
+        if (alive && extraItems.length) { applyExtraCatalogItems(extraItems); forceRedraw((x) => x + 1); }
       }
       if (alive) setParamsLoaded(true);
     })();
@@ -2617,6 +2729,8 @@ export default function KorektCalculator() {
                                   </div>
                                 );
                               })}
+                              <AddCatalogItem group={grp.group} p={p}
+                                onAdded={(id) => { setQty(id, 1); forceRedraw((x) => x + 1); }} />
                             </div>
                           )}
                         </div>
