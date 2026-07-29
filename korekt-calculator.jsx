@@ -1772,10 +1772,151 @@ function AddressBlock({ title, data, onChange }) {
 
 const STEPS = ["Услуга", "Локация", "Вещи и детайли", "Цена"];
 
+function recordRouteLabel(r) {
+  if (r.service === "local") return `${r.city}: ${r.from} → ${r.to}`;
+  if (r.service === "disposal") return `${r.city}${r.from ? ", " + r.from : ""} → сметище`;
+  if (r.service === "labour") return `${r.city} (само хамали)`;
+  if (r.service === "intercity") return `Междугр.: ${r.destination || ""}`;
+  return `Межд.: ${r.destination || ""}`;
+}
+
+// показва запазена калкулация в същия вид, в който е показана при генерирането ѝ
+function RecordDetail({ record: r, p, onClose }) {
+  const serviceLabel = { local: "Градско преместване", intercity: "Междуградско", international: "Международно", disposal: "Изхвърляне на отпадък", labour: "Само хамали (без камион)" }[r.service] || r.service;
+  const lift = (a) => (!a ? "" : a.elevator ? (a.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор") : "без асансьор");
+  const disSet = new Set(r.disassembly || []);
+  const asmSet = new Set(r.assembly || []);
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-lg my-8" onClick={(e) => e.stopPropagation()}>
+        <div className="rounded-2xl p-6 text-white" style={{ background: ink }}>
+          <div className="flex items-center justify-between mb-2">
+            {r.calcNumber ? (
+              <div className="inline-block text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: accent }}>
+                Калкулация №{r.calcNumber}
+              </div>
+            ) : <span />}
+            <button onClick={onClose} className="text-white/70 hover:text-white text-sm">✕ Затвори</button>
+          </div>
+          <div className="flex justify-between items-start">
+            <div>
+              <div className="text-sm opacity-80">Прогнозна цена — по опит</div>
+              <div className="text-4xl font-extrabold mt-1">≈ {r.total} {p?.currency}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-sm opacity-80">Обем · тегло</div>
+              <div className="text-2xl font-bold mt-1" style={{ color: accent }}>{r.volumeM3} м³</div>
+              <div className="text-sm font-semibold" style={{ color: accent }}>{r.weightKg} кг</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 mt-4">
+            {[
+              ["Време труд", `${(r.manHours || 0).toFixed(1)} чч`],
+              ["Бригада", `${r.crew} души · ${(r.hours || 0).toFixed(1)} ч`],
+              ["Курсове", `${r.trips || 0}`],
+              ["Дни за изпълнение", `${r.workDays || 1} ${r.workDays === 1 ? "ден" : "дни"}`],
+            ].map(([k, v]) => (
+              <div key={k} className="rounded-xl px-3 py-2" style={{ background: "rgba(255,255,255,0.08)" }}>
+                <div className="text-[11px] opacity-70">{k}</div>
+                <div className="font-bold text-sm">{v}</div>
+              </div>
+            ))}
+          </div>
+          <div className="text-xs opacity-70 mt-3">
+            {new Date(r.createdAt).toLocaleString("bg-BG")} · статус: {r.status || "калкулация"}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 mt-3">
+          <div className="text-sm font-semibold mb-3" style={{ color: ink }}>Заданието</div>
+          <div className="space-y-1.5 text-sm">
+            <div className="flex justify-between gap-3">
+              <span className="text-slate-500">Услуга</span>
+              <span className="text-right" style={{ color: ink }}>{serviceLabel}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-slate-500">Маршрут</span>
+              <span className="text-right" style={{ color: ink }}>{recordRouteLabel(r)}{r.km ? ` (${r.km} км)` : ""}</span>
+            </div>
+            {r.truck && (
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Камион</span>
+                <span className="text-right" style={{ color: ink }}>{r.truck}</span>
+              </div>
+            )}
+            {r.pickup && (
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Товарене</span>
+                <span className="text-right" style={{ color: ink }}>{r.pickup.floor === 0 ? "партер" : `${r.pickup.floor} ет.`} · {lift(r.pickup)}</span>
+              </div>
+            )}
+            {r.dropoff && (
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Разтоварване</span>
+                <span className="text-right" style={{ color: ink }}>{r.dropoff.floor === 0 ? "партер" : `${r.dropoff.floor} ет.`} · {lift(r.dropoff)}</span>
+              </div>
+            )}
+            {r.contact && (r.contact.name || r.contact.phone || r.contact.email) && (
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Контакт</span>
+                <span className="text-right" style={{ color: ink }}>{[r.contact.name, r.contact.phone, r.contact.email].filter(Boolean).join(" · ")}</span>
+              </div>
+            )}
+          </div>
+
+          {r.items?.length > 0 && (
+            <>
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">Вещи</div>
+              <div className="space-y-1">
+                {r.items.map((it) => (
+                  <div key={it.id} className="flex justify-between gap-3 text-sm">
+                    <span className="text-slate-600">
+                      {it.qty} × {it.label}
+                      {(disSet.has(it.label) || asmSet.has(it.label)) && (
+                        <span className="text-xs" style={{ color: accent }}>
+                          {" "}· {[disSet.has(it.label) && "разглобяване", asmSet.has(it.label) && "сглобяване"].filter(Boolean).join(", ")}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-slate-400 text-xs whitespace-nowrap">{it.m3} м³</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {(r.wrapMeters > 0 || r.protectMeters > 0) && (
+            <div className="text-xs text-slate-500 mt-3 leading-relaxed">
+              {r.wrapMeters > 0 && <>Опаковане със стреч: {r.wrapMeters} м. </>}
+              {r.protectMeters > 0 && <>Велпапе/автопласт: {r.protectMeters} м.</>}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 mt-3 mb-8">
+          <div className="text-sm font-semibold mb-3" style={{ color: ink }}>Как се формира</div>
+          <div className="space-y-1.5">
+            {(r.breakdown || []).map((l, i) => (
+              <div key={i} className="flex justify-between text-sm">
+                <span className="text-slate-600 pr-2">{l.label}</span>
+                <span className="font-medium whitespace-nowrap" style={{ color: ink }}>{l.amount} {p?.currency}</span>
+              </div>
+            ))}
+            <div className="flex justify-between text-sm font-bold pt-2 mt-1 border-t border-slate-100" style={{ color: ink }}>
+              <span>Общо</span><span>{r.total} {p?.currency}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LogPanel({ onClose, p }) {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState(false);
   const [confirming, setConfirming] = useState(null);
+  const [selected, setSelected] = useState(null);
   const refresh = async () => { setRows(null); const d = await loadCalcs(p); setRows(d); setErr(d.length === 0); };
   useEffect(() => { refresh(); }, []);
 
@@ -1849,9 +1990,7 @@ function LogPanel({ onClose, p }) {
                   <tr key={r.key} className="border-t border-slate-100">
                     <td className="py-1.5 px-1 font-semibold whitespace-nowrap" style={{ color: ink }}>{displayNum(r)}</td>
                     <td className="py-1.5 px-1 text-slate-500 whitespace-nowrap">{new Date(r.createdAt).toLocaleDateString("bg-BG")} {new Date(r.createdAt).toLocaleTimeString("bg-BG", { hour: "2-digit", minute: "2-digit" })}</td>
-                    <td className="py-1.5 px-1 text-slate-700">
-                      {r.service === "local" ? `${r.city}: ${r.from} → ${r.to}` : `${r.service === "intercity" ? "Междугр." : "Межд."}: ${r.destination || ""}`}
-                    </td>
+                    <td className="py-1.5 px-1 text-slate-700">{recordRouteLabel(r)}</td>
                     <td className="py-1.5 px-1 text-right text-slate-600">{r.volumeM3}</td>
                     <td className="py-1.5 px-1 text-right font-semibold" style={{ color: ink }}>{r.total} €</td>
                     <td className="py-1.5 px-1 whitespace-nowrap">
@@ -1861,12 +2000,18 @@ function LogPanel({ onClose, p }) {
                       }}>{r.status || "калкулация"}</span>
                     </td>
                     <td className="py-1.5 px-1 whitespace-nowrap">
-                      {r.status !== "потвърдена" && (
-                        <button onClick={() => confirmRow(r)} disabled={confirming === r.key}
-                          className="text-[11px] font-semibold px-2 py-1 rounded-full text-white disabled:opacity-50" style={{ background: ink }}>
-                          {confirming === r.key ? "…" : "Потвърди"}
+                      <div className="flex gap-1 justify-end">
+                        <button onClick={() => setSelected(r)}
+                          className="text-[11px] font-medium px-2 py-1 rounded-full border border-slate-200 text-slate-600">
+                          Отвори
                         </button>
-                      )}
+                        {r.status !== "потвърдена" && (
+                          <button onClick={() => confirmRow(r)} disabled={confirming === r.key}
+                            className="text-[11px] font-semibold px-2 py-1 rounded-full text-white disabled:opacity-50" style={{ background: ink }}>
+                            {confirming === r.key ? "…" : "Потвърди"}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1884,6 +2029,7 @@ function LogPanel({ onClose, p }) {
           ? "Записите се пазят локално за това устройство и този браузър."
           : "Тази среда не пази записи трайно."}
       </p>
+      {selected && <RecordDetail record={selected} p={p} onClose={() => setSelected(null)} />}
     </div>
   );
 }
