@@ -77,6 +77,7 @@ const DEFAULTS = {
   disFactor: 1,           // коеф. върху времето за разглобяване/сглобяване по вещ
   disCrew: 2,             // души за разглобяване (времената са реални часове)
   asmCrew: 2,             // души за сглобяване (различен екип)
+  disAsmRate: 22,         // €/час — квалифициран труд за разглобяване/сглобяване (отделна ставка от общата)
   stretchRollM: 175,      // метри в ролка 1.9 кг стреч, 23мк (≈93 м/кг × 1.9 кг, korekt-bg.com/magazin)
   stretchRollPrice: 8.17, // € за тази ролка, БЕЗ ДДС (сайтът показва 9.80 € с ДДС)
   wrapMPerManHour: 40,    // метри опаковане на човекочас (10 м ≈ 15 мин)
@@ -866,6 +867,7 @@ function computePrice(s, p) {
   // разглобяването и сглобяването се правят от РАЗЛИЧНИ екипи — броят се поотделно
   const disCrew = n(p.disCrew || 2);
   const asmCrew = n(p.asmCrew || 2);
+  const disAsmRate = n(p.disAsmRate || p.workerRate); // квалифициран труд — отделна ставка
   const disOnlyHours = work.dis;                     // реални часове разглобяване
   const asmOnlyHours = work.asm;                     // реални часове сглобяване
   const disOnlyManHours = disOnlyHours * disCrew;
@@ -1037,8 +1039,9 @@ function computePrice(s, p) {
 
     handlingClock = jobClock + travelH;
     handlingManHours = handlingClock * crew;
-    add(`${isAssembly ? "Монтаж на мебели" : "Товарене/разтоварване"} — ${jobClock.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-        jobClock * crew * n(p.workerRate));
+    const jobRate = isAssembly ? disAsmRate : n(p.workerRate); // монтажът е квалифициран труд
+    add(`${isAssembly ? "Монтаж на мебели" : "Товарене/разтоварване"} — ${jobClock.toFixed(1)} ч × ${crew} души × ${jobRate} ${p.currency}/ч`,
+        jobClock * crew * jobRate);
     if (travelH > 0) {
       add(`Път на бригадата (${labourBaseCity} → ${s.city}) — ${travelH.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
           travelH * crew * n(p.workerRate));
@@ -1079,14 +1082,14 @@ function computePrice(s, p) {
         nights * sleepers * n(p.overnightPrice));
   }
 
-  // 2) РАЗГЛОБЯВАНЕ/СГЛОБЯВАНЕ — реални часове × хора по демонтажа (камионът чака, но не се таксува)
+  // 2) РАЗГЛОБЯВАНЕ/СГЛОБЯВАНЕ — реални часове × хора по демонтажа, квалифициран труд (камионът чака, но не се таксува)
   if (disOnlyManHours) {
-    add(`Разглобяване (${s.pickupHood || s.pickupCity || "товарене"}) — ${disOnlyHours.toFixed(1)} ч × ${disCrew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-        disOnlyManHours * n(p.workerRate));
+    add(`Разглобяване (${s.pickupHood || s.pickupCity || "товарене"}) — ${disOnlyHours.toFixed(1)} ч × ${disCrew} души × ${disAsmRate} ${p.currency}/ч`,
+        disOnlyManHours * disAsmRate);
   }
   if (asmOnlyManHours) {
-    add(`Сглобяване (${s.dropoffHood || s.dropoffCity || "разтоварване"}) — ${asmOnlyHours.toFixed(1)} ч × ${asmCrew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-        asmOnlyManHours * n(p.workerRate));
+    add(`Сглобяване (${s.dropoffHood || s.dropoffCity || "разтоварване"}) — ${asmOnlyHours.toFixed(1)} ч × ${asmCrew} души × ${disAsmRate} ${p.currency}/ч`,
+        asmOnlyManHours * disAsmRate);
   }
 
   // 3) ОПАКОВАНЕ — човекочаса
@@ -1715,6 +1718,7 @@ function SettingsPanel({ p, setP, saveState }) {
         <Num label="Коеф. демонтаж" value={p.disFactor} step={0.1} onChange={(v) => upd({ disFactor: v })} suffix="×" />
         <Num label="Хора на разглобяване" value={p.disCrew} step={1} onChange={(v) => upd({ disCrew: v })} suffix="души" />
         <Num label="Хора на сглобяване" value={p.asmCrew} step={1} onChange={(v) => upd({ asmCrew: v })} suffix="души" />
+        <Num label="Ставка монтаж/демонтаж" value={p.disAsmRate} step={1} onChange={(v) => upd({ disAsmRate: v })} suffix="€/ч" />
         <Num label="Кашон/етаж" value={p.boxPerFloor} step={0.05} onChange={(v) => upd({ boxPerFloor: v })} suffix="€" />
         <Num label="Уред/етаж" value={p.appliancePerFloor} step={0.5} onChange={(v) => upd({ appliancePerFloor: v })} suffix="€" />
         <Num label="Спец. уред/етаж" value={p.heavyAppliancePerFloor} step={0.5} onChange={(v) => upd({ heavyAppliancePerFloor: v })} suffix="€" />

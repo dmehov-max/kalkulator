@@ -800,7 +800,7 @@ test("демонтаж: показва се като отделно перо в 
   const r = calc({ qty: { wardrobe3: 1 }, dis: { wardrobe3: true } });
   const line = r.lines.find((l) => l.label.startsWith("Разглобяване"));
   ok(line, "липсва перо за разглобяване");
-  eq(line.amount, Math.round(r.disManHours * P.workerRate));
+  eq(line.amount, Math.round(r.disManHours * P.disAsmRate));
 });
 test("опаковането е отделно перо", () => {
   const r = calc({ qty: { mattress: 1 } });
@@ -888,7 +888,7 @@ test("разглобяване: часовете се плащат на брой
   const чч = (E.ITEM_INDEX.wardrobe3.dis * P.disCrew) + (E.ITEM_INDEX.wardrobe3.asm * P.asmCrew);
   ok(без.handlingClock > P.minLocalHours, "тестът трябва да е над минимума");
   near(с.manHours - без.manHours, чч, 0.01, "разлика в човекочасовете:");
-  near(с.total - без.total, чч * P.workerRate, 1, "разликата е само труд, без транспорт:");
+  near(с.total - без.total, чч * P.disAsmRate, 1, "разликата е само труд, без транспорт:");
 });
 test("разглобяване: броят хора се управлява поотделно за двата екипа", () => {
   const W = E.ITEM_INDEX.wardrobe3;
@@ -903,8 +903,8 @@ test("разглобяване и сглобяване са отделни пе�
   const разгл = r.lines.find((l) => l.label.startsWith("Разглобяване"));
   const сглоб = r.lines.find((l) => l.label.startsWith("Сглобяване"));
   ok(разгл && сглоб, "трябва да има две отделни пера");
-  eq(разгл.amount, Math.round(r.disOnlyManHours * P.workerRate));
-  eq(сглоб.amount, Math.round(r.asmOnlyManHours * P.workerRate));
+  eq(разгл.amount, Math.round(r.disOnlyManHours * P.disAsmRate));
+  eq(сглоб.amount, Math.round(r.asmOnlyManHours * P.disAsmRate));
 });
 test("само разглобяване не поражда перо за сглобяване", () => {
   const r = calc({ qty: { wardrobe3: 1 }, dis: { wardrobe3: true } });
@@ -1390,6 +1390,23 @@ test("монтаж и ТРД не се бъркат едно с друго в п
   const трд = calc({ service: "trd", city: "София", manualHours: 4 });
   ok(монтаж.lines.some((l) => l.label.includes("Монтаж")));
   ok(трд.lines.some((l) => l.label.includes("Товарене/разтоварване")));
+});
+test("монтаж на мебели се плаща по ставката за квалифициран труд", () => {
+  const r = calc({ service: "assembly", city: "София", manualHours: 4, crewOverride: 2 });
+  const line = r.lines.find((l) => l.label.startsWith("Монтаж на мебели"));
+  eq(line.amount, Math.round(4 * 2 * P.disAsmRate), "4ч × 2 души × ставка за квалифициран труд:");
+});
+test("ТРД остава на общата работническа ставка, не квалифицирана", () => {
+  const r = calc({ service: "trd", city: "София", manualHours: 4, crewOverride: 2 }, { ...P, disAsmRate: 22, workerRate: 15 });
+  const line = r.lines.find((l) => l.label.startsWith("Товарене/разтоварване"));
+  eq(line.amount, Math.round(4 * 2 * 15), "ТРД не е монтаж — общата ставка:");
+});
+test("разглобяване/сглобяване на вещи по време на преместване също е квалифициран труд", () => {
+  const r = calc({ qty: { wardrobe3: 1 }, dis: { wardrobe3: true }, asm: { wardrobe3: true } }, { ...P, disAsmRate: 30, workerRate: 15 });
+  const разгл = r.lines.find((l) => l.label.startsWith("Разглобяване"));
+  const сглоб = r.lines.find((l) => l.label.startsWith("Сглобяване"));
+  eq(разгл.amount, Math.round(r.disOnlyManHours * 30));
+  eq(сглоб.amount, Math.round(r.asmOnlyManHours * 30));
 });
 
 
