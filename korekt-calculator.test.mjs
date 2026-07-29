@@ -1341,6 +1341,58 @@ test("само хамали: минималната такса се управл
 });
 
 
+/* --- Монтаж на мебели / ТРД (ръчно въведени часове, без каталог) --- */
+test("монтаж: часовете се въвеждат ръчно, не по обем", () => {
+  const r = calc({ service: "assembly", city: "София", manualHours: 5 });
+  near(r.handlingClock, 5, 0.01);
+  ok(r.lines.some((l) => l.label.startsWith("Монтаж на мебели")), "липсва перо за монтажа");
+});
+test("ТРД: часовете се въвеждат ръчно, не по обем", () => {
+  const r = calc({ service: "trd", city: "София", manualHours: 3 });
+  near(r.handlingClock, 3, 0.01);
+  ok(r.lines.some((l) => l.label.startsWith("Товарене/разтоварване")), "липсва перо за товаренето");
+});
+test("монтаж/ТРД: важи минимумът от 2 часа", () => {
+  const r = calc({ service: "assembly", city: "София", manualHours: 0.5 });
+  near(r.handlingClock, P.minLocalHours, 0.01);
+});
+test("монтаж/ТРД: няма транспортно перо — стоката не е наша грижа", () => {
+  const r = calc({ service: "assembly", city: "София", manualHours: 4 });
+  ok(!r.lines.some((l) => l.label.startsWith("Транспорт")), "не бива да има транспорт");
+});
+test("монтаж/ТРД: не се смята като междуградски курс", () => {
+  const r = calc({ service: "trd", city: "Банско", manualHours: 4 });
+  eq(r.isCourse, false);
+});
+test("монтаж/ТРД: в друг град се начислява път и кола, както при само хамали", () => {
+  const r = calc({ service: "assembly", city: "Банско", manualHours: 4 });
+  ok(r.labourTravelKm > 0, "трябва да има разстояние до базата");
+  ok(r.lines.some((l) => l.label.startsWith("Път на бригадата")), "липсва път");
+  ok(r.lines.some((l) => l.label.startsWith("Кола за бригадата")), "липсва кола");
+});
+test("монтаж/ТРД: в града на базата — само минимална такса за кола", () => {
+  const r = calc({ service: "trd", city: "София", manualHours: 4 });
+  eq(r.labourTravelKm, 0, "София е база — не бива да има път:");
+  const кола = r.lines.find((l) => l.label.startsWith("Кола за бригадата"));
+  eq(кола.amount, P.labourMinCarFee);
+});
+test("монтаж/ТРД: бригадата може да се смени ръчно", () => {
+  const r = calc({ service: "assembly", city: "София", manualHours: 4, crewOverride: 5 });
+  eq(r.crew, 5);
+  ok(r.crewManual, "флагът за ръчна промяна не е вдигнат");
+});
+test("монтаж/ТРД: важи минималната цена на градско ниво", () => {
+  const r = calc({ service: "trd", city: "София", manualHours: 0.1 });
+  ok(r.total >= P.minPrice.local, "не бива да пада под градския праг");
+});
+test("монтаж и ТРД не се бъркат едно с друго в перото за труд", () => {
+  const монтаж = calc({ service: "assembly", city: "София", manualHours: 4 });
+  const трд = calc({ service: "trd", city: "София", manualHours: 4 });
+  ok(монтаж.lines.some((l) => l.label.includes("Монтаж")));
+  ok(трд.lines.some((l) => l.label.includes("Товарене/разтоварване")));
+});
+
+
 test("велпапе: опцията е налична за всички едри вещи", () => {
   const без = [];
   for (const g of E.CATALOG) for (const it of g.items) {

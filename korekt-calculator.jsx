@@ -845,16 +845,21 @@ function computePrice(s, p) {
   // курс = разстояние над прага; далечни "градски" адреси също минават на км тарифа
   const isDisposalService = s.service === "disposal";
   const isLabourOnly = s.service === "labour"; // само хамали, клиентът осигурява транспорт
+  const isAssembly = s.service === "assembly"; // монтаж на мебели, без пренасяне/транспорт на стоки
+  const isTRD = s.service === "trd"; // товаро-разтоварна дейност на тир/камион на едно място
+  // и трите: наши хора пътуват до адрес/обект, часовете се въвеждат ръчно от служителя
+  const isManualHoursService = isAssembly || isTRD;
+  const usesFieldCrew = isLabourOnly || isManualHoursService;
 
-  // При "само хамали" в друг град: бригадата тръгва от избрана или най-близката база.
-  // Ако работата е в самия град на базата, няма път и няма кола.
-  const labourAutoBase = isLabourOnly && s.city ? nearestBase(s.city, n(p.roadFactorBG || 1.25)) : null;
-  const labourBaseCity = isLabourOnly ? (s.labourBase || labourAutoBase?.city || null) : null;
+  // При работа на бригада в друг град: тръгва от избрана или най-близката база.
+  // Ако е в самия град на базата, няма път и няма кола.
+  const labourAutoBase = usesFieldCrew && s.city ? nearestBase(s.city, n(p.roadFactorBG || 1.25)) : null;
+  const labourBaseCity = usesFieldCrew ? (s.labourBase || labourAutoBase?.city || null) : null;
   const labourBaseKm = labourBaseCity && s.city
     ? estimateKmAny(labourBaseCity, "", s.city, "", n(p.roadFactorBG || 1.25))
     : 0;
   const labourTravelKm = labourBaseKm && labourBaseKm > n(p.labourLocalRadiusKm || 15) ? labourBaseKm : 0;
-  const isCourse = !isDisposalService && !isLabourOnly && oneWayKm >= n(p.intercityThresholdKm);
+  const isCourse = !isDisposalService && !usesFieldCrew && oneWayKm >= n(p.intercityThresholdKm);
 
   // екстри (човекочаса) — достъпът по стълби вече е парична такса, не часове
   const work = disHoursFor(s.qty, s.dis, s.asm, n(p.disFactor || 1));
@@ -1023,6 +1028,29 @@ function computePrice(s, p) {
         : `Кола за бригадата (в града) — минимална такса`,
         carFee, true);
     }
+  } else if (isManualHoursService) {
+    // монтаж на мебели / ТРД — часовете се въвеждат ръчно от служителя (по преценка на място),
+    // не се смятат от обем. Пътят на бригадата и колата работят по същия начин като "Само хамали".
+    const jobClock = Math.max(n(s.manualHours || 0), n(p.minLocalHours));
+    const labourKm = labourTravelKm;
+    const travelH = labourKm ? (2 * labourKm) / n(p.roadSpeed || 65) : 0;
+
+    handlingClock = jobClock + travelH;
+    handlingManHours = handlingClock * crew;
+    add(`${isAssembly ? "Монтаж на мебели" : "Товарене/разтоварване"} — ${jobClock.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
+        jobClock * crew * n(p.workerRate));
+    if (travelH > 0) {
+      add(`Път на бригадата (${labourBaseCity} → ${s.city}) — ${travelH.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
+          travelH * crew * n(p.workerRate));
+    }
+    const carKmFee = labourKm ? 2 * labourKm * n(p.carRatePerKm) : 0;
+    const carFee = Math.max(carKmFee, n(p.labourMinCarFee || 0));
+    if (carFee > 0) {
+      add(labourKm
+        ? `Кола за бригадата — ${2 * labourKm} км × ${n(p.carRatePerKm)} ${p.currency}/км`
+        : `Кола за бригадата (в града) — минимална такса`,
+        carFee, true);
+    }
   } else if (selfUnloadMode) {
     // клиентът разтоварва сам — плаща се само товаренето при него
     handlingManHours = loadClock * crew;
@@ -1073,7 +1101,7 @@ function computePrice(s, p) {
     if (extra <= 0) return 0;
     return (Math.ceil(extra / 10) * n(p.carryExtraMinPer10m || 0)) / 60;
   };
-  const skipDropoffCarry = isDisposal || selfUnloadMode || isLabourOnly;
+  const skipDropoffCarry = isDisposal || selfUnloadMode || usesFieldCrew;
   const carryHoursTot = carryExtraHoursFor(s.pickup) + (skipDropoffCarry ? 0 : carryExtraHoursFor(s.dropoff));
   const carryManHours = carryHoursTot * crew;
   if (carryHoursTot) {
@@ -1104,7 +1132,7 @@ function computePrice(s, p) {
   const perFloorStd = n(p.floorFeeNoElevator) + boxes * n(p.boxPerFloor) + appNormal * n(p.appliancePerFloor) + appHeavy * n(p.heavyAppliancePerFloor);
   const perFloorOvr = oversized * n(p.heavyAppliancePerFloor);
   // при изхвърляне няма адрес на доставка (само сметище); при самостоятелно разтоварване стълбите там са за сметка на клиента
-  const skipDropoffFloors = isDisposal || selfUnloadMode || isLabourOnly;
+  const skipDropoffFloors = isDisposal || selfUnloadMode || usesFieldCrew;
   const floorsStdTot = floorsStd(s.pickup) + (skipDropoffFloors ? 0 : floorsStd(s.dropoff));
   const floorsOvrTot = floorsOvr(s.pickup) + (skipDropoffFloors ? 0 : floorsOvr(s.dropoff));
   const stairs = floorsStdTot * perFloorStd + floorsOvrTot * perFloorOvr;
@@ -1118,8 +1146,8 @@ function computePrice(s, p) {
   }
 
   // ТРАНСПОРТ (перо) — само за времето, в което камионът реално участва.
-  // При "само хамали" транспортът е на клиента и не се начислява.
-  if (isLabourOnly) {
+  // При "само хамали"/монтаж/ТРД транспортът на стоката не е наш и не се начислява.
+  if (usesFieldCrew) {
     // без транспортно перо
   } else if (isDisposal) {
     const totalTruckHours = handlingClock * disposalTrucksN; // сума от часовете на всички камиони
@@ -1144,10 +1172,10 @@ function computePrice(s, p) {
   if (rolls) add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(3)} ${p.currency}/м`, rolls * n(p.stretchRollPrice), true);
 
   // праг
-  const floor = n(p.minPrice[(s.service === "disposal" || s.service === "labour") ? "local" : s.service]);
+  const floor = n(p.minPrice[(s.service === "disposal" || usesFieldCrew) ? "local" : s.service]);
   if (total < floor) { lines.push({ label: "Изравняване до минимум", amount: floor - total }); total = floor; }
 
-  return { total: Math.round(total), lines, vol, weight, isDisposal, isLabourOnly, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours };
+  return { total: Math.round(total), lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours };
 }
 
 /* ================= ЗАПИС НА КАЛКУЛАЦИИ (база данни) ================= *
@@ -1296,6 +1324,7 @@ function buildRecord(s, p, r, id, calcNumber) {
     disassemblyHours: +r.disOnlyHours.toFixed(2),
     assemblyHours: +r.asmOnlyHours.toFixed(2),
     courseMode: r.isCourse ? (r.dayCrewMode ? "пътуваща бригада" : r.localCrewMode ? `местен екип (${r.baseCity})` : r.selfUnloadMode ? "клиентът разтоварва сам" : "почасово") : null,
+    manualHours: r.isManualHoursService ? +n(s.manualHours || 0).toFixed(2) : null,
     nights: r.nights || 0,
     travelDays: r.travelDays || 0,
     assembly: Object.entries(s.asm || {}).filter(([, v]) => v).map(([id]) => ITEM_INDEX[id]?.label || id),
@@ -1881,18 +1910,25 @@ function AddCatalogItem({ group, p, onAdded }) {
 }
 
 const STEPS = ["Услуга", "Локация", "Вещи и детайли", "Цена"];
+const SERVICE_LABELS = {
+  local: "Градско преместване", intercity: "Междуградско", international: "Международно",
+  disposal: "Изхвърляне на отпадък", labour: "Само хамали (без камион)",
+  assembly: "Монтаж на мебели", trd: "Товаро-разтоварна дейност",
+};
 
 function recordRouteLabel(r) {
   if (r.service === "local") return `${r.city}: ${r.from} → ${r.to}`;
   if (r.service === "disposal") return `${r.city}${r.from ? ", " + r.from : ""} → сметище`;
   if (r.service === "labour") return `${r.city} (само хамали)`;
+  if (r.service === "assembly") return `${r.city} (монтаж)`;
+  if (r.service === "trd") return `${r.city} (ТРД)`;
   if (r.service === "intercity") return `Междугр.: ${r.destination || ""}`;
   return `Межд.: ${r.destination || ""}`;
 }
 
 // показва запазена калкулация в същия вид, в който е показана при генерирането ѝ
 function RecordDetail({ record: r, p, onClose }) {
-  const serviceLabel = { local: "Градско преместване", intercity: "Междуградско", international: "Международно", disposal: "Изхвърляне на отпадък", labour: "Само хамали (без камион)" }[r.service] || r.service;
+  const serviceLabel = SERVICE_LABELS[r.service] || r.service;
   const lift = (a) => (!a ? "" : a.elevator ? (a.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор") : "без асансьор");
   const disSet = new Set(r.disassembly || []);
   const asmSet = new Set(r.assembly || []);
@@ -2151,7 +2187,7 @@ export default function KorektCalculator() {
   const [openGroups, setOpenGroups] = useState({ "Хол и трапезария": true });
   const [itemSearch, setItemSearch] = useState("");
   const [s, setS] = useState({
-    service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {},
+    service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {},
     pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
     dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
     extras: { packing: false, materials: false, disassembly: false },
@@ -2165,8 +2201,10 @@ export default function KorektCalculator() {
     setS((prev) => ({ ...prev, [field]: { ...prev[field], [id]: value } }));
 
   const r = useMemo(() => computePrice(s, p), [s, p]);
-  const { total, lines, vol, weight, isDisposal, isLabourOnly, labourBaseCity, labourTravelKm, labourAutoBaseCity, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, chosen, oneWayKm, totalKm, driveHours, fleet, auto, crewByProtocol, autoCrew, crewManual, reqCrew, isCourse, disHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, wrapMeters, wrapHours, rolls, protectMeters, protectManHours, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH } = r;
+  const { total, lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, chosen, oneWayKm, totalKm, driveHours, fleet, auto, crewByProtocol, autoCrew, crewManual, reqCrew, isCourse, disHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, wrapMeters, wrapHours, rolls, protectMeters, protectManHours, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH } = r;
   const localEst = s.service === "local" ? estimateKm(s.city, s.pickupHood, s.dropoffHood, Number(p.cityRoadFactor) || 1.3) : null;
+  const isAssembly = s.service === "assembly";
+  const isTRD = s.service === "trd";
 
   // --- зареждане и автоматичен запис на ПАРАМЕТРИТЕ ---
   const [paramsLoaded, setParamsLoaded] = useState(false);
@@ -2299,8 +2337,8 @@ export default function KorektCalculator() {
 
   const canNext =
     (step === 0 && s.service) ||
-    (step === 1 && (s.service === "labour" ? !!findCity(s.city) : s.service === "disposal" ? !!s.city : s.service === "local" ? (s.city && (!NEIGHBORHOODS[s.city] || (s.pickupHood.trim() && s.dropoffHood.trim()))) : s.service === "intercity" ? (!!findCity(s.pickupCity) && !!findCity(s.dropoffCity)) : s.country)) ||
-    (step === 2 && vol > 0);
+    (step === 1 && (s.service === "labour" || isManualHoursService ? !!findCity(s.city) : s.service === "disposal" ? !!s.city : s.service === "local" ? (s.city && (!NEIGHBORHOODS[s.city] || (s.pickupHood.trim() && s.dropoffHood.trim()))) : s.service === "intercity" ? (!!findCity(s.pickupCity) && !!findCity(s.dropoffCity)) : s.country)) ||
+    (step === 2 && (isManualHoursService ? n(s.manualHours || 0) > 0 : vol > 0));
 
   return (
     <div className="min-h-screen w-full" style={{ background: "#f6f7f9", fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -2345,6 +2383,8 @@ export default function KorektCalculator() {
                   { id: "international", t: "Международно", d: "Транспорт от и за ЕС", m: p.minPrice.international },
                   { id: "disposal", t: "Изхвърляне на отпадък", d: "Изнасяне и извозване до сметище", m: 0 },
                   { id: "labour", t: "Само хамали (без камион)", d: "Опаковане, разглобяване и товарене в Ваш транспорт", m: 0 },
+                  { id: "assembly", t: "Монтаж на мебели", d: "Напр. офис мебели — само монтаж, без пренасяне", m: 0 },
+                  { id: "trd", t: "Товаро-разтоварна дейност", d: "Товарене/разтоварване на тир или камион на място", m: 0 },
                 ].map((o) => (
                   <button key={o.id} onClick={() => { set({ service: o.id, truckId: null }); setStep(1); }}
                     className={`w-full text-left rounded-2xl border p-5 bg-white transition hover:shadow-sm ${s.service === o.id ? "" : "border-slate-200"}`}
@@ -2368,7 +2408,7 @@ export default function KorektCalculator() {
             {step === 1 && (
               <div className="space-y-4">
                 <h2 className="text-xl font-bold" style={{ color: ink }}>Локация</h2>
-                {s.service === "labour" && (
+                {(s.service === "labour" || isManualHoursService) && (
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-600 mb-1">В кой град е работата?</label>
@@ -2400,8 +2440,11 @@ export default function KorektCalculator() {
                     )}
 
                     <div className="rounded-xl p-3 text-sm" style={{ background: "#fff8ef", border: "1px solid #f3ddbd" }}>
-                      🚚 Транспортът на багажа е за сметка на клиента. Плащат се работата на хамалите,
-                      материалите и стълбите.
+                      {isAssembly
+                        ? "🔧 Плаща се само трудът по монтажа — часовете се въвеждат ръчно на следващата стъпка."
+                        : isTRD
+                        ? "📦 Плаща се само трудът по товарене/разтоварване — часовете се въвеждат ръчно на следващата стъпка."
+                        : "🚚 Транспортът на багажа е за сметка на клиента. Плащат се работата на хамалите, материалите и стълбите."}
                       {labourTravelKm > 0 ? (
                         <div className="mt-1">
                           🚗 Бригадата пътува от <b>{labourBaseCity}</b> — {labourTravelKm} км в едната посока,
@@ -2598,8 +2641,46 @@ export default function KorektCalculator() {
               </div>
             )}
 
+            {/* STEP 2 — монтаж/ТРД: ръчни часове и бригада, без каталог с вещи */}
+            {step === 2 && isManualHoursService && (
+              <div className="space-y-5">
+                <div>
+                  <h2 className="text-xl font-bold mb-3" style={{ color: ink }}>
+                    {isAssembly ? "Монтаж на мебели" : "Товарене / разтоварване"}
+                  </h2>
+                  <Num label="Прогнозни часове труд" value={s.manualHours || 0} step={0.5}
+                    onChange={(v) => set({ manualHours: v })} suffix="ч" />
+                  <p className="text-xs text-slate-400 mt-2">
+                    {isAssembly
+                      ? "Преценка на служителя за необходимото време за монтажа."
+                      : "Преценка на служителя за времето за товарене/разтоварване на място."}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0 pr-3">
+                      <div className="text-sm font-medium" style={{ color: ink }}>Брой работници</div>
+                      <div className="text-xs text-slate-400">
+                        По подразбиране: {autoCrew} души
+                        {reqCrew > 0 && <> · протокол изисква поне {reqCrew}</>}
+                        {crewManual && <span style={{ color: accent }}> · променено ръчно</span>}
+                      </div>
+                    </div>
+                    <Stepper value={crew} onChange={(v) => set({ crewOverride: v })} />
+                  </div>
+                  {crewManual && (
+                    <button onClick={() => set({ crewOverride: 0 })}
+                      className="text-xs text-slate-500 underline mt-2">
+                      върни автоматичния брой
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* STEP 2 */}
-            {step === 2 && (
+            {step === 2 && !isManualHoursService && (
               <div className="space-y-5">
                 <div>
                   <div className="flex items-baseline justify-between mb-3">
@@ -2984,7 +3065,7 @@ export default function KorektCalculator() {
                     <div className="flex justify-between gap-3">
                       <span className="text-slate-500">Услуга</span>
                       <span className="text-right" style={{ color: ink }}>
-                        {s.service === "local" ? "Градско преместване" : s.service === "intercity" ? "Междуградско" : s.service === "disposal" ? "Изхвърляне на отпадък" : s.service === "labour" ? "Само хамали (без камион)" : "Международно"}
+                        {SERVICE_LABELS[s.service] || "Международно"}
                       </span>
                     </div>
                     <div className="flex justify-between gap-3">
@@ -2993,7 +3074,9 @@ export default function KorektCalculator() {
                         {s.service === "local"
                           ? (NEIGHBORHOODS[s.city] ? `${s.city}: ${s.pickupHood} → ${s.dropoffHood} (${oneWayKm} км)` : `${s.city} (${oneWayKm} км)`)
                           : s.service === "disposal" ? `${s.city}${s.pickupHood ? ", " + s.pickupHood : ""} → сметище (${landfillKm} км)`
-                          : s.service === "intercity" ? `${s.pickupCity} → ${s.dropoffCity} (${oneWayKm} км, център до център)` : `${s.country} (${oneWayKm} км)`}
+                          : s.service === "intercity" ? `${s.pickupCity} → ${s.dropoffCity} (${oneWayKm} км, център до център)`
+                          : usesFieldCrew ? `${s.city}${labourTravelKm > 0 ? ` (бригада от ${labourBaseCity}, ${labourTravelKm} км)` : ""}`
+                          : `${s.country} (${oneWayKm} км)`}
                       </span>
                     </div>
                     {s.service === "intercity" && s.pickupCity && s.dropoffCity && (() => {
