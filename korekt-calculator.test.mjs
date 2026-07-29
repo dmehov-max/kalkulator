@@ -27,7 +27,7 @@ const engineSrc =
   `\nexport { DEFAULTS, CATALOG, ITEM_INDEX, totalVolume, countKind, NEIGHBORHOODS,
   haversineKm, normHood, findHood, cityCenter, estimateKm, crewFor, ownTruck,
   fleetFor, tripsFor, bestTruck, computePrice, totalWeight, findCity, protectMetersFor, BASES, nearestBase, baseOnRoute, mergeParams, buildRecord, toCSV, disHoursFor, wrapMetersFor, CITIES, estimateKmAny, pointFor,
-  saveCalc, loadCalcs, saveParams, loadParams, CALC_PREFIX, PARAMS_KEY, fetchParamsFromSheet, pushParamsToSheet, nextCalcNumber, CALC_COUNTER_KEY, fetchRealDistanceKm, routesCache, ROUTES_CACHE_KEY,
+  saveCalc, loadCalcs, saveParams, loadParams, CALC_PREFIX, PARAMS_KEY, fetchParamsFromSupabase, pushParamsToSupabase, pushCalcToSupabase, fetchCalcsFromSupabase, nextCalcNumber, CALC_COUNTER_KEY, fetchRealDistanceKm, routesCache, ROUTES_CACHE_KEY,
   storageSet, storageGet, storageList, getStorageMode, hasStorage };\n`;
 
 const tmp = path.join(os.tmpdir(), `korekt-engine-${Date.now()}.mjs`);
@@ -1635,26 +1635,52 @@ testAsync("хранилище: липсващо window.storage не чупи п�
 });
 
 
-testAsync("настройки: теглят се от Google Sheet, ако е зададен адрес", async () => {
-  globalThis.fetch = async () => ({ ok: true, json: async () => ({ ok: true, params: { workerRate: 24 } }) });
-  const got = await E.fetchParamsFromSheet("https://script.google.com/x/exec");
-  eq(got.workerRate, 24, "ставка от Sheet:");
+testAsync("настройки: теглят се от Supabase, ако е зададена връзка", async () => {
+  globalThis.fetch = async () => ({ ok: true, json: async () => ([{ value: { workerRate: 24 } }]) });
+  const got = await E.fetchParamsFromSupabase("https://x.supabase.co", "key");
+  eq(got.workerRate, 24, "ставка от базата:");
   eq(got.truckRate, E.DEFAULTS.truckRate, "липсващите полета падат към по подразбиране:");
   delete globalThis.fetch;
 });
-testAsync("настройки: без адрес не се прави заявка", async () => {
-  eq(await E.fetchParamsFromSheet(""), null);
-  eq(await E.pushParamsToSheet({}, ""), false);
+testAsync("настройки: без връзка не се прави заявка", async () => {
+  eq(await E.fetchParamsFromSupabase("", ""), null);
+  eq(await E.pushParamsToSupabase({}, "", ""), false);
 });
 testAsync("настройки: мрежова грешка не чупи зареждането", async () => {
   globalThis.fetch = async () => { throw new Error("няма мрежа"); };
-  eq(await E.fetchParamsFromSheet("https://script.google.com/x/exec"), null);
-  eq(await E.pushParamsToSheet({}, "https://script.google.com/x/exec"), false);
+  eq(await E.fetchParamsFromSupabase("https://x.supabase.co", "key"), null);
+  eq(await E.pushParamsToSupabase({}, "https://x.supabase.co", "key"), false);
   delete globalThis.fetch;
 });
 testAsync("настройки: невалиден отговор не се приема", async () => {
-  globalThis.fetch = async () => ({ ok: true, json: async () => ({ ok: true, params: null }) });
-  eq(await E.fetchParamsFromSheet("https://x/exec"), null);
+  globalThis.fetch = async () => ({ ok: true, json: async () => ([]) });
+  eq(await E.fetchParamsFromSupabase("https://x.supabase.co", "key"), null);
+  delete globalThis.fetch;
+});
+testAsync("калкулации: изпращат се към Supabase с ID за upsert", async () => {
+  let calledUrl = null, calledBody = null;
+  globalThis.fetch = async (url, opts) => { calledUrl = url; calledBody = JSON.parse(opts.body); return { ok: true }; };
+  const result = await E.pushCalcToSupabase({ id: "calc:1", status: "калкулация", total: 100 }, "https://x.supabase.co", "key");
+  ok(result, "трябва да върне true:");
+  ok(calledUrl.includes("on_conflict=id"), "трябва да пази по ID:");
+  eq(calledBody.id, "calc:1");
+  delete globalThis.fetch;
+});
+testAsync("калкулации: без ID не се изпраща", async () => {
+  eq(await E.pushCalcToSupabase({ total: 100 }, "https://x.supabase.co", "key"), false);
+});
+testAsync("калкулации: изтеглянето от Supabase разопакова записите", async () => {
+  globalThis.fetch = async () => ({ ok: true, json: async () => ([{ id: "calc:1", calc_number: 5, status: "заявка", data: { total: 100, createdAt: "2026-01-01" } }]) });
+  const rows = await E.fetchCalcsFromSupabase("https://x.supabase.co", "key");
+  eq(rows.length, 1);
+  eq(rows[0].key, "calc:1");
+  eq(rows[0].calcNumber, 5);
+  eq(rows[0].total, 100);
+  delete globalThis.fetch;
+});
+testAsync("калкулации: мрежова грешка при изтегляне връща празен списък", async () => {
+  globalThis.fetch = async () => { throw new Error("няма мрежа"); };
+  eq((await E.fetchCalcsFromSupabase("https://x.supabase.co", "key")).length, 0);
   delete globalThis.fetch;
 });
 

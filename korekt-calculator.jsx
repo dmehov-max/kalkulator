@@ -98,7 +98,8 @@ const DEFAULTS = {
     Чехия: 1300, Полша: 1300, Испания: 2800, Швеция: 2200,
   },
 
-  sheetEndpoint: "https://script.google.com/macros/s/AKfycbxNirSAcxZdm3qXfvCQjNrKBrci6v81hw1aq_oGJJq2kXrlJklB-gHqj00wdqHgGLrX/exec",     // URL на Apps Script уеб приложението (Google Sheet база)
+  supabaseUrl: "https://ncwiyhndgyssepaqyiss.supabase.co",     // Supabase проект — база данни за калкулации и настройки
+  supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jd2l5aG5kZ3lzc2VwYXF5aXNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzMjU0MzUsImV4cCI6MjEwMDkwMTQzNX0.ve7p8ZKe0DYgD_LrY0rcPyHAGF-NNLuh0R-2noess7w", // anon public ключ — безопасен за браузъра
   mapsApiKey: "",        // Google Maps Routes API ключ — за реални пътни разстояния
 
   phone: "0882 944 098",
@@ -1210,27 +1211,30 @@ async function loadParams() {
   } catch (e) { return null; }
 }
 
-// --- Трайно пазене през Google Sheet (Apps Script) ---
-async function pushParamsToSheet(p, endpoint) {
-  if (!endpoint) return false;
+// --- Трайно пазене през Supabase (споделена база за всички устройства) ---
+function supabaseHeaders(key, extra) {
+  return { apikey: key, Authorization: `Bearer ${key}`, ...extra };
+}
+
+async function pushParamsToSupabase(p, url, key) {
+  if (!url || !key) return false;
   try {
-    await fetch(endpoint, {
+    const res = await fetch(`${url}/rest/v1/calc_params?on_conflict=id`, {
       method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ type: "params", params: p }),
+      headers: supabaseHeaders(key, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
+      body: JSON.stringify({ id: "pricing", value: p }),
     });
-    return true;
+    return res.ok;
   } catch (e) { return false; }
 }
 
-async function fetchParamsFromSheet(endpoint) {
-  if (!endpoint) return null;
+async function fetchParamsFromSupabase(url, key) {
+  if (!url || !key) return null;
   try {
-    const res = await fetch(endpoint + (endpoint.includes("?") ? "&" : "?") + "type=params");
+    const res = await fetch(`${url}/rest/v1/calc_params?id=eq.pricing&select=value`, { headers: supabaseHeaders(key) });
     if (!res.ok) return null;
-    const data = await res.json();
-    return data && data.params ? mergeParams(data.params) : null;
+    const rows = await res.json();
+    return rows && rows[0] ? mergeParams(rows[0].value) : null;
   } catch (e) { return null; }
 }
 
@@ -1291,21 +1295,31 @@ function buildRecord(s, p, r, id, calcNumber) {
   };
 }
 
-// изпраща записа към Google Sheet (Apps Script), ако е зададен адрес
-async function pushToSheet(record, endpoint) {
-  if (!endpoint) return null;
+// изпраща записа към Supabase (споделена база), ако е зададена връзка
+async function pushCalcToSupabase(record, url, key) {
+  if (!url || !key || !record.id) return false;
   try {
-    await fetch(endpoint, {
+    const res = await fetch(`${url}/rest/v1/calculations?on_conflict=id`, {
       method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(record),
+      headers: supabaseHeaders(key, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
+      body: JSON.stringify({ id: record.id, status: record.status || "калкулация", data: record }),
     });
-    return true;
+    return res.ok;
   } catch (e) {
-    console.error("sheet push failed", e);
+    console.error("supabase push failed", e);
     return false;
   }
+}
+
+// изтегля всички калкулации от Supabase (видими за всички устройства)
+async function fetchCalcsFromSupabase(url, key) {
+  if (!url || !key) return [];
+  try {
+    const res = await fetch(`${url}/rest/v1/calculations?select=id,calc_number,status,data&order=created_at.desc&limit=500`, { headers: supabaseHeaders(key) });
+    if (!res.ok) return [];
+    const rows = await res.json();
+    return rows.map((row) => ({ ...row.data, key: row.id, calcNumber: row.calc_number, status: row.status }));
+  } catch (e) { return []; }
 }
 
 const CALC_COUNTER_KEY = "counter:calc";
@@ -1327,7 +1341,8 @@ async function saveCalc(key, record) {
   return storageSet(key, JSON.stringify(record));
 }
 
-async function loadCalcs() {
+async function loadCalcs(p) {
+  if (p && p.supabaseUrl && p.supabaseKey) return fetchCalcsFromSupabase(p.supabaseUrl, p.supabaseKey);
   const out = [];
   const keys = await storageList(CALC_PREFIX);
   for (const k of keys) {
@@ -1565,7 +1580,7 @@ function SettingsPanel({ p, setP, saveState }) {
         <div className="font-bold" style={{ color: ink }}>⚙ Параметри на калкулатора</div>
         <div className="text-xs text-right" style={{ color: saveState === "error" ? "#dc2626" : "#94a3b8" }}>
           {saveState === "saving" ? "Записване…"
-            : saveState === "saved-sheet" ? "Записано в Google Sheet ✓"
+            : saveState === "saved-sheet" ? "Записано в базата ✓"
             : saveState === "saved" ? "Записано ✓"
             : saveState === "unavailable" ? "Важи за сесията (без трайно хранилище)"
             : saveState === "error" ? "Грешка при запис" : ""}
@@ -1690,11 +1705,17 @@ function SettingsPanel({ p, setP, saveState }) {
         )}
       </div>
 
-      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">Google Sheet база данни</div>
+      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">Supabase база данни</div>
       <label className="block">
-        <span className="text-[11px] text-slate-500">Адрес на Apps Script (оставете празно, за да не се изпраща)</span>
-        <input value={p.sheetEndpoint || ""} onChange={(e) => upd({ sheetEndpoint: e.target.value })}
-          placeholder="https://script.google.com/macros/s/..../exec"
+        <span className="text-[11px] text-slate-500">Supabase URL (оставете празно, за да не се изпраща)</span>
+        <input value={p.supabaseUrl || ""} onChange={(e) => upd({ supabaseUrl: e.target.value })}
+          placeholder="https://xxxxx.supabase.co"
+          className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
+      </label>
+      <label className="block mt-2">
+        <span className="text-[11px] text-slate-500">Supabase anon ключ</span>
+        <input value={p.supabaseKey || ""} onChange={(e) => upd({ supabaseKey: e.target.value })}
+          placeholder="eyJhbGci..."
           className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
       </label>
 
@@ -1755,14 +1776,14 @@ function LogPanel({ onClose, p }) {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState(false);
   const [confirming, setConfirming] = useState(null);
-  const refresh = async () => { setRows(null); const d = await loadCalcs(); setRows(d); setErr(d.length === 0); };
+  const refresh = async () => { setRows(null); const d = await loadCalcs(p); setRows(d); setErr(d.length === 0); };
   useEffect(() => { refresh(); }, []);
 
   const confirmRow = async (row) => {
     setConfirming(row.key);
     const { key, ...record } = row;
     record.status = "потвърдена";
-    pushToSheet(record, p?.sheetEndpoint);
+    pushCalcToSupabase(record, p?.supabaseUrl, p?.supabaseKey);
     await saveCalc(key, record);
     await refresh();
     setConfirming(null);
@@ -1795,7 +1816,7 @@ function LogPanel({ onClose, p }) {
       {rows?.length === 0 && (
         <div className="text-sm text-slate-400">
           {getStorageMode() === "none"
-            ? "Тази среда не поддържа трайно хранилище. Свържете Google Sheet базата от ⚙ Параметри, за да се пазят калкулациите."
+            ? "Тази среда не поддържа трайно хранилище. Свържете Supabase базата от ⚙ Параметри, за да се пазят калкулациите."
             : "Още няма записани калкулации."}
         </div>
       )}
@@ -1855,7 +1876,9 @@ function LogPanel({ onClose, p }) {
         </>
       )}
       <p className="text-[11px] text-slate-400 mt-3">
-        {getStorageMode() === "shared"
+        {p?.supabaseUrl && p?.supabaseKey
+          ? "Записите се пазят в споделената база и се виждат от всички устройства."
+          : getStorageMode() === "shared"
           ? "Записите се пазят в браузъра на този сайт и се виждат от всеки, който го отвори на това устройство."
           : getStorageMode() === "personal"
           ? "Записите се пазят локално за това устройство и този браузър."
@@ -1919,9 +1942,9 @@ export default function KorektCalculator() {
       if (alive) forceRedraw((x) => x + 1);
       const local = await loadParams();
       if (alive && local) setP(local);
-      const endpoint = (local || DEFAULTS).sheetEndpoint;
-      if (endpoint) {
-        const remote = await fetchParamsFromSheet(endpoint);
+      const cfg = local || DEFAULTS;
+      if (cfg.supabaseUrl && cfg.supabaseKey) {
+        const remote = await fetchParamsFromSupabase(cfg.supabaseUrl, cfg.supabaseKey);
         if (alive && remote) setP(remote);
       }
       if (alive) setParamsLoaded(true);
@@ -1935,8 +1958,8 @@ export default function KorektCalculator() {
     const t = setTimeout(() => {
       (async () => {
         const okLocal = await saveParams(p);
-        const okSheet = await pushParamsToSheet(p, p.sheetEndpoint);
-        setParamSave(okSheet ? "saved-sheet" : okLocal ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
+        const okRemote = await pushParamsToSupabase(p, p.supabaseUrl, p.supabaseKey);
+        setParamSave(okRemote ? "saved-sheet" : okLocal ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
       })();
     }, 600);
     return () => clearTimeout(t);
@@ -1968,7 +1991,7 @@ export default function KorektCalculator() {
     pending.current = { key, rec };            // готов веднага, дори да не дочакаме таймера
     setSaveState("saving");
     const t = setTimeout(async () => {
-      pushToSheet(rec, p.sheetEndpoint);
+      pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey);
       const ok = await saveCalc(key, rec);
       setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
     }, 1200);
@@ -1981,9 +2004,13 @@ export default function KorektCalculator() {
       const cur = pending.current;
       if (!cur) return;
       try {
-        if (p.sheetEndpoint && typeof navigator !== "undefined" && navigator.sendBeacon) {
-          navigator.sendBeacon(p.sheetEndpoint,
-            new Blob([JSON.stringify(cur.rec)], { type: "text/plain;charset=utf-8" }));
+        if (p.supabaseUrl && p.supabaseKey) {
+          fetch(`${p.supabaseUrl}/rest/v1/calculations?on_conflict=id`, {
+            method: "POST",
+            keepalive: true,
+            headers: supabaseHeaders(p.supabaseKey, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
+            body: JSON.stringify({ id: cur.rec.id, status: cur.rec.status || "калкулация", data: cur.rec }),
+          });
         }
       } catch (e) { /* без значение — записът в хранилището остава */ }
       saveCalc(cur.key, cur.rec);
@@ -1995,7 +2022,7 @@ export default function KorektCalculator() {
       window.removeEventListener("pagehide", flush);
       document.removeEventListener("visibilitychange", onHide);
     };
-  }, [p.sheetEndpoint]);
+  }, [p.supabaseUrl, p.supabaseKey]);
 
   const submitRequest = async () => {
     const key = recordKey.current || `${CALC_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -2004,7 +2031,7 @@ export default function KorektCalculator() {
     rec.contact = { name: s.name, phone: s.phone, email: s.email };
     rec.status = "заявка";
     setSaveState("saving");
-    pushToSheet(rec, p.sheetEndpoint);
+    pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey);
     const ok = await saveCalc(key, rec);
     setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
     alert(ok
