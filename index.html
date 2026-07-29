@@ -89,6 +89,10 @@ const DEFAULTS = {
   // минимум за всяка изпратена бригада (товарене/разтоварване)
   carRatePerKm: 0.3,
   // €/км за кола, ако базата не е на маршрута
+  labourLocalRadiusKm: 15,
+  // до толкова км се брои за "същия град" — без път
+  labourMinCarFee: 10,
+  // минимална такса за кола на бригадата (дори в града)
   routeDetourTolerance: 1.1,
   // до 10% отклонение се брои "по маршрута"
   overnightThresholdH: 8,
@@ -256,7 +260,8 @@ const CATALOG = [{
     m3: 1.4,
     kg: 45,
     wrap: 10,
-    wrapReq: true
+    wrapReq: true,
+    protect: 8
   }, {
     id: "sofa3",
     label: "Диван 3-местен",
@@ -266,7 +271,8 @@ const CATALOG = [{
     asm: 0.5,
     wrap: 12,
     wrapReq: true,
-    kind: "oversized"
+    kind: "oversized",
+    protect: 10
   }, {
     id: "sofaL",
     label: "Ъглов диван",
@@ -276,13 +282,15 @@ const CATALOG = [{
     asm: 0.9,
     wrap: 16,
     wrapReq: true,
-    kind: "oversized"
+    kind: "oversized",
+    protect: 14
   }, {
     id: "armchair",
     label: "Фотьойл",
     m3: 0.8,
     kg: 25,
-    wrap: 6
+    wrap: 6,
+    protect: 5
   }, {
     id: "tvstand",
     label: "ТВ + стойка",
@@ -296,13 +304,15 @@ const CATALOG = [{
     protectReq: true
   }, {
     id: "vitrine",
-    label: "Витрина",
+    label: "Витрина (със стъкла)",
     m3: 1.0,
     kg: 50,
     dis: 0.4,
     asm: 1.2,
     wrap: 10,
-    protect: 6
+    wrapReq: true,
+    protect: 6,
+    protectReq: true
   }, {
     id: "table",
     label: "Маса за хранене",
@@ -313,6 +323,17 @@ const CATALOG = [{
     wrap: 8,
     protect: 5
   }, {
+    id: "tableGlass",
+    label: "Маса със стъклен плот",
+    m3: 0.8,
+    kg: 45,
+    dis: 0.3,
+    asm: 0.7,
+    wrap: 10,
+    wrapReq: true,
+    protect: 8,
+    protectReq: true
+  }, {
     id: "tableSmall",
     label: "Малка масичка",
     m3: 0.25,
@@ -322,11 +343,23 @@ const CATALOG = [{
     wrap: 4,
     protect: 3
   }, {
+    id: "tableSmallGlass",
+    label: "Малка масичка със стъкло",
+    m3: 0.3,
+    kg: 18,
+    dis: 0.15,
+    asm: 0.35,
+    wrap: 6,
+    wrapReq: true,
+    protect: 5,
+    protectReq: true
+  }, {
     id: "chair",
     label: "Стол",
     m3: 0.15,
     kg: 5,
-    wrap: 3
+    wrap: 3,
+    protect: 2
   }, {
     id: "shelf",
     label: "Библиотека / етажерка",
@@ -334,7 +367,8 @@ const CATALOG = [{
     kg: 35,
     dis: 0.3,
     asm: 0.9,
-    wrap: 8
+    wrap: 8,
+    protect: 6
   }]
 }, {
   group: "Спалня",
@@ -345,7 +379,8 @@ const CATALOG = [{
     kg: 40,
     dis: 0.4,
     asm: 0.9,
-    wrap: 8
+    wrap: 8,
+    protect: 6
   }, {
     id: "bedDouble",
     label: "Двойно легло (рамка + матрак)",
@@ -354,14 +389,16 @@ const CATALOG = [{
     dis: 0.5,
     asm: 1.2,
     wrap: 12,
-    wrapReq: true
+    wrapReq: true,
+    protect: 10
   }, {
     id: "mattress",
     label: "Матрак",
     m3: 0.6,
     kg: 25,
     wrap: 12,
-    wrapReq: true
+    wrapReq: true,
+    protect: 6
   }, {
     id: "wardrobe2",
     label: "Гардероб 2-крилен",
@@ -369,7 +406,8 @@ const CATALOG = [{
     kg: 70,
     dis: 0.7,
     asm: 2.0,
-    wrap: 8
+    wrap: 8,
+    protect: 8
   }, {
     id: "wardrobe3",
     label: "Гардероб 3-крилен",
@@ -377,7 +415,8 @@ const CATALOG = [{
     kg: 110,
     dis: 1.5,
     asm: 3.0,
-    wrap: 10
+    wrap: 10,
+    protect: 10
   }, {
     id: "dresser",
     label: "Скрин / шкаф",
@@ -385,13 +424,15 @@ const CATALOG = [{
     kg: 40,
     dis: 0.3,
     asm: 0.9,
-    wrap: 8
+    wrap: 8,
+    protect: 5
   }, {
     id: "nightstand",
     label: "Нощно шкафче",
     m3: 0.2,
     kg: 12,
-    wrap: 4
+    wrap: 4,
+    protect: 3
   }, {
     id: "desk",
     label: "Бюро",
@@ -399,7 +440,8 @@ const CATALOG = [{
     kg: 30,
     dis: 0.3,
     asm: 0.9,
-    wrap: 8
+    wrap: 8,
+    protect: 5
   }]
 }, {
   group: "Уреди",
@@ -410,7 +452,8 @@ const CATALOG = [{
     kg: 60,
     wrap: 10,
     wrapReq: true,
-    kind: "appliance"
+    kind: "appliance",
+    protect: 8
   }, {
     id: "fridgeXL",
     label: "Хладилник голям (American)",
@@ -418,7 +461,8 @@ const CATALOG = [{
     kg: 90,
     wrap: 14,
     wrapReq: true,
-    kind: "appliance"
+    kind: "appliance",
+    protect: 12
   }, {
     id: "freezer",
     label: "Фризер",
@@ -426,7 +470,8 @@ const CATALOG = [{
     kg: 50,
     wrap: 9,
     wrapReq: true,
-    kind: "appliance"
+    kind: "appliance",
+    protect: 7
   }, {
     id: "washer",
     label: "Пералня",
@@ -434,7 +479,8 @@ const CATALOG = [{
     kg: 70,
     wrap: 8,
     wrapReq: true,
-    kind: "appliance"
+    kind: "appliance",
+    protect: 6
   }, {
     id: "dishwasher",
     label: "Съдомиялна",
@@ -442,7 +488,8 @@ const CATALOG = [{
     kg: 45,
     wrap: 8,
     wrapReq: true,
-    kind: "appliance"
+    kind: "appliance",
+    protect: 6
   }, {
     id: "stove",
     label: "Готварска печка",
@@ -450,7 +497,8 @@ const CATALOG = [{
     kg: 45,
     wrap: 8,
     wrapReq: true,
-    kind: "appliance"
+    kind: "appliance",
+    protect: 6
   }, {
     id: "fridgeSxS",
     label: "Хладилник двуврат (side-by-side)",
@@ -459,7 +507,8 @@ const CATALOG = [{
     wrap: 16,
     wrapReq: true,
     kind: "appliance_heavy",
-    minCrew: 4
+    minCrew: 4,
+    protect: 14
   }, {
     id: "washerMiele",
     label: "Пералня Miele",
@@ -467,28 +516,32 @@ const CATALOG = [{
     kg: 85,
     wrap: 8,
     wrapReq: true,
-    kind: "appliance_heavy"
+    kind: "appliance_heavy",
+    protect: 6
   }, {
     id: "microwave",
     label: "Микровълнова",
     m3: 0.1,
     kg: 15,
     wrap: 3,
-    wrapReq: true
+    wrapReq: true,
+    protect: 2
   }, {
     id: "ac",
     label: "Климатик (двете тела)",
     m3: 0.3,
     kg: 35,
     wrap: 4,
-    wrapReq: true
+    wrapReq: true,
+    protect: 4
   }, {
     id: "boiler",
     label: "Бойлер",
     m3: 0.3,
     kg: 30,
     wrap: 4,
-    wrapReq: true
+    wrapReq: true,
+    protect: 4
   }]
 }, {
   group: "Кашони и дребни",
@@ -526,7 +579,8 @@ const CATALOG = [{
     label: "Велосипед",
     m3: 0.4,
     kg: 12,
-    wrap: 6
+    wrap: 6,
+    protect: 4
   }, {
     id: "art",
     label: "Огледало / картина",
@@ -562,18 +616,21 @@ const CATALOG = [{
     label: "Стара мебел за изхвърляне",
     m3: 1.0,
     kg: 40,
-    kind: "appliance"
+    kind: "appliance",
+    protect: 6
   }, {
     id: "junkMattress",
     label: "Стар матрак",
     m3: 0.6,
-    kg: 25
+    kg: 25,
+    protect: 5
   }, {
     id: "junkAppliance",
     label: "Стар уред",
     m3: 0.5,
     kg: 50,
-    kind: "appliance"
+    kind: "appliance",
+    protect: 5
   }]
 }, {
   group: "Специални (спец. обработка)",
@@ -583,21 +640,24 @@ const CATALOG = [{
     m3: 1.5,
     kg: 250,
     wrap: 16,
-    surcharge: 150
+    surcharge: 150,
+    protect: 16
   }, {
     id: "grand",
     label: "Роял",
     m3: 2.5,
     kg: 400,
     wrap: 20,
-    surcharge: 250
+    surcharge: 250,
+    protect: 22
   }, {
     id: "safe",
     label: "Каса / банкомат",
     m3: 0.5,
     kg: 300,
     wrap: 8,
-    surcharge: 200
+    surcharge: 200,
+    protect: 8
   }, {
     id: "gym",
     label: "Спортен уред (пътека)",
@@ -605,20 +665,31 @@ const CATALOG = [{
     kg: 60,
     dis: 0.4,
     asm: 0.8,
-    wrap: 8
+    wrap: 8,
+    protect: 6
   }]
 }];
 const ITEM_INDEX = Object.fromEntries(CATALOG.flatMap(g => g.items).map(i => [i.id, i]));
 const totalVolume = qty => Object.entries(qty).reduce((s, [id, cnt]) => s + (ITEM_INDEX[id]?.m3 || 0) * cnt, 0);
 // часове за разглобяване и за сглобяване (по отделни отметки на вещ)
+// Отметките dis/asm може да са:
+//   true  → всички бройки от вещта (обратна съвместимост)
+//   число → само толкова бройки (напр. 4 бюра, но само 1 се разглобява)
+//   false/липсва → нищо
+const pickCount = (flag, cnt) => {
+  if (flag === true) return cnt;
+  const n = Number(flag);
+  if (Number.isFinite(n) && n > 0) return Math.min(n, cnt);
+  return 0;
+};
 const disHoursFor = (qty, dis, asm, factor) => {
   let d = 0,
     a = 0;
   for (const [id, cnt] of Object.entries(qty)) {
     const it = ITEM_INDEX[id];
     if (!it || !cnt) continue;
-    if (dis?.[id] && it.dis) d += it.dis * cnt;
-    if (asm?.[id] && it.asm) a += it.asm * cnt;
+    if (it.dis) d += it.dis * pickCount(dis?.[id], cnt);
+    if (it.asm) a += it.asm * pickCount(asm?.[id], cnt);
   }
   const k = factor || 1;
   return {
@@ -632,16 +703,17 @@ const disHoursFor = (qty, dis, asm, factor) => {
 const protectMetersFor = (qty, protect) => Object.entries(qty).reduce((s, [id, cnt]) => {
   const it = ITEM_INDEX[id];
   if (!it?.protect || !cnt) return s;
-  const on = it.protectReq || protect?.[id];
-  return on ? s + it.protect * cnt : s;
+  const n = it.protectReq ? cnt : pickCount(protect?.[id], cnt);
+  return s + it.protect * n;
 }, 0);
 
 // метри стреч фолио: задължителните вещи винаги, останалите — по избор
 const wrapMetersFor = (qty, wrap) => Object.entries(qty).reduce((s, [id, cnt]) => {
   const it = ITEM_INDEX[id];
   if (!it?.wrap || !cnt) return s;
-  const on = it.wrapReq || wrap?.[id];
-  return on ? s + it.wrap * cnt : s;
+  // задължителните се опаковат всички; за останалите важи избраният брой
+  const n = it.wrapReq ? cnt : pickCount(wrap?.[id], cnt);
+  return s + it.wrap * n;
 }, 0);
 const totalWeight = qty => Object.entries(qty).reduce((s, [id, cnt]) => s + (ITEM_INDEX[id]?.kg || 0) * cnt, 0);
 const countKind = (qty, kind) => Object.entries(qty).reduce((s, [id, cnt]) => s + (ITEM_INDEX[id]?.kind === kind ? cnt : 0), 0);
@@ -2211,6 +2283,7 @@ function computePrice(s, p) {
   const bgEst = s.service === "intercity" ? estimateKmAny(s.pickupCity, "", s.dropoffCity, "", n(p.roadFactorBG || 1.25)) : null;
   const oneWayKm = s.service === "local" ? localEst != null ? localEst : 0 : s.service === "intercity" ? bgEst != null ? bgEst : n(s.km) : n(p.euDistances[s.country]);
   let crew = crewFor(vol, p);
+  const autoCrew = crew; // изчисленият по обем брой — за справка в интерфейса
   // протокол: някои вещи изискват минимален брой хора (напр. двуврат хладилник → 4)
   let reqCrew = 0;
   Object.entries(s.qty).forEach(([id, cnt]) => {
@@ -2219,8 +2292,22 @@ function computePrice(s, p) {
   const crewByProtocol = reqCrew > crew;
   if (reqCrew) crew = Math.max(crew, reqCrew);
 
+  // ръчна промяна от служител — не може под изисквания от протокола минимум
+  const manualCrew = Number(s.crewOverride) || 0;
+  const crewManual = manualCrew > 0 && manualCrew !== crew;
+  if (manualCrew > 0) crew = Math.max(manualCrew, reqCrew || 1);
+
   // курс = разстояние над прага; далечни "градски" адреси също минават на км тарифа
-  const isCourse = s.service !== "disposal" && oneWayKm >= n(p.intercityThresholdKm);
+  const isDisposalService = s.service === "disposal";
+  const isLabourOnly = s.service === "labour"; // само хамали, клиентът осигурява транспорт
+
+  // При "само хамали" в друг град: бригадата тръгва от избрана или най-близката база.
+  // Ако работата е в самия град на базата, няма път и няма кола.
+  const labourAutoBase = isLabourOnly && s.city ? nearestBase(s.city, n(p.roadFactorBG || 1.25)) : null;
+  const labourBaseCity = isLabourOnly ? s.labourBase || labourAutoBase?.city || null : null;
+  const labourBaseKm = labourBaseCity && s.city ? estimateKmAny(labourBaseCity, "", s.city, "", n(p.roadFactorBG || 1.25)) : 0;
+  const labourTravelKm = labourBaseKm && labourBaseKm > n(p.labourLocalRadiusKm || 15) ? labourBaseKm : 0;
+  const isCourse = !isDisposalService && !isLabourOnly && oneWayKm >= n(p.intercityThresholdKm);
 
   // екстри (човекочаса) — достъпът по стълби вече е парична такса, не часове
   const work = disHoursFor(s.qty, s.dis, s.asm, n(p.disFactor || 1));
@@ -2347,6 +2434,29 @@ function computePrice(s, p) {
       add(`Чували — ${sacks} бр. × ${n(p.sackPrice)} ${p.currency}/бр.`, sacks * n(p.sackPrice), true);
     }
     add(`Изнасяне, извозване и изсипване${trucksN > 1 ? ` (${trucksN} камиона)` : ""} — ${jobClock.toFixed(1)} ч × ${totalCrew} души × ${disposalRate} ${p.currency}/ч`, handlingManHours * disposalRate);
+  } else if (isLabourOnly) {
+    // само хамали — клиентът осигурява транспорта за багажа.
+    // Ако работата е в друг град, се плаща кола за хората + времето за път.
+    const carryClock = vol / n(p.m3PerManHour || 1.6) / crew;
+    let jobClock = carryClock;
+    if (jobClock < n(p.minLocalHours)) jobClock = n(p.minLocalHours); // мин. 2 ч
+
+    // разстояние от базата до града на работа (0, ако е в същия град)
+    const labourKm = labourTravelKm;
+    const travelH = labourKm ? 2 * labourKm / n(p.roadSpeed || 65) : 0; // отиване и връщане
+
+    handlingClock = jobClock + travelH;
+    handlingManHours = handlingClock * crew;
+    add(`Товарене и пренасяне — ${jobClock.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`, jobClock * crew * n(p.workerRate));
+    if (travelH > 0) {
+      add(`Път на бригадата (${labourBaseCity} → ${s.city}) — ${travelH.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`, travelH * crew * n(p.workerRate));
+    }
+    // кола за бригадата — винаги, с минимална такса дори в рамките на града
+    const carKmFee = labourKm ? 2 * labourKm * n(p.carRatePerKm) : 0;
+    const carFee = Math.max(carKmFee, n(p.labourMinCarFee || 0));
+    if (carFee > 0) {
+      add(labourKm ? `Кола за бригадата — ${2 * labourKm} км × ${n(p.carRatePerKm)} ${p.currency}/км` : `Кола за бригадата (в града) — минимална такса`, carFee, true);
+    }
   } else if (selfUnloadMode) {
     // клиентът разтоварва сам — плаща се само товаренето при него
     handlingManHours = loadClock * crew;
@@ -2406,7 +2516,7 @@ function computePrice(s, p) {
   const perFloorStd = n(p.floorFeeNoElevator) + boxes * n(p.boxPerFloor) + appNormal * n(p.appliancePerFloor) + appHeavy * n(p.heavyAppliancePerFloor);
   const perFloorOvr = oversized * n(p.heavyAppliancePerFloor);
   // при изхвърляне няма адрес на доставка (само сметище); при самостоятелно разтоварване стълбите там са за сметка на клиента
-  const skipDropoffFloors = isDisposal || selfUnloadMode;
+  const skipDropoffFloors = isDisposal || selfUnloadMode || isLabourOnly;
   const floorsStdTot = floorsStd(s.pickup) + (skipDropoffFloors ? 0 : floorsStd(s.dropoff));
   const floorsOvrTot = floorsOvr(s.pickup) + (skipDropoffFloors ? 0 : floorsOvr(s.dropoff));
   const stairs = floorsStdTot * perFloorStd + floorsOvrTot * perFloorOvr;
@@ -2419,8 +2529,11 @@ function computePrice(s, p) {
     add(`Стълби без асансьор${parts.length ? " · " + parts.join(", ") : ""}`, stairs);
   }
 
-  // ТРАНСПОРТ (перо) — само за времето, в което камионът реално участва
-  if (isDisposal) {
+  // ТРАНСПОРТ (перо) — само за времето, в което камионът реално участва.
+  // При "само хамали" транспортът е на клиента и не се начислява.
+  if (isLabourOnly) {
+    // без транспортно перо
+  } else if (isDisposal) {
     const totalTruckHours = handlingClock * disposalTrucksN; // сума от часовете на всички камиони
     add(`Транспорт${disposalTrucksN > 1 ? ` (${disposalTrucksN} камиона)` : ""} — ${totalTruckHours.toFixed(1)} ч × ${n(p.truckRate)} ${p.currency}/ч (${totalKm} км до сметището)`, totalTruckHours * n(p.truckRate));
     const fee = n((p.landfillFees || {})[wasteType]);
@@ -2441,7 +2554,7 @@ function computePrice(s, p) {
   if (rolls) add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(3)} ${p.currency}/м`, rolls * n(p.stretchRollPrice), true);
 
   // праг
-  const floor = n(p.minPrice[s.service === "disposal" ? "local" : s.service]);
+  const floor = n(p.minPrice[s.service === "disposal" || s.service === "labour" ? "local" : s.service]);
   if (total < floor) {
     lines.push({
       label: "Изравняване до минимум",
@@ -2455,6 +2568,10 @@ function computePrice(s, p) {
     vol,
     weight,
     isDisposal,
+    isLabourOnly,
+    labourBaseCity,
+    labourTravelKm,
+    labourAutoBaseCity: labourAutoBase?.city || null,
     wasteType,
     sacks,
     fillManHours,
@@ -2480,6 +2597,9 @@ function computePrice(s, p) {
     auto: !picked,
     isCourse,
     crewByProtocol,
+    autoCrew,
+    crewManual,
+    reqCrew,
     disHours,
     disManHours,
     disCrew,
@@ -2805,6 +2925,70 @@ function Pill({
     } : {}
   }, children);
 }
+/* Отметка за услуга по вещ. При няколко бройки позволява да се избере
+   на колко от тях важи (напр. 4 бюра, но само 1 се разглобява). */
+function OptionToggle({
+  label,
+  cnt,
+  value,
+  onChange,
+  detail,
+  locked
+}) {
+  const active = value === true ? cnt : Number(value) > 0 ? Math.min(Number(value), cnt) : 0;
+  const on = active > 0;
+  if (locked) {
+    return /*#__PURE__*/React.createElement("span", {
+      className: "flex items-center gap-1.5"
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "checkbox",
+      checked: true,
+      readOnly: true,
+      disabled: true,
+      className: "w-4 h-4 accent-orange-500"
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "text-xs",
+      style: {
+        color: accent
+      }
+    }, label, " ", detail(cnt)));
+  }
+  return /*#__PURE__*/React.createElement("span", {
+    className: "flex items-center gap-1.5"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: on,
+    onChange: () => onChange(on ? 0 : cnt),
+    className: "w-4 h-4 accent-orange-500"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "text-xs",
+    style: {
+      color: on ? accent : "#94a3b8"
+    }
+  }, label), on && cnt > 1 && /*#__PURE__*/React.createElement("span", {
+    className: "flex items-center gap-1"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => onChange(Math.max(1, active - 1)),
+    className: "w-6 h-6 rounded border border-slate-200 text-slate-500 text-xs leading-none"
+  }, "−"), /*#__PURE__*/React.createElement("span", {
+    className: "text-xs font-semibold",
+    style: {
+      color: ink
+    }
+  }, active), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => onChange(Math.min(cnt, active + 1)),
+    className: "w-6 h-6 rounded border border-slate-200 text-slate-500 text-xs leading-none"
+  }, "+"), /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-slate-400"
+  }, "от ", cnt)), on && /*#__PURE__*/React.createElement("span", {
+    className: "text-xs",
+    style: {
+      color: accent
+    }
+  }, detail(active)));
+}
 function Stepper({
   value,
   onChange
@@ -2972,8 +3156,7 @@ function HoodInput({
 function SettingsPanel({
   p,
   setP,
-  saveState,
-  onSave
+  saveState
 }) {
   const upd = patch => setP({
     ...p,
@@ -3388,6 +3571,22 @@ function SettingsPanel({
     }),
     suffix: "€/км"
   }), /*#__PURE__*/React.createElement(Num, {
+    label: "Радиус без път (хамали)",
+    value: p.labourLocalRadiusKm,
+    step: 5,
+    onChange: v => upd({
+      labourLocalRadiusKm: v
+    }),
+    suffix: "км"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Мин. кола (хамали)",
+    value: p.labourMinCarFee,
+    step: 1,
+    onChange: v => upd({
+      labourMinCarFee: v
+    }),
+    suffix: "€"
+  }), /*#__PURE__*/React.createElement(Num, {
     label: "Праг за нощувка",
     value: p.overnightThresholdH,
     step: 1,
@@ -3573,13 +3772,6 @@ function SettingsPanel({
   })), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap items-center gap-2 mt-4"
   }, /*#__PURE__*/React.createElement("button", {
-    onClick: onSave,
-    disabled: saveState === "saving",
-    className: "text-xs font-semibold px-3 py-1.5 rounded-full text-white disabled:opacity-60",
-    style: {
-      background: accent
-    }
-  }, "💾 Запази"), /*#__PURE__*/React.createElement("button", {
     onClick: exportParams,
     className: "text-xs font-semibold px-3 py-1.5 rounded-full text-white",
     style: {
@@ -3832,6 +4024,8 @@ function KorektCalculator() {
     truckId: null,
     courseMode: "hourly",
     baseCity: "",
+    labourBase: "",
+    crewOverride: 0,
     forceCar: false,
     weFill: true,
     landfillKm: 0,
@@ -3881,6 +4075,14 @@ function KorektCalculator() {
       [id]: !prev[field][id]
     }
   }));
+  // задава на колко бройки важи услугата (0 = изключена)
+  const setField = (field, id, value) => setS(prev => ({
+    ...prev,
+    [field]: {
+      ...prev[field],
+      [id]: value
+    }
+  }));
   const r = useMemo(() => computePrice(s, p), [s, p]);
   const {
     total,
@@ -3888,6 +4090,10 @@ function KorektCalculator() {
     vol,
     weight,
     isDisposal,
+    isLabourOnly,
+    labourBaseCity,
+    labourTravelKm,
+    labourAutoBaseCity,
     wasteType,
     sacks,
     fillManHours,
@@ -3911,6 +4117,9 @@ function KorektCalculator() {
     fleet,
     auto,
     crewByProtocol,
+    autoCrew,
+    crewManual,
+    reqCrew,
     isCourse,
     disHours,
     disCrew,
@@ -3994,12 +4203,6 @@ function KorektCalculator() {
     }, 600);
     return () => clearTimeout(t);
   }, [p, paramsLoaded]);
-  const forceSaveParams = async () => {
-    setParamSave("saving");
-    const okLocal = await saveParams(p);
-    const okSheet = await pushParamsToSheet(p, p.sheetEndpoint);
-    setParamSave(okSheet ? "saved-sheet" : okLocal ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
-  };
 
   // --- автоматичен запис на калкулацията при показване на цената ---
   const [showLog, setShowLog] = useState(false);
@@ -4084,7 +4287,7 @@ function KorektCalculator() {
     setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
     alert(ok ? "Заявката е записана. Ще се свържем с Вас." : "Заявката не можа да се запише автоматично. Моля, обадете се на " + p.phone + ".");
   };
-  const canNext = step === 0 && s.service || step === 1 && (s.service === "disposal" ? !!s.city : s.service === "local" ? s.city && (!NEIGHBORHOODS[s.city] || s.pickupHood.trim() && s.dropoffHood.trim()) : s.service === "intercity" ? !!findCity(s.pickupCity) && !!findCity(s.dropoffCity) : s.country) || step === 2 && vol > 0;
+  const canNext = step === 0 && s.service || step === 1 && (s.service === "labour" ? !!findCity(s.city) : s.service === "disposal" ? !!s.city : s.service === "local" ? s.city && (!NEIGHBORHOODS[s.city] || s.pickupHood.trim() && s.dropoffHood.trim()) : s.service === "intercity" ? !!findCity(s.pickupCity) && !!findCity(s.dropoffCity) : s.country) || step === 2 && vol > 0;
   return /*#__PURE__*/React.createElement("div", {
     className: "min-h-screen w-full",
     style: {
@@ -4122,14 +4325,19 @@ function KorektCalculator() {
       borderColor: showSettings ? accent : "#e2e6ec",
       color: showSettings ? accent : "#64748b"
     }
-  }, "⚙ Параметри"))), showLog && /*#__PURE__*/React.createElement(LogPanel, {
+  }, "⚙ Параметри"), /*#__PURE__*/React.createElement("a", {
+    href: p.phoneHref,
+    className: "text-sm font-semibold px-4 py-2 rounded-full text-white",
+    style: {
+      background: ink
+    }
+  }, p.phone))), showLog && /*#__PURE__*/React.createElement(LogPanel, {
     onClose: () => setShowLog(false),
     p: p
   }), showSettings && /*#__PURE__*/React.createElement(SettingsPanel, {
     p: p,
     setP: setP,
-    saveState: paramSave,
-    onSave: forceSaveParams
+    saveState: paramSave
   }), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-2 mb-8"
   }, STEPS.map((label, i) => /*#__PURE__*/React.createElement("div", {
@@ -4176,6 +4384,11 @@ function KorektCalculator() {
     t: "Изхвърляне на отпадък",
     d: "Изнасяне и извозване до сметище",
     m: 0
+  }, {
+    id: "labour",
+    t: "Само хамали (без камион)",
+    d: "Опаковане, разглобяване и товарене в Ваш транспорт",
+    m: 0
   }].map(o => /*#__PURE__*/React.createElement("button", {
     key: o.id,
     onClick: () => {
@@ -4217,7 +4430,58 @@ function KorektCalculator() {
     style: {
       color: ink
     }
-  }, "Локация"), s.service === "disposal" && /*#__PURE__*/React.createElement("div", {
+  }, "Локация"), s.service === "labour" && /*#__PURE__*/React.createElement("div", {
+    className: "space-y-4"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    className: "block text-sm font-medium text-slate-600 mb-1"
+  }, "В кой град е работата?"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-slate-400 mb-3"
+  }, "Ако е извън града на най-близката база, се начислява път и кола за бригадата."), /*#__PURE__*/React.createElement(CityInput, {
+    value: s.city,
+    onChange: v => set({
+      city: v,
+      pickupHood: ""
+    }),
+    placeholder: "Започнете да пишете…"
+  }), s.city && NEIGHBORHOODS[s.city] && /*#__PURE__*/React.createElement("div", {
+    className: "mt-2"
+  }, /*#__PURE__*/React.createElement(HoodInput, {
+    city: s.city,
+    value: s.pickupHood,
+    onChange: v => set({
+      pickupHood: v
+    }),
+    placeholder: "Квартал (по желание)"
+  }))), s.city && findCity(s.city) && /*#__PURE__*/React.createElement("div", {
+    className: "rounded-2xl border border-slate-200 bg-white p-5"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "block text-sm font-medium text-slate-600 mb-1"
+  }, "Откъде пътува бригадата"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-slate-400 mb-3"
+  }, "По подразбиране най-близката база. Сменете я, ако там няма свободни хора."), /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap gap-2"
+  }, /*#__PURE__*/React.createElement(Pill, {
+    active: !s.labourBase,
+    onClick: () => set({
+      labourBase: ""
+    })
+  }, "Автоматично", labourAutoBaseCity ? ` (${labourAutoBaseCity})` : ""), BASES.map(b => /*#__PURE__*/React.createElement(Pill, {
+    key: b,
+    active: s.labourBase === b,
+    onClick: () => set({
+      labourBase: b
+    })
+  }, b)))), /*#__PURE__*/React.createElement("div", {
+    className: "rounded-xl p-3 text-sm",
+    style: {
+      background: "#fff8ef",
+      border: "1px solid #f3ddbd"
+    }
+  }, "🚚 Транспортът на багажа е за сметка на клиента. Плащат се работата на хамалите, материалите и стълбите.", labourTravelKm > 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "mt-1"
+  }, "🚗 Бригадата пътува от ", /*#__PURE__*/React.createElement("b", null, labourBaseCity), " — ", labourTravelKm, " км в едната посока, включени са пътят и колата.") : labourBaseCity && /*#__PURE__*/React.createElement("div", {
+    className: "mt-1"
+  }, "👥 Бригадата е от ", /*#__PURE__*/React.createElement("b", null, labourBaseCity), " — включена е минимална такса за кола (", p.labourMinCarFee, " ", p.currency, ")."))), s.service === "disposal" && /*#__PURE__*/React.createElement("div", {
     className: "space-y-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
     className: "block text-sm font-medium text-slate-600 mb-2"
@@ -4586,71 +4850,34 @@ function KorektCalculator() {
         value: cnt,
         onChange: v => setQty(it.id, v)
       })), cnt > 0 && (it.dis || it.asm || it.wrap || it.protect) && /*#__PURE__*/React.createElement("div", {
-        className: "flex flex-wrap gap-x-4 gap-y-1 mt-1.5"
-      }, it.dis && /*#__PURE__*/React.createElement("label", {
-        className: "flex items-center gap-1.5 cursor-pointer"
-      }, /*#__PURE__*/React.createElement("input", {
-        type: "checkbox",
-        checked: !!s.dis[it.id],
-        onChange: () => toggle("dis", it.id),
-        className: "w-4 h-4 accent-orange-500"
-      }), /*#__PURE__*/React.createElement("span", {
-        className: "text-xs",
-        style: {
-          color: s.dis[it.id] ? accent : "#94a3b8"
-        }
-      }, "🔧 разглоби", s.dis[it.id] ? ` +${(it.dis * cnt).toFixed(1)} чч` : "")), it.asm && /*#__PURE__*/React.createElement("label", {
-        className: "flex items-center gap-1.5 cursor-pointer"
-      }, /*#__PURE__*/React.createElement("input", {
-        type: "checkbox",
-        checked: !!s.asm[it.id],
-        onChange: () => toggle("asm", it.id),
-        className: "w-4 h-4 accent-orange-500"
-      }), /*#__PURE__*/React.createElement("span", {
-        className: "text-xs",
-        style: {
-          color: s.asm[it.id] ? accent : "#94a3b8"
-        }
-      }, "🔩 сглоби", s.asm[it.id] ? ` +${(it.asm * cnt).toFixed(1)} чч` : "")), it.protect && /*#__PURE__*/React.createElement("label", {
-        className: `flex items-center gap-1.5 ${it.protectReq ? "" : "cursor-pointer"}`
-      }, /*#__PURE__*/React.createElement("input", {
-        type: "checkbox",
-        checked: it.protectReq || !!s.protect[it.id],
-        disabled: it.protectReq,
-        onChange: () => toggle("protect", it.id),
-        className: "w-4 h-4 accent-orange-500"
-      }), /*#__PURE__*/React.createElement("span", {
-        className: "text-xs",
-        style: {
-          color: it.protectReq || s.protect[it.id] ? accent : "#94a3b8"
-        }
-      }, "🛡 велпапе ", it.protect * cnt, " м", it.protectReq ? " (задължително)" : "")), it.protect && /*#__PURE__*/React.createElement("label", {
-        className: `flex items-center gap-1.5 ${it.protectReq ? "" : "cursor-pointer"}`
-      }, /*#__PURE__*/React.createElement("input", {
-        type: "checkbox",
-        checked: it.protectReq || !!s.protect[it.id],
-        disabled: it.protectReq,
-        onChange: () => toggle("protect", it.id),
-        className: "w-4 h-4 accent-orange-500"
-      }), /*#__PURE__*/React.createElement("span", {
-        className: "text-xs",
-        style: {
-          color: it.protectReq || s.protect[it.id] ? accent : "#94a3b8"
-        }
-      }, "🛡 велпапе ", it.protect * cnt, " м", it.protectReq ? " (задължително)" : "")), it.wrap && /*#__PURE__*/React.createElement("label", {
-        className: `flex items-center gap-1.5 ${it.wrapReq ? "" : "cursor-pointer"}`
-      }, /*#__PURE__*/React.createElement("input", {
-        type: "checkbox",
-        checked: it.wrapReq || !!s.wrap[it.id],
-        disabled: it.wrapReq,
-        onChange: () => toggle("wrap", it.id),
-        className: "w-4 h-4 accent-orange-500"
-      }), /*#__PURE__*/React.createElement("span", {
-        className: "text-xs",
-        style: {
-          color: it.wrapReq || s.wrap[it.id] ? accent : "#94a3b8"
-        }
-      }, "📦 стреч ", it.wrap * cnt, " м", it.wrapReq ? " (задължително)" : ""))));
+        className: "flex flex-wrap gap-x-4 gap-y-1.5 mt-1.5"
+      }, it.dis && /*#__PURE__*/React.createElement(OptionToggle, {
+        label: "🔧 разглоби",
+        cnt: cnt,
+        value: s.dis[it.id],
+        onChange: v => setField("dis", it.id, v),
+        detail: n => `+${(it.dis * n).toFixed(1)} чч`
+      }), it.asm && /*#__PURE__*/React.createElement(OptionToggle, {
+        label: "🔩 сглоби",
+        cnt: cnt,
+        value: s.asm[it.id],
+        onChange: v => setField("asm", it.id, v),
+        detail: n => `+${(it.asm * n).toFixed(1)} чч`
+      }), it.protect && /*#__PURE__*/React.createElement(OptionToggle, {
+        label: "🛡 велпапе",
+        cnt: cnt,
+        value: it.protectReq ? true : s.protect[it.id],
+        locked: it.protectReq,
+        onChange: v => setField("protect", it.id, v),
+        detail: n => `${it.protect * n} м${it.protectReq ? " (задълж.)" : ""}`
+      }), it.wrap && /*#__PURE__*/React.createElement(OptionToggle, {
+        label: "📦 стреч",
+        cnt: cnt,
+        value: it.wrapReq ? true : s.wrap[it.id],
+        locked: it.wrapReq,
+        onChange: v => setField("wrap", it.id, v),
+        detail: n => `${it.wrap * n} м${it.wrapReq ? " (задълж.)" : ""}`
+      })));
     })));
   })), /*#__PURE__*/React.createElement("div", {
     className: "mt-3 rounded-xl px-4 py-3 flex justify-between items-center",
@@ -4683,7 +4910,34 @@ function KorektCalculator() {
       weFill: e.target.checked
     }),
     className: "w-5 h-5 accent-orange-500"
-  })), weightLimited && /*#__PURE__*/React.createElement("div", {
+  })), vol > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "rounded-2xl border border-slate-200 bg-white p-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "min-w-0 pr-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-sm font-medium",
+    style: {
+      color: ink
+    }
+  }, "Брой работници"), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs text-slate-400"
+  }, "По обем: ", autoCrew, " души", reqCrew > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, " · протокол изисква поне ", reqCrew), crewManual && /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: accent
+    }
+  }, " · променено ръчно"))), /*#__PURE__*/React.createElement(Stepper, {
+    value: crew,
+    onChange: v => set({
+      crewOverride: v
+    })
+  })), crewManual && /*#__PURE__*/React.createElement("button", {
+    onClick: () => set({
+      crewOverride: 0
+    }),
+    className: "text-xs text-slate-500 underline mt-2"
+  }, "върни автоматичния брой")), weightLimited && /*#__PURE__*/React.createElement("div", {
     className: "rounded-xl p-3 text-sm",
     style: {
       background: "#fff8ef",
@@ -4819,7 +5073,7 @@ function KorektCalculator() {
     }
   }, "Почасово (товарене и разтоварване)"), /*#__PURE__*/React.createElement("span", {
     className: "text-xs text-slate-500"
-  }, "По 1 ч товарене и 1 ч разтоварване на курс, платени на час"))))), s.service !== "local" && vol > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+  }, "По 1 ч товарене и 1 ч разтоварване на курс, платени на час"))))), s.service !== "local" && !isLabourOnly && vol > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
     className: "font-semibold mb-2",
     style: {
       color: ink
@@ -4845,7 +5099,7 @@ function KorektCalculator() {
     onChange: d => set({
       pickup: d
     })
-  }), !isDisposal && /*#__PURE__*/React.createElement(AddressBlock, {
+  }), !isDisposal && !isLabourOnly && /*#__PURE__*/React.createElement(AddressBlock, {
     title: "Адрес на разтоварване",
     data: s.dropoff,
     onChange: d => set({
@@ -4959,7 +5213,7 @@ function KorektCalculator() {
     style: {
       color: ink
     }
-  }, s.service === "local" ? "Градско преместване" : s.service === "intercity" ? "Междуградско" : s.service === "disposal" ? "Изхвърляне на отпадък" : "Международно")), /*#__PURE__*/React.createElement("div", {
+  }, s.service === "local" ? "Градско преместване" : s.service === "intercity" ? "Междуградско" : s.service === "disposal" ? "Изхвърляне на отпадък" : s.service === "labour" ? "Само хамали (без камион)" : "Международно")), /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between gap-3"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-slate-500"

@@ -80,7 +80,7 @@ const addr = (floor = 0, elevator = false, elevatorType = "passenger") => ({ bui
 const order = (o = {}) => ({
   service: "local", city: "София", country: "", km: 0, localKm: 0,
   pickupHood: "Център", dropoffHood: "Младост", pickupCity: "София", dropoffCity: "Пловдив", truckId: null, qty: {},
-  courseMode: "hourly", baseCity: "", forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1,
+  courseMode: "hourly", baseCity: "", labourBase: "", forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1,
   pickup: addr(), dropoff: addr(),
   dis: {}, asm: {}, wrap: {}, protect: {},
   extras: { packing: false, materials: false, disassembly: false },
@@ -654,9 +654,21 @@ test("велпапе: огледала и картини се защитават
 test("велпапе: телевизорът също е задължителен", () => {
   ok(E.ITEM_INDEX.tvstand.protectReq);
 });
-test("велпапе: витрината се защитава само при отметка", () => {
-  eq(E.protectMetersFor({ vitrine: 1 }, {}), 0, "без отметка:");
-  eq(E.protectMetersFor({ vitrine: 1 }, { vitrine: true }), E.ITEM_INDEX.vitrine.protect);
+test("велпапе: стъклените мебели се защитават задължително", () => {
+  for (const id of ["vitrine", "tableGlass", "tableSmallGlass"]) {
+    ok(E.ITEM_INDEX[id].protectReq, `${id}: защитата трябва да е задължителна`);
+    eq(E.protectMetersFor({ [id]: 1 }, {}), E.ITEM_INDEX[id].protect, `${id}: без отметка пак се брои`);
+  }
+});
+test("велпапе: обикновените маси остават по избор", () => {
+  eq(E.protectMetersFor({ table: 1 }, {}), 0, "без отметка:");
+  eq(E.protectMetersFor({ table: 1 }, { table: true }), E.ITEM_INDEX.table.protect);
+});
+test("стъклените маси са по-скъпи от обикновените", () => {
+  const обикн = calc({ qty: { table: 1 } });
+  const стъкло = calc({ qty: { tableGlass: 1 } });
+  ok(стъкло.total > обикн.total, "стъклената трябва да струва повече");
+  ok(стъкло.protectMeters > 0, "трябва да има велпапе");
 });
 test("велпапе: метрите се умножават по броя", () => {
   eq(E.protectMetersFor({ art: 5 }, {}), E.ITEM_INDEX.art.protect * 5);
@@ -1180,6 +1192,185 @@ test("каталог: малката масичка е добавена и е п
   ok(малка.m3 < голяма.m3, "малката трябва да е с по-малък обем");
   ok(малка.kg < голяма.kg, "малката трябва да е по-лека");
   ok(малка.asm > малка.dis, "сглобяването трябва да е по-дълго от разглобяването");
+});
+
+
+/* --- Услуги само на част от бройките --- */
+test("частично: 4 бюра, само 1 се разглобява", () => {
+  const r = calc({ qty: { desk: 4 }, dis: { desk: 1 }, asm: { desk: 1 } });
+  const B = E.ITEM_INDEX.desk;
+  near(r.disHours, B.dis + B.asm, 0.01, "трябва да е за едно бюро, не за четири:");
+});
+test("частично: отметка true пази старото поведение (всички бройки)", () => {
+  const r = calc({ qty: { desk: 4 }, dis: { desk: true } });
+  near(r.disHours, E.ITEM_INDEX.desk.dis * 4, 0.01);
+});
+test("частично: броят не може да надхвърли наличните бройки", () => {
+  const r = calc({ qty: { desk: 2 }, dis: { desk: 10 } });
+  near(r.disHours, E.ITEM_INDEX.desk.dis * 2, 0.01, "максимум колкото са вещите:");
+});
+test("частично: нула означава изключено", () => {
+  eq(calc({ qty: { desk: 4 }, dis: { desk: 0 } }).disHours, 0);
+});
+test("частично: разглобяване и сглобяване може да са различен брой", () => {
+  const r = calc({ qty: { desk: 4 }, dis: { desk: 3 }, asm: { desk: 1 } });
+  const B = E.ITEM_INDEX.desk;
+  near(r.disOnlyHours, B.dis * 3, 0.01, "разглобяване на 3:");
+  near(r.asmOnlyHours, B.asm * 1, 0.01, "сглобяване на 1:");
+});
+test("частично: важи и за опаковането", () => {
+  const цяло = E.wrapMetersFor({ wardrobe3: 4 }, { wardrobe3: true });
+  const частично = E.wrapMetersFor({ wardrobe3: 4 }, { wardrobe3: 1 });
+  eq(частично, цяло / 4, "един гардероб вместо четири:");
+});
+test("частично: задължителното опаковане важи за всички бройки", () => {
+  const r = calc({ qty: { mattress: 3 } });
+  eq(r.wrapMeters, E.ITEM_INDEX.mattress.wrap * 3, "матраците са задължителни — всички:");
+});
+
+
+/* --- Само хамали (транспорт на клиента) --- */
+const хамали = (extra = {}) => calc({ service: "labour", city: "София", pickupHood: "Люлин", qty: { boxL: 20, wardrobe3: 1 }, ...extra });
+
+test("само хамали: няма транспортно перо", () => {
+  const r = хамали();
+  ok(r.isLabourOnly, "режимът не е активен");
+  ok(!r.lines.some((l) => l.label.startsWith("Транспорт")), "транспортът е на клиента — не бива да се начислява");
+});
+test("само хамали: трудът се плаща нормално", () => {
+  const r = хамали();
+  ok(r.lines.some((l) => l.label.startsWith("Товарене и пренасяне")), "липсва перо за труда");
+});
+test("само хамали: излиза по-евтино от пълната услуга", () => {
+  const самоХора = хамали();
+  const сКамион = calc({ qty: { boxL: 20, wardrobe3: 1 } });
+  ok(самоХора.total < сКамион.total, "без камион трябва да е по-евтино");
+});
+test("само хамали: разглобяването и опаковането се начисляват", () => {
+  const r = хамали({ dis: { wardrobe3: true } });
+  ok(r.lines.some((l) => l.label.startsWith("Разглобяване")), "разглобяването трябва да се плаща");
+  ok(r.disHours > 0);
+});
+test("само хамали: стълбите на адреса се начисляват", () => {
+  const партер = хамали();
+  const етаж = хамали({ pickup: addr(3, false) });
+  ok(етаж.total > партер.total, "етажът трябва да оскъпи");
+});
+test("само хамали: няма адрес на разтоварване — не се таксува", () => {
+  const без = хамали();
+  const с = хамали({ dropoff: addr(5, false) });
+  eq(с.total, без.total, "етажът при доставка не бива да влияе:");
+});
+test("само хамали: не се смята като междуградски курс", () => {
+  const r = хамали({ pickupCity: "София", dropoffCity: "Варна" });
+  eq(r.isCourse, false, "не бива да минава на километрична тарифа:");
+});
+test("само хамали: важи минимумът от 2 часа", () => {
+  const r = calc({ service: "labour", city: "София", pickupHood: "Люлин", qty: { boxS: 1 } });
+  near(r.handlingClock, P.minLocalHours, 0.01);
+});
+
+
+test("само хамали: в града на базата няма път, но има минимална такса за кола", () => {
+  const r = calc({ service: "labour", city: "София", qty: { boxL: 20 } });
+  eq(r.labourTravelKm, 0, "София е база — не бива да има път:");
+  ok(!r.lines.some((l) => l.label.startsWith("Път на бригадата")), "не бива да има път");
+  const кола = r.lines.find((l) => l.label.startsWith("Кола за бригадата"));
+  ok(кола, "колата трябва да се начислява и в града");
+  eq(кола.amount, P.labourMinCarFee, "минималната такса:");
+});
+test("само хамали: в друг град се начислява път и кола", () => {
+  const r = calc({ service: "labour", city: "Банско", qty: { boxL: 20 } });
+  ok(r.labourTravelKm > 0, "трябва да има разстояние до базата");
+  ok(r.lines.some((l) => l.label.startsWith("Кола за бригадата")), "липсва кола");
+  ok(r.lines.some((l) => l.label.startsWith("Път на бригадата")), "липсва път");
+});
+test("само хамали: колата се смята двупосочно", () => {
+  const r = calc({ service: "labour", city: "Банско", qty: { boxL: 20 } });
+  const line = r.lines.find((l) => l.label.startsWith("Кола за бригадата"));
+  near(line.amount, 2 * r.labourTravelKm * P.carRatePerKm, 0.05);
+});
+test("само хамали: избира се най-близката база", () => {
+  eq(calc({ service: "labour", city: "Созопол", qty: { boxL: 5 } }).labourBaseCity, "Бургас");
+  eq(calc({ service: "labour", city: "Банско", qty: { boxL: 5 } }).labourBaseCity, "Пловдив");
+});
+test("само хамали: близките градове не носят път (в радиуса)", () => {
+  const r = calc({ service: "labour", city: "Божурище", qty: { boxL: 5 } });
+  ok(r.labourTravelKm === 0, `Божурище е на 14 км — в радиуса от ${P.labourLocalRadiusKm} км, а излиза ${r.labourTravelKm}`);
+});
+test("само хамали: точно над радиуса вече носи път", () => {
+  const r = calc({ service: "labour", city: "Костинброд", qty: { boxL: 5 } });
+  ok(r.labourTravelKm > 0, "19 км е над радиуса — трябва да има път");
+});
+test("само хамали: работата в друг град е по-скъпа", () => {
+  const вБаза = calc({ service: "labour", city: "София", qty: { boxL: 20 } });
+  const далеч = calc({ service: "labour", city: "Банско", qty: { boxL: 20 } });
+  ok(далеч.total > вБаза.total, "пътуването трябва да оскъпи");
+});
+
+
+test("само хамали: базата може да се избере ръчно", () => {
+  const авто = calc({ service: "labour", city: "Банско", qty: { boxL: 20 } });
+  const ръчно = calc({ service: "labour", city: "Банско", labourBase: "София", qty: { boxL: 20 } });
+  eq(авто.labourBaseCity, "Пловдив", "автоматично избира най-близката:");
+  eq(ръчно.labourBaseCity, "София", "ръчният избор има превес:");
+  ok(ръчно.labourTravelKm > авто.labourTravelKm, "София е по-далече — повече км");
+  ok(ръчно.total > авто.total, "по-далечната база трябва да е по-скъпа");
+});
+test("само хамали: ръчно избрана база в същия град маха пътя", () => {
+  const r = calc({ service: "labour", city: "Пловдив", labourBase: "Пловдив", qty: { boxL: 20 } });
+  eq(r.labourTravelKm, 0);
+});
+test("само хамали: показва се и автоматичната база за справка", () => {
+  const r = calc({ service: "labour", city: "Созопол", labourBase: "София", qty: { boxL: 5 } });
+  eq(r.labourAutoBaseCity, "Бургас", "автоматичната остава видима:");
+  eq(r.labourBaseCity, "София", "но се ползва избраната:");
+});
+
+
+test("само хамали: при далечен град колата надхвърля минимума", () => {
+  const r = calc({ service: "labour", city: "Банско", qty: { boxL: 20 } });
+  const кола = r.lines.find((l) => l.label.startsWith("Кола за бригадата"));
+  ok(кола.amount > P.labourMinCarFee, "километрите трябва да надвишат минимума");
+  near(кола.amount, 2 * r.labourTravelKm * P.carRatePerKm, 0.05);
+});
+test("само хамали: минималната такса се управлява от параметрите", () => {
+  const r = calc({ service: "labour", city: "София", qty: { boxL: 20 } }, { ...P, labourMinCarFee: 25 });
+  const кола = r.lines.find((l) => l.label.startsWith("Кола за бригадата"));
+  eq(кола.amount, 25);
+});
+
+
+test("велпапе: опцията е налична за всички едри вещи", () => {
+  const без = [];
+  for (const g of E.CATALOG) for (const it of g.items) {
+    if (!it.protect) без.push(it.id);
+  }
+  // допустимо е да липсва само при кашони, куфар и чували
+  for (const id of без) {
+    const it = E.ITEM_INDEX[id];
+    ok(it.kind === "box" || it.kind === "sack" || id === "suitcase",
+      `${it.label} трябва да има опция за велпапе`);
+  }
+});
+test("велпапе: по избор не се начислява без отметка", () => {
+  eq(E.protectMetersFor({ fridge: 1, wardrobe3: 1 }, {}), 0);
+});
+test("велпапе: отметката го начислява", () => {
+  const m = E.protectMetersFor({ fridge: 1 }, { fridge: true });
+  eq(m, E.ITEM_INDEX.fridge.protect);
+  ok(m > 0);
+});
+test("велпапе: може да се избере само за част от бройките", () => {
+  const цяло = E.protectMetersFor({ fridge: 4 }, { fridge: true });
+  const частично = E.protectMetersFor({ fridge: 4 }, { fridge: 1 });
+  eq(частично, цяло / 4);
+});
+test("велпапе: вдига цената", () => {
+  const без = calc({ qty: { wardrobe3: 1, fridge: 1 } });
+  const с = calc({ qty: { wardrobe3: 1, fridge: 1 }, protect: { wardrobe3: true, fridge: true } });
+  ok(с.total > без.total, "велпапето трябва да оскъпи");
+  ok(с.protectMeters > 0);
 });
 
 /* --- Минимални цени --- */

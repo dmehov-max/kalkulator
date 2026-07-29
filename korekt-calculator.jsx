@@ -23,6 +23,8 @@ const DEFAULTS = {
   localCrewMinHours: 2,  // минимум таксувана работа на местния екип
   minCrewHours: 2,       // минимум за всяка изпратена бригада (товарене/разтоварване)
   carRatePerKm: 0.3,     // €/км за кола, ако базата не е на маршрута
+  labourLocalRadiusKm: 15, // до толкова км се брои за "същия град" — без път
+  labourMinCarFee: 10,   // минимална такса за кола на бригадата (дори в града)
   routeDetourTolerance: 1.1, // до 10% отклонение се брои "по маршрута"
   overnightThresholdH: 8,// работа + път в едната посока над това → нощувка
   overnightPrice: 40,    // € за нощувка на човек
@@ -106,39 +108,41 @@ const DEFAULTS = {
 /* -------- Каталог с вещи -------- */
 const CATALOG = [
   { group: "Хол и трапезария", items: [
-    { id: "sofa2", label: "Диван 2-местен", m3: 1.4, kg: 45, wrap: 10, wrapReq: true },
-    { id: "sofa3", label: "Диван 3-местен", m3: 2.0, kg: 60, dis: 0.3, asm: 0.5, wrap: 12, wrapReq: true, kind: "oversized" },
-    { id: "sofaL", label: "Ъглов диван", m3: 3.0, kg: 90, dis: 0.5, asm: 0.9, wrap: 16, wrapReq: true, kind: "oversized" },
-    { id: "armchair", label: "Фотьойл", m3: 0.8, kg: 25, wrap: 6 },
+    { id: "sofa2", label: "Диван 2-местен", m3: 1.4, kg: 45, wrap: 10, wrapReq: true, protect: 8 },
+    { id: "sofa3", label: "Диван 3-местен", m3: 2.0, kg: 60, dis: 0.3, asm: 0.5, wrap: 12, wrapReq: true, kind: "oversized", protect: 10 },
+    { id: "sofaL", label: "Ъглов диван", m3: 3.0, kg: 90, dis: 0.5, asm: 0.9, wrap: 16, wrapReq: true, kind: "oversized", protect: 14 },
+    { id: "armchair", label: "Фотьойл", m3: 0.8, kg: 25, wrap: 6, protect: 5 },
     { id: "tvstand", label: "ТВ + стойка", m3: 0.4, kg: 20, dis: 0.15, asm: 0.4, wrap: 5, wrapReq: true, protect: 5, protectReq: true },
-    { id: "vitrine", label: "Витрина", m3: 1.0, kg: 50, dis: 0.4, asm: 1.2, wrap: 10, protect: 6 },
+    { id: "vitrine", label: "Витрина (със стъкла)", m3: 1.0, kg: 50, dis: 0.4, asm: 1.2, wrap: 10, wrapReq: true, protect: 6, protectReq: true },
     { id: "table", label: "Маса за хранене", m3: 0.7, kg: 30, dis: 0.2, asm: 0.5, wrap: 8, protect: 5 },
+    { id: "tableGlass", label: "Маса със стъклен плот", m3: 0.8, kg: 45, dis: 0.3, asm: 0.7, wrap: 10, wrapReq: true, protect: 8, protectReq: true },
     { id: "tableSmall", label: "Малка масичка", m3: 0.25, kg: 12, dis: 0.1, asm: 0.25, wrap: 4, protect: 3 },
-    { id: "chair", label: "Стол", m3: 0.15, kg: 5, wrap: 3 },
-    { id: "shelf", label: "Библиотека / етажерка", m3: 0.8, kg: 35, dis: 0.3, asm: 0.9, wrap: 8 },
+    { id: "tableSmallGlass", label: "Малка масичка със стъкло", m3: 0.3, kg: 18, dis: 0.15, asm: 0.35, wrap: 6, wrapReq: true, protect: 5, protectReq: true },
+    { id: "chair", label: "Стол", m3: 0.15, kg: 5, wrap: 3, protect: 2 },
+    { id: "shelf", label: "Библиотека / етажерка", m3: 0.8, kg: 35, dis: 0.3, asm: 0.9, wrap: 8, protect: 6 },
   ]},
   { group: "Спалня", items: [
-    { id: "bedSingle", label: "Единично легло", m3: 1.0, kg: 40, dis: 0.4, asm: 0.9, wrap: 8 },
-    { id: "bedDouble", label: "Двойно легло (рамка + матрак)", m3: 2.0, kg: 70, dis: 0.5, asm: 1.2, wrap: 12, wrapReq: true },
-    { id: "mattress", label: "Матрак", m3: 0.6, kg: 25, wrap: 12, wrapReq: true },
-    { id: "wardrobe2", label: "Гардероб 2-крилен", m3: 1.2, kg: 70, dis: 0.7, asm: 2.0, wrap: 8 },
-    { id: "wardrobe3", label: "Гардероб 3-крилен", m3: 1.8, kg: 110, dis: 1.5, asm: 3.0, wrap: 10 },
-    { id: "dresser", label: "Скрин / шкаф", m3: 0.6, kg: 40, dis: 0.3, asm: 0.9, wrap: 8 },
-    { id: "nightstand", label: "Нощно шкафче", m3: 0.2, kg: 12, wrap: 4 },
-    { id: "desk", label: "Бюро", m3: 0.6, kg: 30, dis: 0.3, asm: 0.9, wrap: 8 },
+    { id: "bedSingle", label: "Единично легло", m3: 1.0, kg: 40, dis: 0.4, asm: 0.9, wrap: 8, protect: 6 },
+    { id: "bedDouble", label: "Двойно легло (рамка + матрак)", m3: 2.0, kg: 70, dis: 0.5, asm: 1.2, wrap: 12, wrapReq: true, protect: 10 },
+    { id: "mattress", label: "Матрак", m3: 0.6, kg: 25, wrap: 12, wrapReq: true, protect: 6 },
+    { id: "wardrobe2", label: "Гардероб 2-крилен", m3: 1.2, kg: 70, dis: 0.7, asm: 2.0, wrap: 8, protect: 8 },
+    { id: "wardrobe3", label: "Гардероб 3-крилен", m3: 1.8, kg: 110, dis: 1.5, asm: 3.0, wrap: 10, protect: 10 },
+    { id: "dresser", label: "Скрин / шкаф", m3: 0.6, kg: 40, dis: 0.3, asm: 0.9, wrap: 8, protect: 5 },
+    { id: "nightstand", label: "Нощно шкафче", m3: 0.2, kg: 12, wrap: 4, protect: 3 },
+    { id: "desk", label: "Бюро", m3: 0.6, kg: 30, dis: 0.3, asm: 0.9, wrap: 8, protect: 5 },
   ]},
   { group: "Уреди", items: [
-    { id: "fridge", label: "Хладилник", m3: 0.6, kg: 60, wrap: 10, wrapReq: true, kind: "appliance" },
-    { id: "fridgeXL", label: "Хладилник голям (American)", m3: 1.0, kg: 90, wrap: 14, wrapReq: true, kind: "appliance" },
-    { id: "freezer", label: "Фризер", m3: 0.5, kg: 50, wrap: 9, wrapReq: true, kind: "appliance" },
-    { id: "washer", label: "Пералня", m3: 0.4, kg: 70, wrap: 8, wrapReq: true, kind: "appliance" },
-    { id: "dishwasher", label: "Съдомиялна", m3: 0.4, kg: 45, wrap: 8, wrapReq: true, kind: "appliance" },
-    { id: "stove", label: "Готварска печка", m3: 0.4, kg: 45, wrap: 8, wrapReq: true, kind: "appliance" },
-    { id: "fridgeSxS", label: "Хладилник двуврат (side-by-side)", m3: 1.2, kg: 120, wrap: 16, wrapReq: true, kind: "appliance_heavy", minCrew: 4 },
-    { id: "washerMiele", label: "Пералня Miele", m3: 0.4, kg: 85, wrap: 8, wrapReq: true, kind: "appliance_heavy" },
-    { id: "microwave", label: "Микровълнова", m3: 0.1, kg: 15, wrap: 3, wrapReq: true },
-    { id: "ac", label: "Климатик (двете тела)", m3: 0.3, kg: 35, wrap: 4, wrapReq: true },
-    { id: "boiler", label: "Бойлер", m3: 0.3, kg: 30, wrap: 4, wrapReq: true },
+    { id: "fridge", label: "Хладилник", m3: 0.6, kg: 60, wrap: 10, wrapReq: true, kind: "appliance", protect: 8 },
+    { id: "fridgeXL", label: "Хладилник голям (American)", m3: 1.0, kg: 90, wrap: 14, wrapReq: true, kind: "appliance", protect: 12 },
+    { id: "freezer", label: "Фризер", m3: 0.5, kg: 50, wrap: 9, wrapReq: true, kind: "appliance", protect: 7 },
+    { id: "washer", label: "Пералня", m3: 0.4, kg: 70, wrap: 8, wrapReq: true, kind: "appliance", protect: 6 },
+    { id: "dishwasher", label: "Съдомиялна", m3: 0.4, kg: 45, wrap: 8, wrapReq: true, kind: "appliance", protect: 6 },
+    { id: "stove", label: "Готварска печка", m3: 0.4, kg: 45, wrap: 8, wrapReq: true, kind: "appliance", protect: 6 },
+    { id: "fridgeSxS", label: "Хладилник двуврат (side-by-side)", m3: 1.2, kg: 120, wrap: 16, wrapReq: true, kind: "appliance_heavy", minCrew: 4, protect: 14 },
+    { id: "washerMiele", label: "Пералня Miele", m3: 0.4, kg: 85, wrap: 8, wrapReq: true, kind: "appliance_heavy", protect: 6 },
+    { id: "microwave", label: "Микровълнова", m3: 0.1, kg: 15, wrap: 3, wrapReq: true, protect: 2 },
+    { id: "ac", label: "Климатик (двете тела)", m3: 0.3, kg: 35, wrap: 4, wrapReq: true, protect: 4 },
+    { id: "boiler", label: "Бойлер", m3: 0.3, kg: 30, wrap: 4, wrapReq: true, protect: 4 },
   ]},
   { group: "Кашони и дребни", items: [
     { id: "boxS", label: "Кашон малък", m3: 0.06, kg: 8, kind: "box" },
@@ -146,34 +150,45 @@ const CATALOG = [
     { id: "boxL", label: "Кашон голям", m3: 0.15, kg: 18, kind: "box" },
     { id: "books", label: "Кашон с книги", m3: 0.06, kg: 25, kind: "box" },
     { id: "suitcase", label: "Куфар", m3: 0.1, kg: 15 },
-    { id: "bike", label: "Велосипед", m3: 0.4, kg: 12, wrap: 6 },
+    { id: "bike", label: "Велосипед", m3: 0.4, kg: 12, wrap: 6, protect: 4 },
     { id: "art", label: "Огледало / картина", m3: 0.15, kg: 5, wrap: 3, wrapReq: true, protect: 4, protectReq: true },
   ]},
   { group: "Отпадък за изхвърляне", items: [
     { id: "sackHouse", label: "Чувал битов отпадък", m3: 0.1, kg: 15, kind: "sack" },
     { id: "sackConstr", label: "Чувал строителен отпадък", m3: 0.06, kg: 40, kind: "sack" },
     { id: "sackGarden", label: "Чувал градински отпадък", m3: 0.12, kg: 12, kind: "sack" },
-    { id: "junkFurniture", label: "Стара мебел за изхвърляне", m3: 1.0, kg: 40, kind: "appliance" },
-    { id: "junkMattress", label: "Стар матрак", m3: 0.6, kg: 25 },
-    { id: "junkAppliance", label: "Стар уред", m3: 0.5, kg: 50, kind: "appliance" },
+    { id: "junkFurniture", label: "Стара мебел за изхвърляне", m3: 1.0, kg: 40, kind: "appliance", protect: 6 },
+    { id: "junkMattress", label: "Стар матрак", m3: 0.6, kg: 25, protect: 5 },
+    { id: "junkAppliance", label: "Стар уред", m3: 0.5, kg: 50, kind: "appliance", protect: 5 },
   ]},
   { group: "Специални (спец. обработка)", items: [
-    { id: "piano", label: "Пиано (пианино)", m3: 1.5, kg: 250, wrap: 16, surcharge: 150 },
-    { id: "grand", label: "Роял", m3: 2.5, kg: 400, wrap: 20, surcharge: 250 },
-    { id: "safe", label: "Каса / банкомат", m3: 0.5, kg: 300, wrap: 8, surcharge: 200 },
-    { id: "gym", label: "Спортен уред (пътека)", m3: 0.8, kg: 60, dis: 0.4, asm: 0.8, wrap: 8 },
+    { id: "piano", label: "Пиано (пианино)", m3: 1.5, kg: 250, wrap: 16, surcharge: 150, protect: 16 },
+    { id: "grand", label: "Роял", m3: 2.5, kg: 400, wrap: 20, surcharge: 250, protect: 22 },
+    { id: "safe", label: "Каса / банкомат", m3: 0.5, kg: 300, wrap: 8, surcharge: 200, protect: 8 },
+    { id: "gym", label: "Спортен уред (пътека)", m3: 0.8, kg: 60, dis: 0.4, asm: 0.8, wrap: 8, protect: 6 },
   ]},
 ];
 const ITEM_INDEX = Object.fromEntries(CATALOG.flatMap((g) => g.items).map((i) => [i.id, i]));
 const totalVolume = (qty) => Object.entries(qty).reduce((s, [id, cnt]) => s + (ITEM_INDEX[id]?.m3 || 0) * cnt, 0);
 // часове за разглобяване и за сглобяване (по отделни отметки на вещ)
+// Отметките dis/asm може да са:
+//   true  → всички бройки от вещта (обратна съвместимост)
+//   число → само толкова бройки (напр. 4 бюра, но само 1 се разглобява)
+//   false/липсва → нищо
+const pickCount = (flag, cnt) => {
+  if (flag === true) return cnt;
+  const n = Number(flag);
+  if (Number.isFinite(n) && n > 0) return Math.min(n, cnt);
+  return 0;
+};
+
 const disHoursFor = (qty, dis, asm, factor) => {
   let d = 0, a = 0;
   for (const [id, cnt] of Object.entries(qty)) {
     const it = ITEM_INDEX[id];
     if (!it || !cnt) continue;
-    if (dis?.[id] && it.dis) d += it.dis * cnt;
-    if (asm?.[id] && it.asm) a += it.asm * cnt;
+    if (it.dis) d += it.dis * pickCount(dis?.[id], cnt);
+    if (it.asm) a += it.asm * pickCount(asm?.[id], cnt);
   }
   const k = factor || 1;
   return { dis: d * k, asm: a * k, total: (d + a) * k };
@@ -184,8 +199,8 @@ const protectMetersFor = (qty, protect) =>
   Object.entries(qty).reduce((s, [id, cnt]) => {
     const it = ITEM_INDEX[id];
     if (!it?.protect || !cnt) return s;
-    const on = it.protectReq || protect?.[id];
-    return on ? s + it.protect * cnt : s;
+    const n = it.protectReq ? cnt : pickCount(protect?.[id], cnt);
+    return s + it.protect * n;
   }, 0);
 
 // метри стреч фолио: задължителните вещи винаги, останалите — по избор
@@ -193,8 +208,9 @@ const wrapMetersFor = (qty, wrap) =>
   Object.entries(qty).reduce((s, [id, cnt]) => {
     const it = ITEM_INDEX[id];
     if (!it?.wrap || !cnt) return s;
-    const on = it.wrapReq || wrap?.[id];
-    return on ? s + it.wrap * cnt : s;
+    // задължителните се опаковат всички; за останалите важи избраният брой
+    const n = it.wrapReq ? cnt : pickCount(wrap?.[id], cnt);
+    return s + it.wrap * n;
   }, 0);
 const totalWeight = (qty) =>
   Object.entries(qty).reduce((s, [id, cnt]) => s + (ITEM_INDEX[id]?.kg || 0) * cnt, 0);
@@ -809,14 +825,31 @@ function computePrice(s, p) {
     : s.service === "intercity" ? (bgEst != null ? bgEst : n(s.km))
     : n(p.euDistances[s.country]);
   let crew = crewFor(vol, p);
+  const autoCrew = crew; // изчисленият по обем брой — за справка в интерфейса
   // протокол: някои вещи изискват минимален брой хора (напр. двуврат хладилник → 4)
   let reqCrew = 0;
   Object.entries(s.qty).forEach(([id, cnt]) => { if (cnt > 0 && ITEM_INDEX[id]?.minCrew) reqCrew = Math.max(reqCrew, ITEM_INDEX[id].minCrew); });
   const crewByProtocol = reqCrew > crew;
   if (reqCrew) crew = Math.max(crew, reqCrew);
 
+  // ръчна промяна от служител — не може под изисквания от протокола минимум
+  const manualCrew = Number(s.crewOverride) || 0;
+  const crewManual = manualCrew > 0 && manualCrew !== crew;
+  if (manualCrew > 0) crew = Math.max(manualCrew, reqCrew || 1);
+
   // курс = разстояние над прага; далечни "градски" адреси също минават на км тарифа
-  const isCourse = s.service !== "disposal" && oneWayKm >= n(p.intercityThresholdKm);
+  const isDisposalService = s.service === "disposal";
+  const isLabourOnly = s.service === "labour"; // само хамали, клиентът осигурява транспорт
+
+  // При "само хамали" в друг град: бригадата тръгва от избрана или най-близката база.
+  // Ако работата е в самия град на базата, няма път и няма кола.
+  const labourAutoBase = isLabourOnly && s.city ? nearestBase(s.city, n(p.roadFactorBG || 1.25)) : null;
+  const labourBaseCity = isLabourOnly ? (s.labourBase || labourAutoBase?.city || null) : null;
+  const labourBaseKm = labourBaseCity && s.city
+    ? estimateKmAny(labourBaseCity, "", s.city, "", n(p.roadFactorBG || 1.25))
+    : 0;
+  const labourTravelKm = labourBaseKm && labourBaseKm > n(p.labourLocalRadiusKm || 15) ? labourBaseKm : 0;
+  const isCourse = !isDisposalService && !isLabourOnly && oneWayKm >= n(p.intercityThresholdKm);
 
   // екстри (човекочаса) — достъпът по стълби вече е парична такса, не часове
   const work = disHoursFor(s.qty, s.dis, s.asm, n(p.disFactor || 1));
@@ -957,6 +990,34 @@ function computePrice(s, p) {
     }
     add(`Изнасяне, извозване и изсипване${trucksN > 1 ? ` (${trucksN} камиона)` : ""} — ${jobClock.toFixed(1)} ч × ${totalCrew} души × ${disposalRate} ${p.currency}/ч`,
         handlingManHours * disposalRate);
+  } else if (isLabourOnly) {
+    // само хамали — клиентът осигурява транспорта за багажа.
+    // Ако работата е в друг град, се плаща кола за хората + времето за път.
+    const carryClock = vol / n(p.m3PerManHour || 1.6) / crew;
+    let jobClock = carryClock;
+    if (jobClock < n(p.minLocalHours)) jobClock = n(p.minLocalHours); // мин. 2 ч
+
+    // разстояние от базата до града на работа (0, ако е в същия град)
+    const labourKm = labourTravelKm;
+    const travelH = labourKm ? (2 * labourKm) / n(p.roadSpeed || 65) : 0; // отиване и връщане
+
+    handlingClock = jobClock + travelH;
+    handlingManHours = handlingClock * crew;
+    add(`Товарене и пренасяне — ${jobClock.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
+        jobClock * crew * n(p.workerRate));
+    if (travelH > 0) {
+      add(`Път на бригадата (${labourBaseCity} → ${s.city}) — ${travelH.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
+          travelH * crew * n(p.workerRate));
+    }
+    // кола за бригадата — винаги, с минимална такса дори в рамките на града
+    const carKmFee = labourKm ? 2 * labourKm * n(p.carRatePerKm) : 0;
+    const carFee = Math.max(carKmFee, n(p.labourMinCarFee || 0));
+    if (carFee > 0) {
+      add(labourKm
+        ? `Кола за бригадата — ${2 * labourKm} км × ${n(p.carRatePerKm)} ${p.currency}/км`
+        : `Кола за бригадата (в града) — минимална такса`,
+        carFee, true);
+    }
   } else if (selfUnloadMode) {
     // клиентът разтоварва сам — плаща се само товаренето при него
     handlingManHours = loadClock * crew;
@@ -1024,7 +1085,7 @@ function computePrice(s, p) {
   const perFloorStd = n(p.floorFeeNoElevator) + boxes * n(p.boxPerFloor) + appNormal * n(p.appliancePerFloor) + appHeavy * n(p.heavyAppliancePerFloor);
   const perFloorOvr = oversized * n(p.heavyAppliancePerFloor);
   // при изхвърляне няма адрес на доставка (само сметище); при самостоятелно разтоварване стълбите там са за сметка на клиента
-  const skipDropoffFloors = isDisposal || selfUnloadMode;
+  const skipDropoffFloors = isDisposal || selfUnloadMode || isLabourOnly;
   const floorsStdTot = floorsStd(s.pickup) + (skipDropoffFloors ? 0 : floorsStd(s.dropoff));
   const floorsOvrTot = floorsOvr(s.pickup) + (skipDropoffFloors ? 0 : floorsOvr(s.dropoff));
   const stairs = floorsStdTot * perFloorStd + floorsOvrTot * perFloorOvr;
@@ -1037,8 +1098,11 @@ function computePrice(s, p) {
     add(`Стълби без асансьор${parts.length ? " · " + parts.join(", ") : ""}`, stairs);
   }
 
-  // ТРАНСПОРТ (перо) — само за времето, в което камионът реално участва
-  if (isDisposal) {
+  // ТРАНСПОРТ (перо) — само за времето, в което камионът реално участва.
+  // При "само хамали" транспортът е на клиента и не се начислява.
+  if (isLabourOnly) {
+    // без транспортно перо
+  } else if (isDisposal) {
     const totalTruckHours = handlingClock * disposalTrucksN; // сума от часовете на всички камиони
     add(`Транспорт${disposalTrucksN > 1 ? ` (${disposalTrucksN} камиона)` : ""} — ${totalTruckHours.toFixed(1)} ч × ${n(p.truckRate)} ${p.currency}/ч (${totalKm} км до сметището)`,
         totalTruckHours * n(p.truckRate));
@@ -1061,10 +1125,10 @@ function computePrice(s, p) {
   if (rolls) add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(3)} ${p.currency}/м`, rolls * n(p.stretchRollPrice), true);
 
   // праг
-  const floor = n(p.minPrice[s.service === "disposal" ? "local" : s.service]);
+  const floor = n(p.minPrice[(s.service === "disposal" || s.service === "labour") ? "local" : s.service]);
   if (total < floor) { lines.push({ label: "Изравняване до минимум", amount: floor - total }); total = floor; }
 
-  return { total: Math.round(total), lines, vol, weight, isDisposal, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH };
+  return { total: Math.round(total), lines, vol, weight, isDisposal, isLabourOnly, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH };
 }
 
 /* ================= ЗАПИС НА КАЛКУЛАЦИИ (база данни) ================= *
@@ -1304,6 +1368,42 @@ function Pill({ active, children, onClick }) {
       style={active ? { background: ink } : {}}>{children}</button>
   );
 }
+/* Отметка за услуга по вещ. При няколко бройки позволява да се избере
+   на колко от тях важи (напр. 4 бюра, но само 1 се разглобява). */
+function OptionToggle({ label, cnt, value, onChange, detail, locked }) {
+  const active = value === true ? cnt : (Number(value) > 0 ? Math.min(Number(value), cnt) : 0);
+  const on = active > 0;
+
+  if (locked) {
+    return (
+      <span className="flex items-center gap-1.5">
+        <input type="checkbox" checked readOnly disabled className="w-4 h-4 accent-orange-500" />
+        <span className="text-xs" style={{ color: accent }}>{label} {detail(cnt)}</span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex items-center gap-1.5">
+      <input type="checkbox" checked={on}
+        onChange={() => onChange(on ? 0 : cnt)}
+        className="w-4 h-4 accent-orange-500" />
+      <span className="text-xs" style={{ color: on ? accent : "#94a3b8" }}>{label}</span>
+      {on && cnt > 1 && (
+        <span className="flex items-center gap-1">
+          <button type="button" onClick={() => onChange(Math.max(1, active - 1))}
+            className="w-6 h-6 rounded border border-slate-200 text-slate-500 text-xs leading-none">−</button>
+          <span className="text-xs font-semibold" style={{ color: ink }}>{active}</span>
+          <button type="button" onClick={() => onChange(Math.min(cnt, active + 1))}
+            className="w-6 h-6 rounded border border-slate-200 text-slate-500 text-xs leading-none">+</button>
+          <span className="text-xs text-slate-400">от {cnt}</span>
+        </span>
+      )}
+      {on && <span className="text-xs" style={{ color: accent }}>{detail(active)}</span>}
+    </span>
+  );
+}
+
 function Stepper({ value, onChange }) {
   // държим суров текст, за да може полето да се изпразни, докато се пише
   const [raw, setRaw] = useState(String(value || 0));
@@ -1432,7 +1532,7 @@ function HoodInput({ city, value, onChange, placeholder }) {
   );
 }
 
-function SettingsPanel({ p, setP, saveState, onSave }) {
+function SettingsPanel({ p, setP, saveState }) {
   const upd = (patch) => setP({ ...p, ...patch });
 
   const exportParams = () => {
@@ -1536,6 +1636,8 @@ function SettingsPanel({ p, setP, saveState, onSave }) {
         <Num label="Мин. работа местен екип" value={p.localCrewMinHours} step={0.5} onChange={(v) => upd({ localCrewMinHours: v })} suffix="ч" />
         <Num label="Мин. на изпратена бригада" value={p.minCrewHours} step={0.5} onChange={(v) => upd({ minCrewHours: v })} suffix="ч" />
         <Num label="Кола" value={p.carRatePerKm} step={0.05} onChange={(v) => upd({ carRatePerKm: v })} suffix="€/км" />
+        <Num label="Радиус без път (хамали)" value={p.labourLocalRadiusKm} step={5} onChange={(v) => upd({ labourLocalRadiusKm: v })} suffix="км" />
+        <Num label="Мин. кола (хамали)" value={p.labourMinCarFee} step={1} onChange={(v) => upd({ labourMinCarFee: v })} suffix="€" />
         <Num label="Праг за нощувка" value={p.overnightThresholdH} step={1} onChange={(v) => upd({ overnightThresholdH: v })} suffix="ч" />
         <Num label="Нощувка" value={p.overnightPrice} step={5} onChange={(v) => upd({ overnightPrice: v })} suffix="€" />
       </div>
@@ -1597,9 +1699,6 @@ function SettingsPanel({ p, setP, saveState, onSave }) {
       </label>
 
       <div className="flex flex-wrap items-center gap-2 mt-4">
-        <button onClick={onSave} disabled={saveState === "saving"} className="text-xs font-semibold px-3 py-1.5 rounded-full text-white disabled:opacity-60" style={{ background: accent }}>
-          💾 Запази
-        </button>
         <button onClick={exportParams} className="text-xs font-semibold px-3 py-1.5 rounded-full text-white" style={{ background: ink }}>
           ⬇ Свали настройките
         </button>
@@ -1773,7 +1872,7 @@ export default function KorektCalculator() {
   const [openGroups, setOpenGroups] = useState({ "Хол и трапезария": true });
   const [itemSearch, setItemSearch] = useState("");
   const [s, setS] = useState({
-    service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {},
+    service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {},
     pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger" },
     dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger" },
     extras: { packing: false, materials: false, disassembly: false },
@@ -1782,9 +1881,12 @@ export default function KorektCalculator() {
   const set = (patch) => setS((prev) => ({ ...prev, ...patch }));
   const setQty = (id, cnt) => setS((prev) => ({ ...prev, qty: { ...prev.qty, [id]: cnt } }));
   const toggle = (field, id) => setS((prev) => ({ ...prev, [field]: { ...prev[field], [id]: !prev[field][id] } }));
+  // задава на колко бройки важи услугата (0 = изключена)
+  const setField = (field, id, value) =>
+    setS((prev) => ({ ...prev, [field]: { ...prev[field], [id]: value } }));
 
   const r = useMemo(() => computePrice(s, p), [s, p]);
-  const { total, lines, vol, weight, isDisposal, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, chosen, oneWayKm, totalKm, driveHours, fleet, auto, crewByProtocol, isCourse, disHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, wrapMeters, wrapHours, rolls, protectMeters, protectManHours, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH } = r;
+  const { total, lines, vol, weight, isDisposal, isLabourOnly, labourBaseCity, labourTravelKm, labourAutoBaseCity, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, chosen, oneWayKm, totalKm, driveHours, fleet, auto, crewByProtocol, autoCrew, crewManual, reqCrew, isCourse, disHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, wrapMeters, wrapHours, rolls, protectMeters, protectManHours, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH } = r;
   const localEst = s.service === "local" ? estimateKm(s.city, s.pickupHood, s.dropoffHood, Number(p.cityRoadFactor) || 1.3) : null;
 
   // --- зареждане и автоматичен запис на ПАРАМЕТРИТЕ ---
@@ -1839,13 +1941,6 @@ export default function KorektCalculator() {
     }, 600);
     return () => clearTimeout(t);
   }, [p, paramsLoaded]);
-
-  const forceSaveParams = async () => {
-    setParamSave("saving");
-    const okLocal = await saveParams(p);
-    const okSheet = await pushParamsToSheet(p, p.sheetEndpoint);
-    setParamSave(okSheet ? "saved-sheet" : okLocal ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
-  };
 
   // --- автоматичен запис на калкулацията при показване на цената ---
   const [showLog, setShowLog] = useState(false);
@@ -1919,7 +2014,7 @@ export default function KorektCalculator() {
 
   const canNext =
     (step === 0 && s.service) ||
-    (step === 1 && (s.service === "disposal" ? !!s.city : s.service === "local" ? (s.city && (!NEIGHBORHOODS[s.city] || (s.pickupHood.trim() && s.dropoffHood.trim()))) : s.service === "intercity" ? (!!findCity(s.pickupCity) && !!findCity(s.dropoffCity)) : s.country)) ||
+    (step === 1 && (s.service === "labour" ? !!findCity(s.city) : s.service === "disposal" ? !!s.city : s.service === "local" ? (s.city && (!NEIGHBORHOODS[s.city] || (s.pickupHood.trim() && s.dropoffHood.trim()))) : s.service === "intercity" ? (!!findCity(s.pickupCity) && !!findCity(s.dropoffCity)) : s.country)) ||
     (step === 2 && vol > 0);
 
   return (
@@ -1937,11 +2032,12 @@ export default function KorektCalculator() {
             <button onClick={() => setShowSettings((v) => !v)}
               className="text-sm font-semibold px-3 py-2 rounded-full border transition"
               style={{ borderColor: showSettings ? accent : "#e2e6ec", color: showSettings ? accent : "#64748b" }}>⚙ Параметри</button>
+            <a href={p.phoneHref} className="text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: ink }}>{p.phone}</a>
           </div>
         </div>
 
         {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} />}
-        {showSettings && <SettingsPanel p={p} setP={setP} saveState={paramSave} onSave={forceSaveParams} />}
+        {showSettings && <SettingsPanel p={p} setP={setP} saveState={paramSave} />}
 
         <div className="flex gap-2 mb-8">
           {STEPS.map((label, i) => (
@@ -1963,6 +2059,7 @@ export default function KorektCalculator() {
                   { id: "intercity", t: "Междуградско", d: "От всяка точка на страната", m: 0 },
                   { id: "international", t: "Международно", d: "Транспорт от и за ЕС", m: p.minPrice.international },
                   { id: "disposal", t: "Изхвърляне на отпадък", d: "Изнасяне и извозване до сметище", m: 0 },
+                  { id: "labour", t: "Само хамали (без камион)", d: "Опаковане, разглобяване и товарене в Ваш транспорт", m: 0 },
                 ].map((o) => (
                   <button key={o.id} onClick={() => { set({ service: o.id, truckId: null }); setStep(1); }}
                     className={`w-full text-left rounded-2xl border p-5 bg-white transition hover:shadow-sm ${s.service === o.id ? "" : "border-slate-200"}`}
@@ -1986,6 +2083,54 @@ export default function KorektCalculator() {
             {step === 1 && (
               <div className="space-y-4">
                 <h2 className="text-xl font-bold" style={{ color: ink }}>Локация</h2>
+                {s.service === "labour" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-600 mb-1">В кой град е работата?</label>
+                      <p className="text-xs text-slate-400 mb-3">
+                        Ако е извън града на най-близката база, се начислява път и кола за бригадата.
+                      </p>
+                      <CityInput value={s.city} onChange={(v) => set({ city: v, pickupHood: "" })} placeholder="Започнете да пишете…" />
+                      {s.city && NEIGHBORHOODS[s.city] && (
+                        <div className="mt-2">
+                          <HoodInput city={s.city} value={s.pickupHood} onChange={(v) => set({ pickupHood: v })} placeholder="Квартал (по желание)" />
+                        </div>
+                      )}
+                    </div>
+                    {s.city && findCity(s.city) && (
+                      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Откъде пътува бригадата</label>
+                        <p className="text-xs text-slate-400 mb-3">
+                          По подразбиране най-близката база. Сменете я, ако там няма свободни хора.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Pill active={!s.labourBase} onClick={() => set({ labourBase: "" })}>
+                            Автоматично{labourAutoBaseCity ? ` (${labourAutoBaseCity})` : ""}
+                          </Pill>
+                          {BASES.map((b) => (
+                            <Pill key={b} active={s.labourBase === b} onClick={() => set({ labourBase: b })}>{b}</Pill>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="rounded-xl p-3 text-sm" style={{ background: "#fff8ef", border: "1px solid #f3ddbd" }}>
+                      🚚 Транспортът на багажа е за сметка на клиента. Плащат се работата на хамалите,
+                      материалите и стълбите.
+                      {labourTravelKm > 0 ? (
+                        <div className="mt-1">
+                          🚗 Бригадата пътува от <b>{labourBaseCity}</b> — {labourTravelKm} км в едната посока,
+                          включени са пътят и колата.
+                        </div>
+                      ) : labourBaseCity && (
+                        <div className="mt-1">
+                          👥 Бригадата е от <b>{labourBaseCity}</b> — включена е минимална такса за кола ({p.labourMinCarFee} {p.currency}).
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {s.service === "disposal" && (
                   <div className="space-y-4">
                     <div>
@@ -2271,49 +2416,28 @@ export default function KorektCalculator() {
                                       <Stepper value={cnt} onChange={(v) => setQty(it.id, v)} />
                                     </div>
                                     {cnt > 0 && (it.dis || it.asm || it.wrap || it.protect) && (
-                                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5">
+                                      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-1.5">
                                         {it.dis && (
-                                          <label className="flex items-center gap-1.5 cursor-pointer">
-                                            <input type="checkbox" checked={!!s.dis[it.id]} onChange={() => toggle("dis", it.id)} className="w-4 h-4 accent-orange-500" />
-                                            <span className="text-xs" style={{ color: s.dis[it.id] ? accent : "#94a3b8" }}>
-                                              🔧 разглоби{s.dis[it.id] ? ` +${(it.dis * cnt).toFixed(1)} чч` : ""}
-                                            </span>
-                                          </label>
+                                          <OptionToggle label="🔧 разглоби" cnt={cnt} value={s.dis[it.id]}
+                                            onChange={(v) => setField("dis", it.id, v)}
+                                            detail={(n) => `+${(it.dis * n).toFixed(1)} чч`} />
                                         )}
                                         {it.asm && (
-                                          <label className="flex items-center gap-1.5 cursor-pointer">
-                                            <input type="checkbox" checked={!!s.asm[it.id]} onChange={() => toggle("asm", it.id)} className="w-4 h-4 accent-orange-500" />
-                                            <span className="text-xs" style={{ color: s.asm[it.id] ? accent : "#94a3b8" }}>
-                                              🔩 сглоби{s.asm[it.id] ? ` +${(it.asm * cnt).toFixed(1)} чч` : ""}
-                                            </span>
-                                          </label>
+                                          <OptionToggle label="🔩 сглоби" cnt={cnt} value={s.asm[it.id]}
+                                            onChange={(v) => setField("asm", it.id, v)}
+                                            detail={(n) => `+${(it.asm * n).toFixed(1)} чч`} />
                                         )}
                                         {it.protect && (
-                                          <label className={`flex items-center gap-1.5 ${it.protectReq ? "" : "cursor-pointer"}`}>
-                                            <input type="checkbox" checked={it.protectReq || !!s.protect[it.id]} disabled={it.protectReq}
-                                              onChange={() => toggle("protect", it.id)} className="w-4 h-4 accent-orange-500" />
-                                            <span className="text-xs" style={{ color: it.protectReq || s.protect[it.id] ? accent : "#94a3b8" }}>
-                                              🛡 велпапе {it.protect * cnt} м{it.protectReq ? " (задължително)" : ""}
-                                            </span>
-                                          </label>
-                                        )}
-                                        {it.protect && (
-                                          <label className={`flex items-center gap-1.5 ${it.protectReq ? "" : "cursor-pointer"}`}>
-                                            <input type="checkbox" checked={it.protectReq || !!s.protect[it.id]} disabled={it.protectReq}
-                                              onChange={() => toggle("protect", it.id)} className="w-4 h-4 accent-orange-500" />
-                                            <span className="text-xs" style={{ color: it.protectReq || s.protect[it.id] ? accent : "#94a3b8" }}>
-                                              🛡 велпапе {it.protect * cnt} м{it.protectReq ? " (задължително)" : ""}
-                                            </span>
-                                          </label>
+                                          <OptionToggle label="🛡 велпапе" cnt={cnt} value={it.protectReq ? true : s.protect[it.id]}
+                                            locked={it.protectReq}
+                                            onChange={(v) => setField("protect", it.id, v)}
+                                            detail={(n) => `${it.protect * n} м${it.protectReq ? " (задълж.)" : ""}`} />
                                         )}
                                         {it.wrap && (
-                                          <label className={`flex items-center gap-1.5 ${it.wrapReq ? "" : "cursor-pointer"}`}>
-                                            <input type="checkbox" checked={it.wrapReq || !!s.wrap[it.id]} disabled={it.wrapReq}
-                                              onChange={() => toggle("wrap", it.id)} className="w-4 h-4 accent-orange-500" />
-                                            <span className="text-xs" style={{ color: it.wrapReq || s.wrap[it.id] ? accent : "#94a3b8" }}>
-                                              📦 стреч {it.wrap * cnt} м{it.wrapReq ? " (задължително)" : ""}
-                                            </span>
-                                          </label>
+                                          <OptionToggle label="📦 стреч" cnt={cnt} value={it.wrapReq ? true : s.wrap[it.id]}
+                                            locked={it.wrapReq}
+                                            onChange={(v) => setField("wrap", it.id, v)}
+                                            detail={(n) => `${it.wrap * n} м${it.wrapReq ? " (задълж.)" : ""}`} />
                                         )}
                                       </div>
                                     )}
@@ -2347,6 +2471,28 @@ export default function KorektCalculator() {
                     </span>
                     <input type="checkbox" checked={!!s.weFill} onChange={(e) => set({ weFill: e.target.checked })} className="w-5 h-5 accent-orange-500" />
                   </label>
+                )}
+
+                {vol > 0 && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 pr-3">
+                        <div className="text-sm font-medium" style={{ color: ink }}>Брой работници</div>
+                        <div className="text-xs text-slate-400">
+                          По обем: {autoCrew} души
+                          {reqCrew > 0 && <> · протокол изисква поне {reqCrew}</>}
+                          {crewManual && <span style={{ color: accent }}> · променено ръчно</span>}
+                        </div>
+                      </div>
+                      <Stepper value={crew} onChange={(v) => set({ crewOverride: v })} />
+                    </div>
+                    {crewManual && (
+                      <button onClick={() => set({ crewOverride: 0 })}
+                        className="text-xs text-slate-500 underline mt-2">
+                        върни автоматичния брой
+                      </button>
+                    )}
+                  </div>
                 )}
 
                 {weightLimited && (
@@ -2443,7 +2589,7 @@ export default function KorektCalculator() {
                 )}
 
                 {/* Избор на камион — само за извънградско/международно */}
-                {s.service !== "local" && vol > 0 && (
+                {s.service !== "local" && !isLabourOnly && vol > 0 && (
                   <div>
                     <h3 className="font-semibold mb-2" style={{ color: ink }}>Камион</h3>
                     <div className="flex flex-wrap gap-2">
@@ -2461,7 +2607,7 @@ export default function KorektCalculator() {
                 )}
 
                 <AddressBlock title={isDisposal ? "Адрес, откъдето се изнася" : "Адрес на товарене"} data={s.pickup} onChange={(d) => set({ pickup: d })} />
-                {!isDisposal && (
+                {!isDisposal && !isLabourOnly && (
                   <AddressBlock title="Адрес на разтоварване" data={s.dropoff} onChange={(d) => set({ dropoff: d })} />
                 )}
 
@@ -2551,7 +2697,7 @@ export default function KorektCalculator() {
                     <div className="flex justify-between gap-3">
                       <span className="text-slate-500">Услуга</span>
                       <span className="text-right" style={{ color: ink }}>
-                        {s.service === "local" ? "Градско преместване" : s.service === "intercity" ? "Междуградско" : s.service === "disposal" ? "Изхвърляне на отпадък" : "Международно"}
+                        {s.service === "local" ? "Градско преместване" : s.service === "intercity" ? "Междуградско" : s.service === "disposal" ? "Изхвърляне на отпадък" : s.service === "labour" ? "Само хамали (без камион)" : "Международно"}
                       </span>
                     </div>
                     <div className="flex justify-between gap-3">
