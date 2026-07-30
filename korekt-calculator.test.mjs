@@ -27,7 +27,7 @@ const engineSrc =
   `\nexport { DEFAULTS, CATALOG, ITEM_INDEX, totalVolume, countKind, NEIGHBORHOODS,
   haversineKm, normHood, findHood, cityCenter, estimateKm, crewFor, ownTruck,
   fleetFor, tripsFor, bestTruck, computePrice, totalWeight, findCity, protectMetersFor, BASES, nearestBase, baseOnRoute, mergeParams, buildRecord, toCSV, disHoursFor, wrapMetersFor, CITIES, estimateKmAny, pointFor,
-  saveCalc, loadCalcs, saveParams, loadParams, CALC_PREFIX, PARAMS_KEY, fetchParamsFromSupabase, pushParamsToSupabase, pushCalcToSupabase, fetchCalcsFromSupabase, fetchCatalogItemsFromSupabase, pushCatalogItemToSupabase, applyExtraCatalogItems, nextCalcNumber, CALC_COUNTER_KEY, fetchRealDistanceKm, routesCache, ROUTES_CACHE_KEY, roundHalf,
+  saveCalc, loadCalcs, saveParams, loadParams, CALC_PREFIX, PARAMS_KEY, fetchParamsFromSupabase, pushParamsToSupabase, pushCalcToSupabase, fetchCalcsFromSupabase, fetchCatalogItemsFromSupabase, pushCatalogItemToSupabase, applyExtraCatalogItems, nextCalcNumber, CALC_COUNTER_KEY, fetchRealDistanceKm, routesCache, ROUTES_CACHE_KEY, roundHalf, sanitizeNumericParams,
   storageSet, storageGet, storageList, getStorageMode, hasStorage };\n`;
 
 const tmp = path.join(os.tmpdir(), `korekt-engine-${Date.now()}.mjs`);
@@ -1870,6 +1870,24 @@ testAsync("хранилище: липсващо window.storage не чупи п�
 });
 
 
+test("параметри: изпразнено поле по време на писане не разваля трайно числото", () => {
+  const clean = E.sanitizeNumericParams({ ...E.DEFAULTS, workerRate: "" }, E.DEFAULTS);
+  eq(clean.workerRate, E.DEFAULTS.workerRate);
+});
+test("параметри: изпразнено вложено число (напр. minPrice) също се пази", () => {
+  const clean = E.sanitizeNumericParams({ ...E.DEFAULTS, minPrice: { local: "", international: 450 } }, E.DEFAULTS);
+  eq(clean.minPrice.local, E.DEFAULTS.minPrice.local);
+  eq(clean.minPrice.international, 450, "истинско число не бива да се пипа:");
+});
+test("параметри: реално въведено число минава непроменено", () => {
+  const clean = E.sanitizeNumericParams({ ...E.DEFAULTS, workerRate: 25 }, E.DEFAULTS);
+  eq(clean.workerRate, 25);
+});
+test("параметри: mergeParams чисти стари повредени данни от базата", () => {
+  const p = E.mergeParams({ minPrice: { local: "", international: "" } });
+  eq(p.minPrice.local, E.DEFAULTS.minPrice.local);
+  eq(p.minPrice.international, E.DEFAULTS.minPrice.international);
+});
 testAsync("настройки: теглят се от Supabase, ако е зададена връзка", async () => {
   globalThis.fetch = async () => ({ ok: true, json: async () => ([{ value: { workerRate: 24 } }]) });
   const got = await E.fetchParamsFromSupabase("https://x.supabase.co", "key");

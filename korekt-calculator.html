@@ -2835,11 +2835,29 @@ async function storageList(prefix) {
 }
 const PARAMS_KEY = "config:pricing";
 
+// "" (изпразнено поле по средата на писане) не бива да замести число трайно —
+// пази стойността по подразбиране, докато не дойде истинско ново число
+function sanitizeNumericParams(obj, defaults) {
+  const out = {
+    ...obj
+  };
+  for (const key of Object.keys(defaults)) {
+    const dv = defaults[key],
+      v = out[key];
+    if (typeof dv === "number") {
+      if (v === "" || v == null || !Number.isFinite(Number(v))) out[key] = dv;
+    } else if (dv && typeof dv === "object" && !Array.isArray(dv) && v && typeof v === "object" && !Array.isArray(v)) {
+      out[key] = sanitizeNumericParams(v, dv);
+    }
+  }
+  return out;
+}
+
 // сливане със стойностите по подразбиране, за да не се губят нови полета
 function mergeParams(saved) {
   const d = structuredClone(DEFAULTS);
   if (!saved || typeof saved !== "object") return d;
-  return {
+  return sanitizeNumericParams({
     ...d,
     ...saved,
     truck: {
@@ -2865,7 +2883,7 @@ function mergeParams(saved) {
       ...d.euDistances,
       ...(saved.euDistances || {})
     }
-  };
+  }, d);
 }
 async function loadParams() {
   try {
@@ -4916,8 +4934,10 @@ function KorektCalculator() {
     setParamSave("saving");
     const t = setTimeout(() => {
       (async () => {
-        const okLocal = await saveParams(p);
-        const okRemote = await pushParamsToSupabase(p, p.supabaseUrl, p.supabaseKey);
+        // не пазим трайно временно изпразнено поле (напр. докато служителят трие старото число, за да въведе ново)
+        const clean = sanitizeNumericParams(p, DEFAULTS);
+        const okLocal = await saveParams(clean);
+        const okRemote = await pushParamsToSupabase(clean, p.supabaseUrl, p.supabaseKey);
         setParamSave(okRemote ? "saved-sheet" : okLocal ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
       })();
     }, 600);
