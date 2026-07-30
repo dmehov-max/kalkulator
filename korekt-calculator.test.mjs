@@ -111,8 +111,12 @@ test("вместимост: 4×2×2 × 0.85 = 13.6 м³", () => near(E.ownTruck(
 
 /* --- Бригада --- */
 test("бригада: ≤8 м³ → 2 души", () => eq(E.crewFor(5, P), 2));
-test("бригада: ≤22 м³ → 3 души", () => eq(E.crewFor(15, P), 3));
-test("бригада: >22 м³ → 4 души", () => eq(E.crewFor(30, P), 4));
+test("бригада: ≤22 м³ → 4 души", () => eq(E.crewFor(15, P), 4));
+test("бригада: ≤40 м³ → 6 души", () => eq(E.crewFor(30, P), 6));
+test("бригада: >40 м³ → 8 души", () => eq(E.crewFor(50, P), 8));
+test("бригада: винаги четен брой души по подразбиране", () => {
+  for (const t of P.crewTiers) eq(t.crew % 2, 0, `${t.crew} души не е четно число:`);
+});
 test("протокол: двуврат хладилник изисква 4 души дори при малък обем", () => {
   const r = calc({ qty: { fridgeSxS: 1 } });
   eq(r.crew, 4);
@@ -815,6 +819,42 @@ test("закръгляне: показаните часове в перото з
   eq(shown * 2, Math.round(shown * 2), "показаните часове трябва да са кратни на 0.5:");
   near(line.amount, shown * r.crew * P.workerRate, 1, "цената трябва да отговаря на показаните часове:");
 });
+/* --- Ръчна промяна на километри и часове --- */
+test("километри: по подразбиране е изчисленото разстояние", () => {
+  const r = calc({ qty: { boxM: 5 }, pickupHood: "Център", dropoffHood: "Младост" });
+  eq(r.kmManual, false);
+  eq(r.oneWayKm, r.autoOneWayKm);
+});
+test("километри: ръчна стойност заменя изчисленото разстояние", () => {
+  const r = calc({ qty: { boxM: 5 }, pickupHood: "Център", dropoffHood: "Младост", kmOverride: 25 });
+  eq(r.kmManual, true);
+  eq(r.oneWayKm, 25);
+  ok(r.autoOneWayKm !== 25, "автоматичното трябва да е запазено отделно, за бутона за връщане:");
+});
+test("километри: ръчната стойност реално променя транспорта", () => {
+  const близо = calc({ qty: { boxM: 5 }, pickupHood: "Център", dropoffHood: "Младост", kmOverride: 1 });
+  const далеч = calc({ qty: { boxM: 5 }, pickupHood: "Център", dropoffHood: "Младост", kmOverride: 50 });
+  ok(далеч.total > близо.total, "повече километри трябва да оскъпяват");
+});
+test("часове: по подразбиране е изчисленото време", () => {
+  const r = calc({ qty: { boxM: 5 }, pickupHood: "Център", dropoffHood: "Младост" });
+  eq(r.hoursManual, false);
+  eq(r.handlingClock, r.autoHandlingClock);
+});
+test("часове: ръчна стойност заменя изчисленото време и се вижда в разбивката", () => {
+  const r = calc({ qty: { boxM: 5 }, pickupHood: "Център", dropoffHood: "Младост", hoursOverride: 6 });
+  eq(r.hoursManual, true);
+  eq(r.handlingClock, 6);
+  const line = r.lines.find((l) => l.label.startsWith("Товарене и разтоварване (ръчно)"));
+  ok(line, "липсва перото за ръчните часове");
+  eq(line.amount, Math.round(6 * r.crew * P.workerRate));
+});
+test("часове: ръчна стойност работи и при курс (интерсити)", () => {
+  const r = calc({ service: "intercity", pickupCity: "София", dropoffCity: "Пловдив", qty: { boxM: 5 }, hoursOverride: 8 });
+  eq(r.handlingClock, 8);
+  ok(!r.lines.some((l) => l.label.startsWith("Товарене —")), "не бива да има отделни редове товарене/разтоварване:");
+  ok(!r.lines.some((l) => l.label.startsWith("Разтоварване —")));
+});
 test("демонтаж: показва се като отделно перо в разбивката", () => {
   const r = calc({ qty: { wardrobe3: 1 }, dis: { wardrobe3: true } });
   const line = r.lines.find((l) => l.label.startsWith("Разглобяване"));
@@ -1019,13 +1059,14 @@ test("изхвърляне: стара мебел и стар уред нося�
 
 
 test("изхвърляне: 2 камиона намаляват календарното време наполовина", () => {
-  const един = изхв({ sackHouse: 1000 }, { truckId: "own" });
-  const два = изхв({ sackHouse: 1000 }, { truckId: "own", disposalTrucks: 2 });
+  // обем, при който базовата бригада (4) удвоена от 2 камиона опира точно в тавана (8), без отрязване
+  const един = изхв({ sackHouse: 120 }, { truckId: "own" });
+  const два = изхв({ sackHouse: 120 }, { truckId: "own", disposalTrucks: 2 });
   near(два.clockHours, един.clockHours / 2, 0.1, "времето трябва да е наполовина:");
 });
 test("изхвърляне: повече камиони НЕ променят общата цена", () => {
-  const един = изхв({ sackHouse: 1000 }, { truckId: "own" });
-  const два = изхв({ sackHouse: 1000 }, { truckId: "own", disposalTrucks: 2 });
+  const един = изхв({ sackHouse: 120 }, { truckId: "own" });
+  const два = изхв({ sackHouse: 120 }, { truckId: "own", disposalTrucks: 2 });
   eq(два.total, един.total, "цената трябва да е същата — само календарното време се компресира:");
 });
 test("изхвърляне: с 2 камиона общият брой хора се удвоява", () => {
@@ -1065,7 +1106,7 @@ test("изхвърляне: таванът на хората важи и без 
 
 
 test("изхвърляне: бригадата в статистиката е реалният общ брой, не базовият", () => {
-  const o = order({ service: "disposal", city: "Варна", pickupHood: "Център", qty: { sackHouse: 1000 }, disposalTrucks: 2, truckId: "own" });
+  const o = order({ service: "disposal", city: "Варна", pickupHood: "Център", qty: { sackHouse: 120 }, disposalTrucks: 2, truckId: "own" });
   const r = E.computePrice(o, P);
   ok(r.disposalTotalCrew > r.crew, "общият брой трябва да е по-голям от базовата бригада на камион");
   eq(r.disposalTotalCrew, r.crew * 2);
@@ -1102,20 +1143,20 @@ test("дни: под 10 часа е 1 ден", () => {
   eq(r.workDays, 1);
 });
 test("дни: над 10 часа изисква повече от 1 ден", () => {
-  const r = calc({ qty: { boxL: 400 } }); // голямо градско, обем над нормата за 1 ден
+  const r = calc({ qty: { boxL: 800 } }); // голямо градско, обем над нормата за 1 ден
   ok(r.clockHours > P.dayHours, `тестът трябва да е над 10ч, а е ${r.clockHours.toFixed(1)}`);
   eq(r.workDays, Math.ceil(r.clockHours / P.dayHours));
   ok(r.workDays >= 2);
 });
 test("дни: важи и за градско (не само за курс/изхвърляне)", () => {
-  const r = calc({ qty: { boxL: 400 } }); // услугата по подразбиране в calc() е градско
+  const r = calc({ qty: { boxL: 800 } }); // услугата по подразбиране в calc() е градско
   ok(r.workDays >= 2, "голямо градско преместване също трябва да покаже нужните дни");
 });
 test("дни: важи за изхвърляне при голям обем", () => {
-  const r = изхв({ sackHouse: 1000 }, { truckId: "own", disposalTrucks: 1 });
+  const r = изхв({ sackHouse: 1500 }, { truckId: "own", disposalTrucks: 1 });
   ok(r.clockHours > 24, `тестът трябва да е ясно многодневен: ${r.clockHours.toFixed(1)} ч`);
   eq(r.workDays, Math.ceil(r.clockHours / P.dayHours));
-  ok(r.workDays >= 4, `1000 чувала с 1 камион трябва да отнемат поне 4 дни, а е ${r.workDays}`);
+  ok(r.workDays >= 4, `1500 чувала с 1 камион трябва да отнемат поне 4 дни, а е ${r.workDays}`);
 });
 test("дни: повече паралелни камиони намаляват броя дни", () => {
   const един = изхв({ sackHouse: 1000 }, { truckId: "own", disposalTrucks: 1 });

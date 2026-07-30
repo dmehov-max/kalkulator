@@ -88,8 +88,9 @@ const DEFAULTS = {
 
   crewTiers: [
     { maxM3: 8, crew: 2 },
-    { maxM3: 22, crew: 3 },
-    { maxM3: 999, crew: 4 },
+    { maxM3: 22, crew: 4 },
+    { maxM3: 40, crew: 6 },
+    { maxM3: 999, crew: 8 },
   ],
 
   bgDistances: {
@@ -829,9 +830,12 @@ function computePrice(s, p) {
   const bgEst = s.service === "intercity"
     ? estimateKmAny(s.pickupCity, "", s.dropoffCity, "", n(p.roadFactorBG || 1.25))
     : null;
-  const oneWayKm = s.service === "local" ? (localEst != null ? localEst : 0)
+  const autoOneWayKm = s.service === "local" ? (localEst != null ? localEst : 0)
     : s.service === "intercity" ? (bgEst != null ? bgEst : n(s.km))
     : n(p.euDistances[s.country]);
+  // ръчна промяна на километрите (напр. служителят знае по-точен маршрут) — важи за всички услуги
+  const kmManual = Number(s.kmOverride) > 0;
+  const oneWayKm = kmManual ? Number(s.kmOverride) : autoOneWayKm;
   let crew = crewFor(vol, p);
   const autoCrew = crew; // изчисленият по обем брой — за справка в интерфейса
   // протокол: някои вещи изискват минимален брой хора (напр. двуврат хладилник → 4)
@@ -933,6 +937,10 @@ function computePrice(s, p) {
     handlingClock = loadCarryClock + unloadCarryClock + driveHours;
     if (handlingClock < n(p.minLocalHours)) handlingClock = n(p.minLocalHours); // мин 2 ч
   }
+  // ръчна промяна на часовете на курса (напр. служителят знае реалния престой) — заменя изчисленото
+  const autoHandlingClock = handlingClock;
+  const hoursManual = Number(s.hoursOverride) > 0;
+  if (hoursManual) handlingClock = Number(s.hoursOverride);
   // при курс с пътуваща бригада вторият човек се плаща за РЕАЛНИТЕ часове (път + работа) × часова ставка,
   // без таван — 10 часа = 10 × ставката, 12 часа = 12 × ставката и т.н.
   const dayTotalH = handlingClock + driveHours;
@@ -1079,7 +1087,12 @@ function computePrice(s, p) {
     }
   } else {
     handlingManHours = handlingClock * crew;
-    if (isCourse) {
+    if (hoursManual) {
+      // ръчно зададени часове — един общ ред вместо автоматичното разделяне на товарене/разтоварване
+      const h = roundHalf(handlingClock);
+      add(`Товарене и разтоварване (ръчно) — ${h.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
+          h * crew * n(p.workerRate));
+    } else if (isCourse) {
       const hL = roundHalf(loadClock), hU = roundHalf(unloadClock);
       add(`Товарене — ${hL.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`, hL * crew * n(p.workerRate));
       add(`Разтоварване — ${hU.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`, hU * crew * n(p.workerRate));
@@ -1201,7 +1214,7 @@ function computePrice(s, p) {
   const floor = n(p.minPrice[(s.service === "disposal" || usesFieldCrew) ? "local" : s.service]);
   if (total < floor) { lines.push({ label: "Изравняване до минимум", amount: floor - total }); total = floor; }
 
-  return { total: Math.round(total), lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours };
+  return { total: Math.round(total), lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, autoHandlingClock, hoursManual, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours };
 }
 
 /* ================= ЗАПИС НА КАЛКУЛАЦИИ (база данни) ================= *
@@ -2214,7 +2227,7 @@ export default function KorektCalculator() {
   const [openGroups, setOpenGroups] = useState({ "Хол и трапезария": true });
   const [itemSearch, setItemSearch] = useState("");
   const [s, setS] = useState({
-    service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {},
+    service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {},
     pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
     dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
     extras: { packing: false, materials: false, disassembly: false },
@@ -2228,7 +2241,7 @@ export default function KorektCalculator() {
     setS((prev) => ({ ...prev, [field]: { ...prev[field], [id]: value } }));
 
   const r = useMemo(() => computePrice(s, p), [s, p]);
-  const { total, lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, chosen, oneWayKm, totalKm, driveHours, fleet, auto, crewByProtocol, autoCrew, crewManual, reqCrew, isCourse, disHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, wrapMeters, wrapHours, rolls, protectMeters, protectManHours, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH } = r;
+  const { total, lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto, crewByProtocol, autoCrew, crewManual, reqCrew, isCourse, autoHandlingClock, hoursManual, disHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, wrapMeters, wrapHours, rolls, protectMeters, protectManHours, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH } = r;
   const localEst = s.service === "local" ? estimateKm(s.city, s.pickupHood, s.dropoffHood, Number(p.cityRoadFactor) || 1.3) : null;
   const isAssembly = s.service === "assembly";
   const isTRD = s.service === "trd";
@@ -2885,6 +2898,50 @@ export default function KorektCalculator() {
                       <button onClick={() => set({ crewOverride: 0 })}
                         className="text-xs text-slate-500 underline mt-2">
                         върни автоматичния брой
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {vol > 0 && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 pr-3">
+                        <div className="text-sm font-medium" style={{ color: ink }}>Часове на курса</div>
+                        <div className="text-xs text-slate-400">
+                          Изчислено: {autoHandlingClock.toFixed(1)} ч
+                          {hoursManual && <span style={{ color: accent }}> · променено ръчно</span>}
+                        </div>
+                      </div>
+                      <div className="w-24">
+                        <Num value={s.hoursOverride || ""} step={0.5} onChange={(v) => set({ hoursOverride: v || 0 })} suffix="ч" />
+                      </div>
+                    </div>
+                    {hoursManual && (
+                      <button onClick={() => set({ hoursOverride: 0 })}
+                        className="text-xs text-slate-500 underline mt-2">
+                        върни изчислените часове
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {oneWayKm > 0 && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 pr-3">
+                        <div className="text-sm font-medium" style={{ color: ink }}>Километри</div>
+                        <div className="text-xs text-slate-400">
+                          Изчислено: {autoOneWayKm} км
+                          {kmManual && <span style={{ color: accent }}> · променено ръчно</span>}
+                        </div>
+                      </div>
+                      <Stepper value={Math.round(oneWayKm)} onChange={(v) => set({ kmOverride: v })} />
+                    </div>
+                    {kmManual && (
+                      <button onClick={() => set({ kmOverride: 0 })}
+                        className="text-xs text-slate-500 underline mt-2">
+                        върни изчислените километри
                       </button>
                     )}
                   </div>
