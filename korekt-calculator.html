@@ -65,6 +65,8 @@ const {
 
 const DEFAULTS = {
   currency: "€",
+  deviationFactor: 1.15,
+  // коеф. на отклонение върху крайната цена (буфер за непредвидени разходи)
   workerRate: 18,
   // €/час на работник
   truckRate: 20,
@@ -2647,6 +2649,13 @@ function computePrice(s, p) {
     });
     total = floor;
   }
+
+  // отклонение (буфер) върху крайната калкулация — последна стъпка, върху всичко по-горе
+  const deviationFactor = n(p.deviationFactor || 1) || 1;
+  if (deviationFactor !== 1) {
+    const percent = Math.round((deviationFactor - 1) * 100);
+    add(`Отклонение (${percent >= 0 ? "+" : ""}${percent}%)`, total * (deviationFactor - 1));
+  }
   return {
     total: Math.round(total),
     lines,
@@ -3398,6 +3407,18 @@ function SettingsPanel({
       color: saveState === "error" ? "#dc2626" : "#94a3b8"
     }
   }, saveState === "saving" ? "Записване…" : saveState === "saved-sheet" ? "Записано в базата ✓" : saveState === "saved" ? "Записано ✓" : saveState === "unavailable" ? "Важи за сесията (без трайно хранилище)" : saveState === "error" ? "Грешка при запис" : "")), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2"
+  }, "Отклонение върху крайната цена"), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"
+  }, /*#__PURE__*/React.createElement(Num, {
+    label: "Коеф. отклонение",
+    value: p.deviationFactor,
+    step: 0.01,
+    onChange: v => upd({
+      deviationFactor: v
+    }),
+    suffix: "×"
+  })), /*#__PURE__*/React.createElement("div", {
     className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2"
   }, "Ставки и скорости"), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"

@@ -11,6 +11,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 const DEFAULTS = {
   currency: "€",
 
+  deviationFactor: 1.15, // коеф. на отклонение върху крайната цена (буфер за непредвидени разходи)
   workerRate: 18,        // €/час на работник
   truckRate: 20,         // €/час транспорт (за градско)
   kmRate: 0.7,           // €/км за извънградско (собствен камион)
@@ -1214,6 +1215,13 @@ function computePrice(s, p) {
   const floor = n(p.minPrice[(s.service === "disposal" || usesFieldCrew) ? "local" : s.service]);
   if (total < floor) { lines.push({ label: "Изравняване до минимум", amount: floor - total }); total = floor; }
 
+  // отклонение (буфер) върху крайната калкулация — последна стъпка, върху всичко по-горе
+  const deviationFactor = n(p.deviationFactor || 1) || 1;
+  if (deviationFactor !== 1) {
+    const percent = Math.round((deviationFactor - 1) * 100);
+    add(`Отклонение (${percent >= 0 ? "+" : ""}${percent}%)`, total * (deviationFactor - 1));
+  }
+
   return { total: Math.round(total), lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, autoHandlingClock, hoursManual, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours };
 }
 
@@ -1706,6 +1714,11 @@ function SettingsPanel({ p, setP, saveState }) {
             : saveState === "unavailable" ? "Важи за сесията (без трайно хранилище)"
             : saveState === "error" ? "Грешка при запис" : ""}
         </div>
+      </div>
+
+      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Отклонение върху крайната цена</div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <Num label="Коеф. отклонение" value={p.deviationFactor} step={0.01} onChange={(v) => upd({ deviationFactor: v })} suffix="×" />
       </div>
 
       <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Ставки и скорости</div>

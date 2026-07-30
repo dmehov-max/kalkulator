@@ -855,6 +855,43 @@ test("часове: ръчна стойност работи и при курс 
   ok(!r.lines.some((l) => l.label.startsWith("Товарене —")), "не бива да има отделни редове товарене/разтоварване:");
   ok(!r.lines.some((l) => l.label.startsWith("Разтоварване —")));
 });
+/* --- Отклонение (буфер) върху крайната цена --- */
+test("отклонение: прилага се като последна стъпка върху всичко", () => {
+  const r = calc({ qty: { boxM: 5 }, pickupHood: "Център", dropoffHood: "Младост" });
+  const line = r.lines.find((l) => l.label.startsWith("Отклонение"));
+  ok(line, "липсва перо за отклонението");
+  const преди = r.total - line.amount;
+  near(r.total, Math.round(преди * P.deviationFactor), 1);
+});
+test("отклонение: важи за всеки тип услуга", () => {
+  for (const o of [
+    { qty: { boxM: 5 } },
+    { service: "disposal", city: "Варна", qty: { sackHouse: 10 } },
+    { service: "labour", city: "София", qty: { boxL: 10 } },
+    { service: "assembly", city: "София", manualHours: 3 },
+  ]) {
+    const r = calc(o);
+    ok(r.lines.some((l) => l.label.startsWith("Отклонение")), `липсва при ${o.service || "local"}`);
+  }
+});
+test("отклонение: коефициентът се управлява от параметрите", () => {
+  const r10 = calc({ qty: { boxM: 5 }, pickupHood: "Център", dropoffHood: "Младост" }, { ...P, deviationFactor: 1.10 });
+  const line = r10.lines.find((l) => l.label.startsWith("Отклонение"));
+  ok(line.label.includes("+10%"), `етикетът трябва да показва 10%: ${line.label}`);
+});
+test("отклонение: коефициент 1 не добавя перо", () => {
+  const r = calc({ qty: { boxM: 5 } }, { ...P, deviationFactor: 1 });
+  ok(!r.lines.some((l) => l.label.startsWith("Отклонение")), "не бива да има перо при ×1");
+});
+test("отклонение: прилага се и след изравняване до минимум", () => {
+  // изкуствено висок праг, за да сме сигурни, че изравняването реално се задейства
+  const params = { ...P, minPrice: { ...P.minPrice, local: 100000 } };
+  const r = calc({ qty: { boxS: 1 }, pickupHood: "Център", dropoffHood: "Център" }, params);
+  ok(r.lines.some((l) => l.label === "Изравняване до минимум"));
+  const line = r.lines.find((l) => l.label.startsWith("Отклонение"));
+  ok(line, "отклонението трябва да важи и върху минималната цена");
+  near(r.total, Math.round(100000 * P.deviationFactor), 1);
+});
 test("демонтаж: показва се като отделно перо в разбивката", () => {
   const r = calc({ qty: { wardrobe3: 1 }, dis: { wardrobe3: true } });
   const line = r.lines.find((l) => l.label.startsWith("Разглобяване"));
@@ -949,7 +986,7 @@ test("разглобяване: часовете се плащат на брой
   const чч = (E.ITEM_INDEX.wardrobe3.dis * P.disCrew) + (E.ITEM_INDEX.wardrobe3.asm * P.asmCrew);
   ok(без.handlingClock > P.minLocalHours, "тестът трябва да е над минимума");
   near(с.manHours - без.manHours, чч, 0.01, "разлика в човекочасовете:");
-  near(с.total - без.total, чч * P.disAsmRate, 1, "разликата е само труд, без транспорт:");
+  near(с.total - без.total, чч * P.disAsmRate * P.deviationFactor, 1, "разликата е само труд, без транспорт (плюс отклонението):");
 });
 test("разглобяване: броят хора се управлява поотделно за двата екипа", () => {
   const W = E.ITEM_INDEX.wardrobe3;
