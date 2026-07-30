@@ -1434,14 +1434,22 @@ function buildRecord(s, p, r, id, calcNumber) {
 }
 
 // изпраща записа към Supabase (споделена база), ако е зададена връзка
-async function pushCalcToSupabase(record, url, key) {
+// isUpdate=true праща PATCH на съществуващ ред (не хаби пореден номер от bigserial
+// последователността, за разлика от upsert — виж проекта: "защо в записите липсват номера")
+async function pushCalcToSupabase(record, url, key, isUpdate) {
   if (!url || !key || !record.id) return false;
   try {
-    const res = await fetch(`${url}/rest/v1/calculations?on_conflict=id`, {
-      method: "POST",
-      headers: supabaseHeaders(key, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
-      body: JSON.stringify({ id: record.id, status: record.status || "калкулация", data: record }),
-    });
+    const res = isUpdate
+      ? await fetch(`${url}/rest/v1/calculations?id=eq.${encodeURIComponent(record.id)}`, {
+          method: "PATCH",
+          headers: supabaseHeaders(key, { "Content-Type": "application/json", Prefer: "return=minimal" }),
+          body: JSON.stringify({ status: record.status || "калкулация", data: record }),
+        })
+      : await fetch(`${url}/rest/v1/calculations?on_conflict=id`, {
+          method: "POST",
+          headers: supabaseHeaders(key, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
+          body: JSON.stringify({ id: record.id, status: record.status || "калкулация", data: record }),
+        });
     return res.ok;
   } catch (e) {
     console.error("supabase push failed", e);
@@ -1720,6 +1728,21 @@ function HoodInput({ city, value, onChange, placeholder }) {
   );
 }
 
+// колабируема секция в ⚙ Параметри — затворена по подразбиране, за да не притиска дълъг списък
+function Section({ title, children }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mb-2 border-b border-slate-100 pb-2 last:border-b-0">
+      <button type="button" onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between text-left py-1.5">
+        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{title}</span>
+        <span className="text-slate-400 text-lg leading-none">{open ? "–" : "+"}</span>
+      </button>
+      {open && <div className="mt-1 pb-1">{children}</div>}
+    </div>
+  );
+}
+
 function SettingsPanel({ p, setP, saveState }) {
   const upd = (patch) => setP({ ...p, ...patch });
 
@@ -1764,169 +1787,178 @@ function SettingsPanel({ p, setP, saveState }) {
         </div>
       </div>
 
-      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Отклонение върху крайната цена</div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <Num label="Коеф. отклонение" value={p.deviationFactor} step={0.01} onChange={(v) => upd({ deviationFactor: v })} suffix="×" />
-      </div>
+      <Section title="Отклонение върху крайната цена">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Num label="Коеф. отклонение" value={p.deviationFactor} step={0.01} onChange={(v) => upd({ deviationFactor: v })} suffix="×" />
+        </div>
+      </Section>
 
-      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Себестойност и марж (вътрешно, не се вижда от клиента)</div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-        <Num label="Работник (по подразбиране)" value={p.workerCostDefault} onChange={(v) => upd({ workerCostDefault: v })} suffix="€/ч" />
-        <Num label="Камион (градско)" value={p.truckCostPerHour} step={0.5} onChange={(v) => upd({ truckCostPerHour: v })} suffix="€/ч" />
-        <Num label="Камион (по km)" value={p.truckCostPerKm} step={0.05} onChange={(v) => upd({ truckCostPerKm: v })} suffix="€/км" />
-      </div>
-      <div className="space-y-2 mb-4">
-        {(p.workerCostByCity || []).map((c, i) => (
-          <div key={i} className="grid grid-cols-[1fr_90px_28px] gap-2 items-end">
-            <label className="block">
-              <span className="text-[11px] text-slate-500">Град</span>
-              <input value={c.city} onChange={(e) => setCityCost(i, { city: e.target.value })} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
-            </label>
-            <Num label="Работник" value={c.rate} onChange={(v) => setCityCost(i, { rate: v })} suffix="€/ч" />
-            <button onClick={() => upd({ workerCostByCity: p.workerCostByCity.filter((_, j) => j !== i) })}
-              className="h-9 rounded-lg border border-slate-200 text-slate-400">×</button>
-          </div>
-        ))}
-        <button onClick={() => upd({ workerCostByCity: [...(p.workerCostByCity || []), { city: "", rate: p.workerCostDefault }] })}
-          className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600">
-          + Ставка за град
-        </button>
-      </div>
-
-      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Ставки и скорости</div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <Num label="Работник" value={p.workerRate} onChange={(v) => upd({ workerRate: v })} suffix="€/ч" />
-        <Num label="Транспорт (градско)" value={p.truckRate} onChange={(v) => upd({ truckRate: v })} suffix="€/ч" />
-        <Num label="Извънградско" value={p.kmRate} step={0.05} onChange={(v) => upd({ kmRate: v })} suffix="€/км" />
-        <Num label="Двупосочен курс" value={p.roundTripFactor} step={0.5} onChange={(v) => upd({ roundTripFactor: v })} suffix="×" />
-        <Num label="Скорост в града" value={p.citySpeed} step={5} onChange={(v) => upd({ citySpeed: v })} suffix="км/ч" />
-        <Num label="Скорост извън града" value={p.roadSpeed} step={5} onChange={(v) => upd({ roadSpeed: v })} suffix="км/ч" />
-      </div>
-
-      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Собствен камион — {cap.toFixed(1)} м³/курс</div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <Num label="Дължина" value={p.truck.l} step={0.1} onChange={(v) => upd({ truck: { ...p.truck, l: v } })} suffix="м" />
-        <Num label="Широчина" value={p.truck.w} step={0.1} onChange={(v) => upd({ truck: { ...p.truck, w: v } })} suffix="м" />
-        <Num label="Височина" value={p.truck.h} step={0.1} onChange={(v) => upd({ truck: { ...p.truck, h: v } })} suffix="м" />
-        <Num label="Полезно запълване" value={p.fillFactor} step={0.05} onChange={(v) => upd({ fillFactor: v })} suffix="×" />
-        <Num label="Товароносимост" value={p.truck.payloadKg} step={100} onChange={(v) => upd({ truck: { ...p.truck, payloadKg: v } })} suffix="кг" />
-      </div>
-
-      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Партньорски камиони (междуградско/международно)</div>
-      <div className="space-y-2 mb-4">
-        {p.partnerTrucks.map((t, i) => (
-          <div key={t.id} className="grid grid-cols-[1fr_90px_90px_28px] gap-2 items-end">
-            <label className="block">
-              <span className="text-[11px] text-slate-500">Име</span>
-              <input value={t.name} onChange={(e) => setPartner(i, { name: e.target.value })} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
-            </label>
-            <Num label="Вместимост" value={t.capacity} onChange={(v) => setPartner(i, { capacity: v })} suffix="м³" />
-            <Num label="€/км" value={t.kmRate ?? ""} step={0.05} onChange={(v) => setPartner(i, { kmRate: v })} />
-            <button onClick={() => upd({ partnerTrucks: p.partnerTrucks.filter((_, j) => j !== i) })}
-              className="w-7 h-9 rounded-lg border border-slate-200 text-slate-400 hover:text-red-500">×</button>
-          </div>
-        ))}
-        <button onClick={() => upd({ partnerTrucks: [...p.partnerTrucks, { id: "p" + Date.now(), name: "Нов камион", capacity: 30 }] })}
-          className="text-xs font-medium" style={{ color: accent }}>+ Добави камион</button>
-      </div>
-
-      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Време и производителност</div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <Num label="Производителност" value={p.m3PerManHour} step={0.1} onChange={(v) => upd({ m3PerManHour: v })} suffix="м³/чч" />
-        <Num label="Мин. градско" value={p.minLocalHours} step={0.5} onChange={(v) => upd({ minLocalHours: v })} suffix="ч" />
-        <Num label="Коеф. път (град)" value={p.cityRoadFactor} step={0.05} onChange={(v) => upd({ cityRoadFactor: v })} suffix="×" />
-        <Num label="Разстояние в малък град" value={p.defaultTownKm} step={1} onChange={(v) => upd({ defaultTownKm: v })} suffix="км" />
-        <Num label="Коеф. демонтаж" value={p.disFactor} step={0.1} onChange={(v) => upd({ disFactor: v })} suffix="×" />
-        <Num label="Хора на разглобяване" value={p.disCrew} step={1} onChange={(v) => upd({ disCrew: v })} suffix="души" />
-        <Num label="Хора на сглобяване" value={p.asmCrew} step={1} onChange={(v) => upd({ asmCrew: v })} suffix="души" />
-        <Num label="Ставка монтаж/демонтаж" value={p.disAsmRate} step={1} onChange={(v) => upd({ disAsmRate: v })} suffix="€/ч" />
-        <Num label="Кашон/етаж" value={p.boxPerFloor} step={0.05} onChange={(v) => upd({ boxPerFloor: v })} suffix="€" />
-        <Num label="Уред/етаж" value={p.appliancePerFloor} step={0.5} onChange={(v) => upd({ appliancePerFloor: v })} suffix="€" />
-        <Num label="Спец. уред/етаж" value={p.heavyAppliancePerFloor} step={0.5} onChange={(v) => upd({ heavyAppliancePerFloor: v })} suffix="€" />
-        <Num label="Плоска база/етаж" value={p.floorFeeNoElevator} step={0.5} onChange={(v) => upd({ floorFeeNoElevator: v })} suffix="€" />
-        <Num label="Безплатно носене до" value={p.carryFreeDistanceM} step={5} onChange={(v) => upd({ carryFreeDistanceM: v })} suffix="м" />
-        <Num label="Мин. на 10м носене" value={p.carryExtraMinPer10m} step={1} onChange={(v) => upd({ carryExtraMinPer10m: v })} suffix="мин" />
-        <Num label="Ролка стреч" value={p.stretchRollM} step={1} onChange={(v) => upd({ stretchRollM: v })} suffix="м" />
-        <Num label="Цена ролка" value={p.stretchRollPrice} step={0.5} onChange={(v) => upd({ stretchRollPrice: v })} suffix="€" />
-        <Num label="Скорост опаковане" value={p.wrapMPerManHour} step={10} onChange={(v) => upd({ wrapMPerManHour: v })} suffix="м/чч" />
-        <Num label="Велпапе / автопласт" value={p.protectPricePerM} step={0.05} onChange={(v) => upd({ protectPricePerM: v })} suffix="€/м" />
-        <Num label="Скорост велпапе" value={p.protectMPerManHour} step={5} onChange={(v) => upd({ protectMPerManHour: v })} suffix="м/чч" />
-        <Num label="Праг междуградско" value={p.intercityThresholdKm} step={5} onChange={(v) => upd({ intercityThresholdKm: v })} suffix="км" />
-        <Num label="Товарене/курс" value={p.loadHours} step={0.5} onChange={(v) => upd({ loadHours: v })} suffix="ч" />
-        <Num label="Разтоварване/курс" value={p.unloadHours} step={0.5} onChange={(v) => upd({ unloadHours: v })} suffix="ч" />
-        <Num label="Пътуват (без шофьор)" value={p.travelCrew} step={1} onChange={(v) => upd({ travelCrew: v })} suffix="души" />
-        <Num label="Часове в работен ден" value={p.dayHours} step={1} onChange={(v) => upd({ dayHours: v })} suffix="ч" />
-        <Num label="Местен екип" value={p.localCrewSize} step={1} onChange={(v) => upd({ localCrewSize: v })} suffix="души" />
-        <Num label="Мин. работа местен екип" value={p.localCrewMinHours} step={0.5} onChange={(v) => upd({ localCrewMinHours: v })} suffix="ч" />
-        <Num label="Мин. на изпратена бригада" value={p.minCrewHours} step={0.5} onChange={(v) => upd({ minCrewHours: v })} suffix="ч" />
-        <Num label="Кола" value={p.carRatePerKm} step={0.05} onChange={(v) => upd({ carRatePerKm: v })} suffix="€/км" />
-        <Num label="Радиус без път (хамали)" value={p.labourLocalRadiusKm} step={5} onChange={(v) => upd({ labourLocalRadiusKm: v })} suffix="км" />
-        <Num label="Мин. кола (хамали)" value={p.labourMinCarFee} step={1} onChange={(v) => upd({ labourMinCarFee: v })} suffix="€" />
-        <Num label="Праг за нощувка" value={p.overnightThresholdH} step={1} onChange={(v) => upd({ overnightThresholdH: v })} suffix="ч" />
-        <Num label="Нощувка" value={p.overnightPrice} step={5} onChange={(v) => upd({ overnightPrice: v })} suffix="€" />
-      </div>
-
-      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Минимални цени</div>
-      <div className="grid grid-cols-2 gap-3">
-        <Num label="Градско" value={p.minPrice.local} step={10} onChange={(v) => upd({ minPrice: { ...p.minPrice, local: v } })} suffix="€" />
-        <Num label="Международно" value={p.minPrice.international} step={10} onChange={(v) => upd({ minPrice: { ...p.minPrice, international: v } })} suffix="€" />
-      </div>
-
-      <p className="text-[11px] text-slate-400 mt-1">
-        Стреч: {(Number(p.stretchRollPrice) / Number(p.stretchRollM || 1)).toFixed(3)} {p.currency}/м
-      </p>
-
-      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">Изхвърляне на отпадък</div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-2">
-        <Num label="Пълнене на чувал" value={p.fillMinPerSack} step={0.5} onChange={(v) => upd({ fillMinPerSack: v })} suffix="мин" />
-        <Num label="Изсипване на курс" value={p.dumpHoursPerTrip} step={0.1} onChange={(v) => upd({ dumpHoursPerTrip: v })} suffix="ч" />
-        <Num label="До сметището" value={p.landfillKm} step={1} onChange={(v) => upd({ landfillKm: v })} suffix="км" />
-        <Num label="Ставка изхвърляне" value={p.disposalWorkerRate} step={1} onChange={(v) => upd({ disposalWorkerRate: v })} suffix="€/ч" />
-        <Num label="Макс. хора" value={p.disposalMaxWorkers} step={1} onChange={(v) => upd({ disposalMaxWorkers: v })} suffix="души" />
-        <Num label="Макс. камион за изхвърляне" value={p.disposalMaxPayloadKg} step={500} onChange={(v) => upd({ disposalMaxPayloadKg: v })} suffix="кг" />
-        <Num label="Такса битов" value={(p.landfillFees || {}).household} step={5}
-          onChange={(v) => upd({ landfillFees: { ...p.landfillFees, household: v } })} suffix="€/курс" />
-        <Num label="Такса строителен" value={(p.landfillFees || {}).construction} step={5}
-          onChange={(v) => upd({ landfillFees: { ...p.landfillFees, construction: v } })} suffix="€/курс" />
-        <Num label="Такса смесен" value={(p.landfillFees || {}).mixed} step={5}
-          onChange={(v) => upd({ landfillFees: { ...p.landfillFees, mixed: v } })} suffix="€/курс" />
-        <Num label="Цена чувал" value={p.sackPrice} step={0.05} onChange={(v) => upd({ sackPrice: v })} suffix="€/бр." />
-      </div>
-
-      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">Реални разстояния (Google Maps)</div>
-      <label className="block">
-        <span className="text-[11px] text-slate-500">Routes API ключ — оставете празно за изчисление по права линия</span>
-        <input value={p.mapsApiKey || ""} onChange={(e) => upd({ mapsApiKey: e.target.value })}
-          placeholder="AIza..." type="password"
-          className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
-      </label>
-      <p className="text-[11px] text-slate-400 mt-1">
-        С ключ разстоянията се теглят по реален път от Google. Всеки маршрут се пита само веднъж и се запомня трайно.
-      </p>
-      <div className="flex items-center gap-3 mt-2">
-        <span className="text-[11px] text-slate-500">Запомнени маршрути: <b style={{ color: ink }}>{routesCache.size}</b></span>
-        {routesCache.size > 0 && (
-          <button
-            onClick={async () => { routesCache.clear(); await persistRoutesCache(); setP({ ...p }); }}
-            className="text-[11px] font-medium px-2 py-1 rounded-full border border-slate-200 text-slate-600">
-            Изчисти запомнените
+      <Section title="Себестойност и марж (вътрешно, не се вижда от клиента)">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+          <Num label="Работник (по подразбиране)" value={p.workerCostDefault} onChange={(v) => upd({ workerCostDefault: v })} suffix="€/ч" />
+          <Num label="Камион (градско)" value={p.truckCostPerHour} step={0.5} onChange={(v) => upd({ truckCostPerHour: v })} suffix="€/ч" />
+          <Num label="Камион (по km)" value={p.truckCostPerKm} step={0.05} onChange={(v) => upd({ truckCostPerKm: v })} suffix="€/км" />
+        </div>
+        <div className="space-y-2">
+          {(p.workerCostByCity || []).map((c, i) => (
+            <div key={i} className="grid grid-cols-[1fr_90px_28px] gap-2 items-end">
+              <label className="block">
+                <span className="text-[11px] text-slate-500">Град</span>
+                <input value={c.city} onChange={(e) => setCityCost(i, { city: e.target.value })} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
+              </label>
+              <Num label="Работник" value={c.rate} onChange={(v) => setCityCost(i, { rate: v })} suffix="€/ч" />
+              <button onClick={() => upd({ workerCostByCity: p.workerCostByCity.filter((_, j) => j !== i) })}
+                className="h-9 rounded-lg border border-slate-200 text-slate-400">×</button>
+            </div>
+          ))}
+          <button onClick={() => upd({ workerCostByCity: [...(p.workerCostByCity || []), { city: "", rate: p.workerCostDefault }] })}
+            className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600">
+            + Ставка за град
           </button>
-        )}
-      </div>
+        </div>
+      </Section>
 
-      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2">Supabase база данни</div>
-      <label className="block">
-        <span className="text-[11px] text-slate-500">Supabase URL (оставете празно, за да не се изпраща)</span>
-        <input value={p.supabaseUrl || ""} onChange={(e) => upd({ supabaseUrl: e.target.value })}
-          placeholder="https://xxxxx.supabase.co"
-          className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
-      </label>
-      <label className="block mt-2">
-        <span className="text-[11px] text-slate-500">Supabase anon ключ</span>
-        <input value={p.supabaseKey || ""} onChange={(e) => upd({ supabaseKey: e.target.value })}
-          placeholder="eyJhbGci..."
-          className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
-      </label>
+      <Section title="Ставки и скорости">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Num label="Работник" value={p.workerRate} onChange={(v) => upd({ workerRate: v })} suffix="€/ч" />
+          <Num label="Транспорт (градско)" value={p.truckRate} onChange={(v) => upd({ truckRate: v })} suffix="€/ч" />
+          <Num label="Извънградско" value={p.kmRate} step={0.05} onChange={(v) => upd({ kmRate: v })} suffix="€/км" />
+          <Num label="Двупосочен курс" value={p.roundTripFactor} step={0.5} onChange={(v) => upd({ roundTripFactor: v })} suffix="×" />
+          <Num label="Скорост в града" value={p.citySpeed} step={5} onChange={(v) => upd({ citySpeed: v })} suffix="км/ч" />
+          <Num label="Скорост извън града" value={p.roadSpeed} step={5} onChange={(v) => upd({ roadSpeed: v })} suffix="км/ч" />
+        </div>
+      </Section>
+
+      <Section title={`Собствен камион — ${cap.toFixed(1)} м³/курс`}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Num label="Дължина" value={p.truck.l} step={0.1} onChange={(v) => upd({ truck: { ...p.truck, l: v } })} suffix="м" />
+          <Num label="Широчина" value={p.truck.w} step={0.1} onChange={(v) => upd({ truck: { ...p.truck, w: v } })} suffix="м" />
+          <Num label="Височина" value={p.truck.h} step={0.1} onChange={(v) => upd({ truck: { ...p.truck, h: v } })} suffix="м" />
+          <Num label="Полезно запълване" value={p.fillFactor} step={0.05} onChange={(v) => upd({ fillFactor: v })} suffix="×" />
+          <Num label="Товароносимост" value={p.truck.payloadKg} step={100} onChange={(v) => upd({ truck: { ...p.truck, payloadKg: v } })} suffix="кг" />
+        </div>
+      </Section>
+
+      <Section title="Партньорски камиони (междуградско/международно)">
+        <div className="space-y-2">
+          {p.partnerTrucks.map((t, i) => (
+            <div key={t.id} className="grid grid-cols-[1fr_90px_90px_28px] gap-2 items-end">
+              <label className="block">
+                <span className="text-[11px] text-slate-500">Име</span>
+                <input value={t.name} onChange={(e) => setPartner(i, { name: e.target.value })} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
+              </label>
+              <Num label="Вместимост" value={t.capacity} onChange={(v) => setPartner(i, { capacity: v })} suffix="м³" />
+              <Num label="€/км" value={t.kmRate ?? ""} step={0.05} onChange={(v) => setPartner(i, { kmRate: v })} />
+              <button onClick={() => upd({ partnerTrucks: p.partnerTrucks.filter((_, j) => j !== i) })}
+                className="w-7 h-9 rounded-lg border border-slate-200 text-slate-400 hover:text-red-500">×</button>
+            </div>
+          ))}
+          <button onClick={() => upd({ partnerTrucks: [...p.partnerTrucks, { id: "p" + Date.now(), name: "Нов камион", capacity: 30 }] })}
+            className="text-xs font-medium" style={{ color: accent }}>+ Добави камион</button>
+        </div>
+      </Section>
+
+      <Section title="Време и производителност">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Num label="Производителност" value={p.m3PerManHour} step={0.1} onChange={(v) => upd({ m3PerManHour: v })} suffix="м³/чч" />
+          <Num label="Мин. градско" value={p.minLocalHours} step={0.5} onChange={(v) => upd({ minLocalHours: v })} suffix="ч" />
+          <Num label="Коеф. път (град)" value={p.cityRoadFactor} step={0.05} onChange={(v) => upd({ cityRoadFactor: v })} suffix="×" />
+          <Num label="Разстояние в малък град" value={p.defaultTownKm} step={1} onChange={(v) => upd({ defaultTownKm: v })} suffix="км" />
+          <Num label="Коеф. демонтаж" value={p.disFactor} step={0.1} onChange={(v) => upd({ disFactor: v })} suffix="×" />
+          <Num label="Хора на разглобяване" value={p.disCrew} step={1} onChange={(v) => upd({ disCrew: v })} suffix="души" />
+          <Num label="Хора на сглобяване" value={p.asmCrew} step={1} onChange={(v) => upd({ asmCrew: v })} suffix="души" />
+          <Num label="Ставка монтаж/демонтаж" value={p.disAsmRate} step={1} onChange={(v) => upd({ disAsmRate: v })} suffix="€/ч" />
+          <Num label="Кашон/етаж" value={p.boxPerFloor} step={0.05} onChange={(v) => upd({ boxPerFloor: v })} suffix="€" />
+          <Num label="Уред/етаж" value={p.appliancePerFloor} step={0.5} onChange={(v) => upd({ appliancePerFloor: v })} suffix="€" />
+          <Num label="Спец. уред/етаж" value={p.heavyAppliancePerFloor} step={0.5} onChange={(v) => upd({ heavyAppliancePerFloor: v })} suffix="€" />
+          <Num label="Плоска база/етаж" value={p.floorFeeNoElevator} step={0.5} onChange={(v) => upd({ floorFeeNoElevator: v })} suffix="€" />
+          <Num label="Безплатно носене до" value={p.carryFreeDistanceM} step={5} onChange={(v) => upd({ carryFreeDistanceM: v })} suffix="м" />
+          <Num label="Мин. на 10м носене" value={p.carryExtraMinPer10m} step={1} onChange={(v) => upd({ carryExtraMinPer10m: v })} suffix="мин" />
+          <Num label="Ролка стреч" value={p.stretchRollM} step={1} onChange={(v) => upd({ stretchRollM: v })} suffix="м" />
+          <Num label="Цена ролка" value={p.stretchRollPrice} step={0.5} onChange={(v) => upd({ stretchRollPrice: v })} suffix="€" />
+          <Num label="Скорост опаковане" value={p.wrapMPerManHour} step={10} onChange={(v) => upd({ wrapMPerManHour: v })} suffix="м/чч" />
+          <Num label="Велпапе / автопласт" value={p.protectPricePerM} step={0.05} onChange={(v) => upd({ protectPricePerM: v })} suffix="€/м" />
+          <Num label="Скорост велпапе" value={p.protectMPerManHour} step={5} onChange={(v) => upd({ protectMPerManHour: v })} suffix="м/чч" />
+          <Num label="Праг междуградско" value={p.intercityThresholdKm} step={5} onChange={(v) => upd({ intercityThresholdKm: v })} suffix="км" />
+          <Num label="Товарене/курс" value={p.loadHours} step={0.5} onChange={(v) => upd({ loadHours: v })} suffix="ч" />
+          <Num label="Разтоварване/курс" value={p.unloadHours} step={0.5} onChange={(v) => upd({ unloadHours: v })} suffix="ч" />
+          <Num label="Пътуват (без шофьор)" value={p.travelCrew} step={1} onChange={(v) => upd({ travelCrew: v })} suffix="души" />
+          <Num label="Часове в работен ден" value={p.dayHours} step={1} onChange={(v) => upd({ dayHours: v })} suffix="ч" />
+          <Num label="Местен екип" value={p.localCrewSize} step={1} onChange={(v) => upd({ localCrewSize: v })} suffix="души" />
+          <Num label="Мин. работа местен екип" value={p.localCrewMinHours} step={0.5} onChange={(v) => upd({ localCrewMinHours: v })} suffix="ч" />
+          <Num label="Мин. на изпратена бригада" value={p.minCrewHours} step={0.5} onChange={(v) => upd({ minCrewHours: v })} suffix="ч" />
+          <Num label="Кола" value={p.carRatePerKm} step={0.05} onChange={(v) => upd({ carRatePerKm: v })} suffix="€/км" />
+          <Num label="Радиус без път (хамали)" value={p.labourLocalRadiusKm} step={5} onChange={(v) => upd({ labourLocalRadiusKm: v })} suffix="км" />
+          <Num label="Мин. кола (хамали)" value={p.labourMinCarFee} step={1} onChange={(v) => upd({ labourMinCarFee: v })} suffix="€" />
+          <Num label="Праг за нощувка" value={p.overnightThresholdH} step={1} onChange={(v) => upd({ overnightThresholdH: v })} suffix="ч" />
+          <Num label="Нощувка" value={p.overnightPrice} step={5} onChange={(v) => upd({ overnightPrice: v })} suffix="€" />
+        </div>
+        <p className="text-[11px] text-slate-400 mt-2">
+          Стреч: {(Number(p.stretchRollPrice) / Number(p.stretchRollM || 1)).toFixed(3)} {p.currency}/м
+        </p>
+      </Section>
+
+      <Section title="Минимални цени">
+        <div className="grid grid-cols-2 gap-3">
+          <Num label="Градско" value={p.minPrice.local} step={10} onChange={(v) => upd({ minPrice: { ...p.minPrice, local: v } })} suffix="€" />
+          <Num label="Международно" value={p.minPrice.international} step={10} onChange={(v) => upd({ minPrice: { ...p.minPrice, international: v } })} suffix="€" />
+        </div>
+      </Section>
+
+      <Section title="Изхвърляне на отпадък">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Num label="Пълнене на чувал" value={p.fillMinPerSack} step={0.5} onChange={(v) => upd({ fillMinPerSack: v })} suffix="мин" />
+          <Num label="Изсипване на курс" value={p.dumpHoursPerTrip} step={0.1} onChange={(v) => upd({ dumpHoursPerTrip: v })} suffix="ч" />
+          <Num label="До сметището" value={p.landfillKm} step={1} onChange={(v) => upd({ landfillKm: v })} suffix="км" />
+          <Num label="Ставка изхвърляне" value={p.disposalWorkerRate} step={1} onChange={(v) => upd({ disposalWorkerRate: v })} suffix="€/ч" />
+          <Num label="Макс. хора" value={p.disposalMaxWorkers} step={1} onChange={(v) => upd({ disposalMaxWorkers: v })} suffix="души" />
+          <Num label="Макс. камион за изхвърляне" value={p.disposalMaxPayloadKg} step={500} onChange={(v) => upd({ disposalMaxPayloadKg: v })} suffix="кг" />
+          <Num label="Такса битов" value={(p.landfillFees || {}).household} step={5}
+            onChange={(v) => upd({ landfillFees: { ...p.landfillFees, household: v } })} suffix="€/курс" />
+          <Num label="Такса строителен" value={(p.landfillFees || {}).construction} step={5}
+            onChange={(v) => upd({ landfillFees: { ...p.landfillFees, construction: v } })} suffix="€/курс" />
+          <Num label="Такса смесен" value={(p.landfillFees || {}).mixed} step={5}
+            onChange={(v) => upd({ landfillFees: { ...p.landfillFees, mixed: v } })} suffix="€/курс" />
+          <Num label="Цена чувал" value={p.sackPrice} step={0.05} onChange={(v) => upd({ sackPrice: v })} suffix="€/бр." />
+        </div>
+      </Section>
+
+      <Section title="Реални разстояния (Google Maps)">
+        <label className="block">
+          <span className="text-[11px] text-slate-500">Routes API ключ — оставете празно за изчисление по права линия</span>
+          <input value={p.mapsApiKey || ""} onChange={(e) => upd({ mapsApiKey: e.target.value })}
+            placeholder="AIza..." type="password"
+            className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
+        </label>
+        <p className="text-[11px] text-slate-400 mt-1">
+          С ключ разстоянията се теглят по реален път от Google. Всеки маршрут се пита само веднъж и се запомня трайно.
+        </p>
+        <div className="flex items-center gap-3 mt-2">
+          <span className="text-[11px] text-slate-500">Запомнени маршрути: <b style={{ color: ink }}>{routesCache.size}</b></span>
+          {routesCache.size > 0 && (
+            <button
+              onClick={async () => { routesCache.clear(); await persistRoutesCache(); setP({ ...p }); }}
+              className="text-[11px] font-medium px-2 py-1 rounded-full border border-slate-200 text-slate-600">
+              Изчисти запомнените
+            </button>
+          )}
+        </div>
+      </Section>
+
+      <Section title="Supabase база данни">
+        <label className="block">
+          <span className="text-[11px] text-slate-500">Supabase URL (оставете празно, за да не се изпраща)</span>
+          <input value={p.supabaseUrl || ""} onChange={(e) => upd({ supabaseUrl: e.target.value })}
+            placeholder="https://xxxxx.supabase.co"
+            className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
+        </label>
+        <label className="block mt-2">
+          <span className="text-[11px] text-slate-500">Supabase anon ключ</span>
+          <input value={p.supabaseKey || ""} onChange={(e) => upd({ supabaseKey: e.target.value })}
+            placeholder="eyJhbGci..."
+            className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
+        </label>
+      </Section>
 
       <div className="flex flex-wrap items-center gap-2 mt-4">
         <button onClick={exportParams} className="text-xs font-semibold px-3 py-1.5 rounded-full text-white" style={{ background: ink }}>
@@ -2219,7 +2251,7 @@ function LogPanel({ onClose, p }) {
     setConfirming(row.key);
     const { key, ...record } = row;
     record.status = "потвърдена";
-    pushCalcToSupabase(record, p?.supabaseUrl, p?.supabaseKey);
+    pushCalcToSupabase(record, p?.supabaseUrl, p?.supabaseKey, true);
     await saveCalc(key, record);
     await refresh();
     setConfirming(null);
@@ -2418,6 +2450,7 @@ export default function KorektCalculator() {
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
   const recordKey = useRef(null);
   const recordNumber = useRef(null); // поредният номер на тази калкулация (генерира се веднъж)
+  const pushedRef = useRef(false); // дали вече е създаден ред в Supabase — след това само PATCH (update), не upsert
   const [calcNumberState, setCalcNumberState] = useState(null); // за показване в резултата
 
   // Всяка калкулация се пази автоматично — без клиентът да прави нищо.
@@ -2428,6 +2461,7 @@ export default function KorektCalculator() {
     if (!s.service || r.vol <= 0 || r.total <= 0) return;
     if (!recordKey.current) {
       recordKey.current = `${CALC_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      pushedRef.current = false;
       nextCalcNumber().then((num) => { recordNumber.current = num; setCalcNumberState(num); });
     }
     const key = recordKey.current;
@@ -2439,7 +2473,8 @@ export default function KorektCalculator() {
     pending.current = { key, rec };            // готов веднага, дори да не дочакаме таймера
     setSaveState("saving");
     const t = setTimeout(async () => {
-      pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey);
+      pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey, pushedRef.current);
+      pushedRef.current = true;
       const ok = await saveCalc(key, rec);
       setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
     }, 1200);
@@ -2453,12 +2488,26 @@ export default function KorektCalculator() {
       if (!cur) return;
       try {
         if (p.supabaseUrl && p.supabaseKey) {
-          fetch(`${p.supabaseUrl}/rest/v1/calculations?on_conflict=id`, {
-            method: "POST",
-            keepalive: true,
-            headers: supabaseHeaders(p.supabaseKey, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
-            body: JSON.stringify({ id: cur.rec.id, status: cur.rec.status || "калкулация", data: cur.rec }),
-          });
+          const isUpdate = pushedRef.current;
+          fetch(
+            isUpdate
+              ? `${p.supabaseUrl}/rest/v1/calculations?id=eq.${encodeURIComponent(cur.rec.id)}`
+              : `${p.supabaseUrl}/rest/v1/calculations?on_conflict=id`,
+            {
+              method: isUpdate ? "PATCH" : "POST",
+              keepalive: true,
+              headers: supabaseHeaders(p.supabaseKey, {
+                "Content-Type": "application/json",
+                Prefer: isUpdate ? "return=minimal" : "resolution=merge-duplicates,return=minimal",
+              }),
+              body: JSON.stringify(
+                isUpdate
+                  ? { status: cur.rec.status || "калкулация", data: cur.rec }
+                  : { id: cur.rec.id, status: cur.rec.status || "калкулация", data: cur.rec }
+              ),
+            }
+          );
+          pushedRef.current = true;
         }
       } catch (e) { /* без значение — записът в хранилището остава */ }
       saveCalc(cur.key, cur.rec);
@@ -2479,7 +2528,8 @@ export default function KorektCalculator() {
     rec.contact = { name: s.name, phone: s.phone, email: s.email };
     rec.status = "заявка";
     setSaveState("saving");
-    pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey);
+    pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey, pushedRef.current);
+    pushedRef.current = true;
     const ok = await saveCalc(key, rec);
     setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
     alert(ok

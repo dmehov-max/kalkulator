@@ -3017,10 +3017,22 @@ function buildRecord(s, p, r, id, calcNumber) {
 }
 
 // изпраща записа към Supabase (споделена база), ако е зададена връзка
-async function pushCalcToSupabase(record, url, key) {
+// isUpdate=true праща PATCH на съществуващ ред (не хаби пореден номер от bigserial
+// последователността, за разлика от upsert — виж проекта: "защо в записите липсват номера")
+async function pushCalcToSupabase(record, url, key, isUpdate) {
   if (!url || !key || !record.id) return false;
   try {
-    const res = await fetch(`${url}/rest/v1/calculations?on_conflict=id`, {
+    const res = isUpdate ? await fetch(`${url}/rest/v1/calculations?id=eq.${encodeURIComponent(record.id)}`, {
+      method: "PATCH",
+      headers: supabaseHeaders(key, {
+        "Content-Type": "application/json",
+        Prefer: "return=minimal"
+      }),
+      body: JSON.stringify({
+        status: record.status || "калкулация",
+        data: record
+      })
+    }) : await fetch(`${url}/rest/v1/calculations?on_conflict=id`, {
       method: "POST",
       headers: supabaseHeaders(key, {
         "Content-Type": "application/json",
@@ -3403,6 +3415,27 @@ function HoodInput({
     className: "block w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
   }, h.name))));
 }
+
+// колабируема секция в ⚙ Параметри — затворена по подразбиране, за да не притиска дълъг списък
+function Section({
+  title,
+  children
+}) {
+  const [open, setOpen] = useState(false);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "mb-2 border-b border-slate-100 pb-2 last:border-b-0"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setOpen(v => !v),
+    className: "w-full flex items-center justify-between text-left py-1.5"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide"
+  }, title), /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-400 text-lg leading-none"
+  }, open ? "–" : "+")), open && /*#__PURE__*/React.createElement("div", {
+    className: "mt-1 pb-1"
+  }, children));
+}
 function SettingsPanel({
   p,
   setP,
@@ -3471,10 +3504,10 @@ function SettingsPanel({
     style: {
       color: saveState === "error" ? "#dc2626" : "#94a3b8"
     }
-  }, saveState === "saving" ? "Записване…" : saveState === "saved-sheet" ? "Записано в базата ✓" : saveState === "saved" ? "Записано ✓" : saveState === "unavailable" ? "Важи за сесията (без трайно хранилище)" : saveState === "error" ? "Грешка при запис" : "")), /*#__PURE__*/React.createElement("div", {
-    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2"
-  }, "Отклонение върху крайната цена"), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"
+  }, saveState === "saving" ? "Записване…" : saveState === "saved-sheet" ? "Записано в базата ✓" : saveState === "saved" ? "Записано ✓" : saveState === "unavailable" ? "Важи за сесията (без трайно хранилище)" : saveState === "error" ? "Грешка при запис" : "")), /*#__PURE__*/React.createElement(Section, {
+    title: "Отклонение върху крайната цена"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 md:grid-cols-4 gap-3"
   }, /*#__PURE__*/React.createElement(Num, {
     label: "Коеф. отклонение",
     value: p.deviationFactor,
@@ -3483,9 +3516,9 @@ function SettingsPanel({
       deviationFactor: v
     }),
     suffix: "×"
-  })), /*#__PURE__*/React.createElement("div", {
-    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2"
-  }, "Себестойност и марж (вътрешно, не се вижда от клиента)"), /*#__PURE__*/React.createElement("div", {
+  }))), /*#__PURE__*/React.createElement(Section, {
+    title: "Себестойност и марж (вътрешно, не се вижда от клиента)"
+  }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"
   }, /*#__PURE__*/React.createElement(Num, {
     label: "Работник (по подразбиране)",
@@ -3511,7 +3544,7 @@ function SettingsPanel({
     }),
     suffix: "€/км"
   })), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-2 mb-4"
+    className: "space-y-2"
   }, (p.workerCostByCity || []).map((c, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
     className: "grid grid-cols-[1fr_90px_28px] gap-2 items-end"
@@ -3545,10 +3578,10 @@ function SettingsPanel({
       }]
     }),
     className: "text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600"
-  }, "+ Ставка за град")), /*#__PURE__*/React.createElement("div", {
-    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2"
-  }, "Ставки и скорости"), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"
+  }, "+ Ставка за град"))), /*#__PURE__*/React.createElement(Section, {
+    title: "Ставки и скорости"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 md:grid-cols-4 gap-3"
   }, /*#__PURE__*/React.createElement(Num, {
     label: "Работник",
     value: p.workerRate,
@@ -3595,10 +3628,10 @@ function SettingsPanel({
       roadSpeed: v
     }),
     suffix: "км/ч"
-  })), /*#__PURE__*/React.createElement("div", {
-    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2"
-  }, "Собствен камион — ", cap.toFixed(1), " м³/курс"), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"
+  }))), /*#__PURE__*/React.createElement(Section, {
+    title: `Собствен камион — ${cap.toFixed(1)} м³/курс`
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 md:grid-cols-4 gap-3"
   }, /*#__PURE__*/React.createElement(Num, {
     label: "Дължина",
     value: p.truck.l,
@@ -3651,10 +3684,10 @@ function SettingsPanel({
       }
     }),
     suffix: "кг"
-  })), /*#__PURE__*/React.createElement("div", {
-    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2"
-  }, "Партньорски камиони (междуградско/международно)"), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-2 mb-4"
+  }))), /*#__PURE__*/React.createElement(Section, {
+    title: "Партньорски камиони (междуградско/международно)"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "space-y-2"
   }, p.partnerTrucks.map((t, i) => /*#__PURE__*/React.createElement("div", {
     key: t.id,
     className: "grid grid-cols-[1fr_90px_90px_28px] gap-2 items-end"
@@ -3699,10 +3732,10 @@ function SettingsPanel({
     style: {
       color: accent
     }
-  }, "+ Добави камион")), /*#__PURE__*/React.createElement("div", {
-    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2"
-  }, "Време и производителност"), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"
+  }, "+ Добави камион"))), /*#__PURE__*/React.createElement(Section, {
+    title: "Време и производителност"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 md:grid-cols-4 gap-3"
   }, /*#__PURE__*/React.createElement(Num, {
     label: "Производителност",
     value: p.m3PerManHour,
@@ -3959,9 +3992,11 @@ function SettingsPanel({
       overnightPrice: v
     }),
     suffix: "€"
-  })), /*#__PURE__*/React.createElement("div", {
-    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2"
-  }, "Минимални цени"), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("p", {
+    className: "text-[11px] text-slate-400 mt-2"
+  }, "Стреч: ", (Number(p.stretchRollPrice) / Number(p.stretchRollM || 1)).toFixed(3), " ", p.currency, "/м")), /*#__PURE__*/React.createElement(Section, {
+    title: "Минимални цени"
+  }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-3"
   }, /*#__PURE__*/React.createElement(Num, {
     label: "Градско",
@@ -3985,12 +4020,10 @@ function SettingsPanel({
       }
     }),
     suffix: "€"
-  })), /*#__PURE__*/React.createElement("p", {
-    className: "text-[11px] text-slate-400 mt-1"
-  }, "Стреч: ", (Number(p.stretchRollPrice) / Number(p.stretchRollM || 1)).toFixed(3), " ", p.currency, "/м"), /*#__PURE__*/React.createElement("div", {
-    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2"
-  }, "Изхвърляне на отпадък"), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 md:grid-cols-4 gap-3 mb-2"
+  }))), /*#__PURE__*/React.createElement(Section, {
+    title: "Изхвърляне на отпадък"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 md:grid-cols-4 gap-3"
   }, /*#__PURE__*/React.createElement(Num, {
     label: "Пълнене на чувал",
     value: p.fillMinPerSack,
@@ -4080,9 +4113,9 @@ function SettingsPanel({
       sackPrice: v
     }),
     suffix: "€/бр."
-  })), /*#__PURE__*/React.createElement("div", {
-    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2"
-  }, "Реални разстояния (Google Maps)"), /*#__PURE__*/React.createElement("label", {
+  }))), /*#__PURE__*/React.createElement(Section, {
+    title: "Реални разстояния (Google Maps)"
+  }, /*#__PURE__*/React.createElement("label", {
     className: "block"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-[11px] text-slate-500"
@@ -4113,9 +4146,9 @@ function SettingsPanel({
       });
     },
     className: "text-[11px] font-medium px-2 py-1 rounded-full border border-slate-200 text-slate-600"
-  }, "Изчисти запомнените")), /*#__PURE__*/React.createElement("div", {
-    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2"
-  }, "Supabase база данни"), /*#__PURE__*/React.createElement("label", {
+  }, "Изчисти запомнените"))), /*#__PURE__*/React.createElement(Section, {
+    title: "Supabase база данни"
+  }, /*#__PURE__*/React.createElement("label", {
     className: "block"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-[11px] text-slate-500"
@@ -4137,7 +4170,7 @@ function SettingsPanel({
     }),
     placeholder: "eyJhbGci...",
     className: "w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1"
-  })), /*#__PURE__*/React.createElement("div", {
+  }))), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap items-center gap-2 mt-4"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: exportParams,
@@ -4582,7 +4615,7 @@ function LogPanel({
       ...record
     } = row;
     record.status = "потвърдена";
-    pushCalcToSupabase(record, p?.supabaseUrl, p?.supabaseKey);
+    pushCalcToSupabase(record, p?.supabaseUrl, p?.supabaseKey, true);
     await saveCalc(key, record);
     await refresh();
     setConfirming(null);
@@ -4950,6 +4983,7 @@ function KorektCalculator() {
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
   const recordKey = useRef(null);
   const recordNumber = useRef(null); // поредният номер на тази калкулация (генерира се веднъж)
+  const pushedRef = useRef(false); // дали вече е създаден ред в Supabase — след това само PATCH (update), не upsert
   const [calcNumberState, setCalcNumberState] = useState(null); // за показване в резултата
 
   // Всяка калкулация се пази автоматично — без клиентът да прави нищо.
@@ -4960,6 +4994,7 @@ function KorektCalculator() {
     if (!s.service || r.vol <= 0 || r.total <= 0) return;
     if (!recordKey.current) {
       recordKey.current = `${CALC_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      pushedRef.current = false;
       nextCalcNumber().then(num => {
         recordNumber.current = num;
         setCalcNumberState(num);
@@ -4981,7 +5016,8 @@ function KorektCalculator() {
     }; // готов веднага, дори да не дочакаме таймера
     setSaveState("saving");
     const t = setTimeout(async () => {
-      pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey);
+      pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey, pushedRef.current);
+      pushedRef.current = true;
       const ok = await saveCalc(key, rec);
       setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
     }, 1200);
@@ -4995,19 +5031,24 @@ function KorektCalculator() {
       if (!cur) return;
       try {
         if (p.supabaseUrl && p.supabaseKey) {
-          fetch(`${p.supabaseUrl}/rest/v1/calculations?on_conflict=id`, {
-            method: "POST",
+          const isUpdate = pushedRef.current;
+          fetch(isUpdate ? `${p.supabaseUrl}/rest/v1/calculations?id=eq.${encodeURIComponent(cur.rec.id)}` : `${p.supabaseUrl}/rest/v1/calculations?on_conflict=id`, {
+            method: isUpdate ? "PATCH" : "POST",
             keepalive: true,
             headers: supabaseHeaders(p.supabaseKey, {
               "Content-Type": "application/json",
-              Prefer: "resolution=merge-duplicates,return=minimal"
+              Prefer: isUpdate ? "return=minimal" : "resolution=merge-duplicates,return=minimal"
             }),
-            body: JSON.stringify({
+            body: JSON.stringify(isUpdate ? {
+              status: cur.rec.status || "калкулация",
+              data: cur.rec
+            } : {
               id: cur.rec.id,
               status: cur.rec.status || "калкулация",
               data: cur.rec
             })
           });
+          pushedRef.current = true;
         }
       } catch (e) {/* без значение — записът в хранилището остава */}
       saveCalc(cur.key, cur.rec);
@@ -5033,7 +5074,8 @@ function KorektCalculator() {
     };
     rec.status = "заявка";
     setSaveState("saving");
-    pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey);
+    pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey, pushedRef.current);
+    pushedRef.current = true;
     const ok = await saveCalc(key, rec);
     setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
     alert(ok ? "Заявката е записана. Ще се свържем с Вас." : "Заявката не можа да се запише автоматично. Моля, обадете се на " + p.phone + ".");

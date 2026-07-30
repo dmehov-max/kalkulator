@@ -1922,6 +1922,16 @@ testAsync("калкулации: изпращат се към Supabase с ID з�
 testAsync("калкулации: без ID не се изпраща", async () => {
   eq(await E.pushCalcToSupabase({ total: 100 }, "https://x.supabase.co", "key"), false);
 });
+testAsync("калкулации: обновяване на съществуващ ред е PATCH, не upsert (да не хаби номера)", async () => {
+  let calledUrl = null, calledMethod = null, calledBody = null;
+  globalThis.fetch = async (url, opts) => { calledUrl = url; calledMethod = opts.method; calledBody = JSON.parse(opts.body); return { ok: true }; };
+  const result = await E.pushCalcToSupabase({ id: "calc:1", status: "калкулация", total: 100 }, "https://x.supabase.co", "key", true);
+  ok(result, "трябва да върне true:");
+  eq(calledMethod, "PATCH", "обновяване не бива да е POST/upsert:");
+  ok(calledUrl.includes("id=eq.") && calledUrl.includes(encodeURIComponent("calc:1")), "трябва да филтрира по ID:");
+  ok(!calledUrl.includes("on_conflict"), "PATCH не хаби пореден номер, за разлика от upsert:");
+  eq(calledBody.id, undefined, "PATCH тялото не бива да пренасочва ID:");
+});
 testAsync("калкулации: изтеглянето от Supabase разопакова записите", async () => {
   globalThis.fetch = async () => ({ ok: true, json: async () => ([{ id: "calc:1", calc_number: 5, status: "заявка", data: { total: 100, createdAt: "2026-01-01" } }]) });
   const rows = await E.fetchCalcsFromSupabase("https://x.supabase.co", "key");
