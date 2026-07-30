@@ -1298,6 +1298,7 @@ async function storageList(prefix) {
   return [];
 }
 const PARAMS_KEY = "config:pricing";
+const USER_NAME_KEY = "korekt:userName"; // име на колегата на това устройство — само за отбелязване в записите, не е вход/парола
 
 // "" (изпразнено поле по средата на писане) не бива да замести число трайно —
 // пази стойността по подразбиране, докато не дойде истинско ново число
@@ -1372,13 +1373,14 @@ async function saveParams(p) {
   return storageSet(PARAMS_KEY, JSON.stringify(p));
 }
 
-function buildRecord(s, p, r, id, calcNumber) {
+function buildRecord(s, p, r, id, calcNumber, createdBy) {
   const items = Object.entries(s.qty)
     .filter(([, cnt]) => cnt > 0)
     .map(([id, cnt]) => ({ id, label: ITEM_INDEX[id]?.label || id, qty: cnt, m3: +( (ITEM_INDEX[id]?.m3 || 0) * cnt ).toFixed(2) }));
   return {
     id: id || null,
     calcNumber: calcNumber || null,
+    createdBy: createdBy || null,
     createdAt: new Date().toISOString(),
     service: s.service,
     city: s.city || null,
@@ -2126,7 +2128,7 @@ function RecordDetail({ record: r, p, onClose }) {
             ))}
           </div>
           <div className="text-xs opacity-70 mt-3">
-            {new Date(r.createdAt).toLocaleString("bg-BG")} · статус: {r.status || "калкулация"}
+            {new Date(r.createdAt).toLocaleString("bg-BG")} · статус: {r.status || "калкулация"}{r.createdBy ? ` · от ${r.createdBy}` : ""}
           </div>
         </div>
 
@@ -2305,6 +2307,7 @@ function LogPanel({ onClose, p }) {
                 <tr className="text-slate-400 text-left">
                   <th className="py-1.5 px-1 font-medium">№</th>
                   <th className="py-1.5 px-1 font-medium">Дата</th>
+                  <th className="py-1.5 px-1 font-medium">Кой</th>
                   <th className="py-1.5 px-1 font-medium">Маршрут</th>
                   <th className="py-1.5 px-1 font-medium text-right">м³</th>
                   <th className="py-1.5 px-1 font-medium text-right">Цена</th>
@@ -2317,6 +2320,7 @@ function LogPanel({ onClose, p }) {
                   <tr key={r.key} className="border-t border-slate-100">
                     <td className="py-1.5 px-1 font-semibold whitespace-nowrap" style={{ color: ink }}>{displayNum(r)}</td>
                     <td className="py-1.5 px-1 text-slate-500 whitespace-nowrap">{new Date(r.createdAt).toLocaleDateString("bg-BG")} {new Date(r.createdAt).toLocaleTimeString("bg-BG", { hour: "2-digit", minute: "2-digit" })}</td>
+                    <td className="py-1.5 px-1 text-slate-500 whitespace-nowrap">{r.createdBy || "—"}</td>
                     <td className="py-1.5 px-1 text-slate-700">{recordRouteLabel(r)}</td>
                     <td className="py-1.5 px-1 text-right text-slate-600">{r.volumeM3}</td>
                     <td className="py-1.5 px-1 text-right font-semibold" style={{ color: ink }}>{r.total} €</td>
@@ -2363,6 +2367,13 @@ function LogPanel({ onClose, p }) {
 
 export default function KorektCalculator() {
   const [step, setStep] = useState(0);
+  const [userName, setUserNameState] = useState(() => {
+    try { return localStorage.getItem(USER_NAME_KEY) || ""; } catch (e) { return ""; }
+  });
+  const setUserName = (name) => {
+    setUserNameState(name);
+    try { localStorage.setItem(USER_NAME_KEY, name); } catch (e) { /* без значение */ }
+  };
   const [showSettings, setShowSettings] = useState(false);
   const [p, setP] = useState(() => structuredClone(DEFAULTS));
   const [openGroups, setOpenGroups] = useState({ "Хол и трапезария": true });
@@ -2465,7 +2476,7 @@ export default function KorektCalculator() {
       nextCalcNumber().then((num) => { recordNumber.current = num; setCalcNumberState(num); });
     }
     const key = recordKey.current;
-    const rec = buildRecord(s, p, r, key, recordNumber.current);
+    const rec = buildRecord(s, p, r, key, recordNumber.current, userName);
     if (s.name || s.phone || s.email) {
       rec.contact = { name: s.name, phone: s.phone, email: s.email };
       rec.status = "заявка";
@@ -2479,7 +2490,7 @@ export default function KorektCalculator() {
       setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
     }, 1200);
     return () => clearTimeout(t);
-  }, [s, p]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [s, p, userName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ако страницата се затвори преди таймера — изпращаме веднага
   useEffect(() => {
@@ -2524,7 +2535,7 @@ export default function KorektCalculator() {
   const submitRequest = async () => {
     const key = recordKey.current || `${CALC_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     recordKey.current = key;
-    const rec = buildRecord(s, p, r, key, recordNumber.current);
+    const rec = buildRecord(s, p, r, key, recordNumber.current, userName);
     rec.contact = { name: s.name, phone: s.phone, email: s.email };
     rec.status = "заявка";
     setSaveState("saving");
@@ -2551,6 +2562,9 @@ export default function KorektCalculator() {
             <div className="text-xs text-slate-500 -mt-0.5">Калкулатор за приблизителна цена</div>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={() => { const name = prompt("Твоето име (показва се в записите като автор на калкулацията):", userName); if (name !== null) setUserName(name.trim()); }}
+              className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+              style={{ borderColor: userName ? ink : "#e2e6ec", color: userName ? ink : "#64748b" }}>👤 {userName || "Кой сте Вие?"}</button>
             <button onClick={() => setShowLog((v) => !v)}
               className="text-sm font-semibold px-3 py-2 rounded-full border transition"
               style={{ borderColor: showLog ? ink : "#e2e6ec", color: showLog ? ink : "#64748b" }}>📋 Записи</button>

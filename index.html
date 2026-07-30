@@ -2834,6 +2834,7 @@ async function storageList(prefix) {
   return [];
 }
 const PARAMS_KEY = "config:pricing";
+const USER_NAME_KEY = "korekt:userName"; // име на колегата на това устройство — само за отбелязване в записите, не е вход/парола
 
 // "" (изпразнено поле по средата на писане) не бива да замести число трайно —
 // пази стойността по подразбиране, докато не дойде истинско ново число
@@ -2937,7 +2938,7 @@ async function fetchParamsFromSupabase(url, key) {
 async function saveParams(p) {
   return storageSet(PARAMS_KEY, JSON.stringify(p));
 }
-function buildRecord(s, p, r, id, calcNumber) {
+function buildRecord(s, p, r, id, calcNumber, createdBy) {
   const items = Object.entries(s.qty).filter(([, cnt]) => cnt > 0).map(([id, cnt]) => ({
     id,
     label: ITEM_INDEX[id]?.label || id,
@@ -2947,6 +2948,7 @@ function buildRecord(s, p, r, id, calcNumber) {
   return {
     id: id || null,
     calcNumber: calcNumber || null,
+    createdBy: createdBy || null,
     createdAt: new Date().toISOString(),
     service: s.service,
     city: s.city || null,
@@ -4435,7 +4437,7 @@ function RecordDetail({
     className: "font-bold text-sm"
   }, v)))), /*#__PURE__*/React.createElement("div", {
     className: "text-xs opacity-70 mt-3"
-  }, new Date(r.createdAt).toLocaleString("bg-BG"), " · статус: ", r.status || "калкулация")), /*#__PURE__*/React.createElement("div", {
+  }, new Date(r.createdAt).toLocaleString("bg-BG"), " · статус: ", r.status || "калкулация", r.createdBy ? ` · от ${r.createdBy}` : "")), /*#__PURE__*/React.createElement("div", {
     className: "rounded-2xl border border-slate-200 bg-white p-5 mt-3"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-sm font-semibold mb-3",
@@ -4689,6 +4691,8 @@ function LogPanel({
     className: "py-1.5 px-1 font-medium"
   }, "Дата"), /*#__PURE__*/React.createElement("th", {
     className: "py-1.5 px-1 font-medium"
+  }, "Кой"), /*#__PURE__*/React.createElement("th", {
+    className: "py-1.5 px-1 font-medium"
   }, "Маршрут"), /*#__PURE__*/React.createElement("th", {
     className: "py-1.5 px-1 font-medium text-right"
   }, "м³"), /*#__PURE__*/React.createElement("th", {
@@ -4711,6 +4715,8 @@ function LogPanel({
     hour: "2-digit",
     minute: "2-digit"
   })), /*#__PURE__*/React.createElement("td", {
+    className: "py-1.5 px-1 text-slate-500 whitespace-nowrap"
+  }, r.createdBy || "—"), /*#__PURE__*/React.createElement("td", {
     className: "py-1.5 px-1 text-slate-700"
   }, recordRouteLabel(r)), /*#__PURE__*/React.createElement("td", {
     className: "py-1.5 px-1 text-right text-slate-600"
@@ -4751,6 +4757,19 @@ function LogPanel({
 }
 function KorektCalculator() {
   const [step, setStep] = useState(0);
+  const [userName, setUserNameState] = useState(() => {
+    try {
+      return localStorage.getItem(USER_NAME_KEY) || "";
+    } catch (e) {
+      return "";
+    }
+  });
+  const setUserName = name => {
+    setUserNameState(name);
+    try {
+      localStorage.setItem(USER_NAME_KEY, name);
+    } catch (e) {/* без значение */}
+  };
   const [showSettings, setShowSettings] = useState(false);
   const [p, setP] = useState(() => structuredClone(DEFAULTS));
   const [openGroups, setOpenGroups] = useState({
@@ -5001,7 +5020,7 @@ function KorektCalculator() {
       });
     }
     const key = recordKey.current;
-    const rec = buildRecord(s, p, r, key, recordNumber.current);
+    const rec = buildRecord(s, p, r, key, recordNumber.current, userName);
     if (s.name || s.phone || s.email) {
       rec.contact = {
         name: s.name,
@@ -5022,7 +5041,7 @@ function KorektCalculator() {
       setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
     }, 1200);
     return () => clearTimeout(t);
-  }, [s, p]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [s, p, userName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ако страницата се затвори преди таймера — изпращаме веднага
   useEffect(() => {
@@ -5066,7 +5085,7 @@ function KorektCalculator() {
   const submitRequest = async () => {
     const key = recordKey.current || `${CALC_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     recordKey.current = key;
-    const rec = buildRecord(s, p, r, key, recordNumber.current);
+    const rec = buildRecord(s, p, r, key, recordNumber.current, userName);
     rec.contact = {
       name: s.name,
       phone: s.phone,
@@ -5105,6 +5124,16 @@ function KorektCalculator() {
   }, "Калкулатор за приблизителна цена")), /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-2"
   }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      const name = prompt("Твоето име (показва се в записите като автор на калкулацията):", userName);
+      if (name !== null) setUserName(name.trim());
+    },
+    className: "text-sm font-semibold px-3 py-2 rounded-full border transition",
+    style: {
+      borderColor: userName ? ink : "#e2e6ec",
+      color: userName ? ink : "#64748b"
+    }
+  }, "👤 ", userName || "Кой сте Вие?"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowLog(v => !v),
     className: "text-sm font-semibold px-3 py-2 rounded-full border transition",
     style: {

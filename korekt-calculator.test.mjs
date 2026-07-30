@@ -1240,6 +1240,13 @@ test("запис: пази броя дни за изпълнение", () => {
   const rec = E.buildRecord(o, P, E.computePrice(o, P), "calc:x");
   eq(rec.workDays, E.computePrice(o, P).workDays);
 });
+test("запис: пази кой е направил калкулацията", () => {
+  const o = order({ qty: { boxM: 5 } });
+  const withUser = E.buildRecord(o, P, E.computePrice(o, P), "calc:x", null, "Мира");
+  eq(withUser.createdBy, "Мира");
+  const noUser = E.buildRecord(o, P, E.computePrice(o, P), "calc:x");
+  eq(noUser.createdBy, null, "без подадено име трябва да е null, не undefined:");
+});
 
 
 /* --- Пренасяне по стълби: на курсове, не на чист обем --- */
