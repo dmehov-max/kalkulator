@@ -892,6 +892,36 @@ test("отклонение: прилага се и след изравняван
   ok(line, "отклонението трябва да важи и върху минималната цена");
   near(r.total, Math.round(100000 * P.deviationFactor), 1);
 });
+/* --- Себестойност и марж (вътрешни данни) --- */
+test("себестойност: използва ставката по подразбиране без град в списъка", () => {
+  const r = calc({ qty: { boxM: 5 }, city: "Хасково", pickupHood: "Център", dropoffHood: "Център" });
+  eq(r.workerCostRate, P.workerCostDefault);
+});
+test("себестойност: градска ставка от списъка има превес", () => {
+  const params = { ...P, workerCostByCity: [{ city: "София", rate: 14 }] };
+  const r = calc({ qty: { boxM: 5 }, city: "София", pickupHood: "Център", dropoffHood: "Младост" }, params);
+  eq(r.workerCostRate, 14);
+});
+test("себестойност: трудът се смята по реалните човекочасове × градската ставка", () => {
+  const params = { ...P, workerCostByCity: [{ city: "София", rate: 10 }] };
+  const r = calc({ qty: { boxM: 5 }, city: "София", pickupHood: "Център", dropoffHood: "Младост" }, params);
+  near(r.laborCost, r.manHours * 10, 1);
+});
+test("себестойност: междуградско ползва ставката на града на тръгване", () => {
+  const params = { ...P, workerCostByCity: [{ city: "София", rate: 20 }, { city: "Пловдив", rate: 8 }] };
+  const r = calc({ service: "intercity", pickupCity: "София", dropoffCity: "Пловдив", qty: { boxM: 5 } }, params);
+  eq(r.workerCostRate, 20, "тръгва от София, не Пловдив:");
+});
+test("марж: цена минус себестойност, с положителен марж при нормални ставки", () => {
+  const r = calc({ qty: { boxM: 5 }, pickupHood: "Център", dropoffHood: "Младост" });
+  eq(r.margin, r.total - r.totalCost);
+  ok(r.margin > 0, "маржът трябва да е положителен при нормални ставки");
+  ok(r.marginPercent > 0 && r.marginPercent < 100);
+});
+test("марж: при само хамали/монтаж/ТРД няма разход за камион (клиентски транспорт)", () => {
+  const r = calc({ service: "labour", city: "София", qty: { boxL: 10 } });
+  eq(r.truckCost, 0);
+});
 test("демонтаж: показва се като отделно перо в разбивката", () => {
   const r = calc({ qty: { wardrobe3: 1 }, dis: { wardrobe3: true } });
   const line = r.lines.find((l) => l.label.startsWith("Разглобяване"));

@@ -67,6 +67,17 @@ const DEFAULTS = {
   currency: "€",
   deviationFactor: 1.15,
   // коеф. на отклонение върху крайната цена (буфер за непредвидени разходи)
+
+  // Себестойност (реален разход) и марж — вътрешни данни, не се показват на клиента
+  workerCostDefault: 12,
+  // €/час реален разход за работник, ако градът не е зададен по-долу
+  workerCostByCity: [],
+  // [{ city:"София", rate:14 }, ...] — различна ставка по градове
+  truckCostPerHour: 8,
+  // €/час реален разход за камион при градски (почасови) курсове
+  truckCostPerKm: 0.3,
+  // €/км реален разход за камион при курсове по километри
+
   workerRate: 18,
   // €/час на работник
   truckRate: 20,
@@ -2656,9 +2667,29 @@ function computePrice(s, p) {
     const percent = Math.round((deviationFactor - 1) * 100);
     add(`Отклонение (${percent >= 0 ? "+" : ""}${percent}%)`, total * (deviationFactor - 1));
   }
+
+  // СЕБЕСТОЙНОСТ И МАРЖ — вътрешни данни (реален разход), не влияят на цената на клиента.
+  // Ставката за работник е по градове — тръгва от базата/града, в който реално се работи.
+  const costCity = s.service === "intercity" ? s.pickupCity : s.city || null;
+  const cityCostEntry = (p.workerCostByCity || []).find(c => c.city === costCity);
+  const workerCostRate = n(cityCostEntry ? cityCostEntry.rate : p.workerCostDefault);
+  const laborCost = manHours * workerCostRate;
+  const truckCostRate = usesFieldCrew ? 0 : n(isCourse || isDisposal ? p.truckCostPerKm : p.truckCostPerHour);
+  const truckCostBasis = isCourse || isDisposal ? totalKm : handlingClock;
+  const truckCost = usesFieldCrew ? 0 : truckCostBasis * truckCostRate;
+  const totalCost = laborCost + truckCost;
+  const margin = total - totalCost;
+  const marginPercent = total > 0 ? margin / total * 100 : 0;
   return {
     total: Math.round(total),
     lines,
+    costCity,
+    workerCostRate,
+    laborCost: Math.round(laborCost),
+    truckCost: Math.round(truckCost),
+    totalCost: Math.round(totalCost),
+    margin: Math.round(margin),
+    marginPercent,
     vol,
     weight,
     isDisposal,
@@ -2938,6 +2969,13 @@ function buildRecord(s, p, r, id, calcNumber) {
     assemblyHours: +r.asmOnlyHours.toFixed(2),
     courseMode: r.isCourse ? r.dayCrewMode ? "пътуваща бригада" : r.localCrewMode ? `местен екип (${r.baseCity})` : r.selfUnloadMode ? "клиентът разтоварва сам" : "почасово" : null,
     manualHours: r.isManualHoursService ? +n(s.manualHours || 0).toFixed(2) : null,
+    costCity: r.costCity || null,
+    workerCostRate: r.workerCostRate,
+    laborCost: r.laborCost,
+    truckCost: r.truckCost,
+    totalCost: r.totalCost,
+    margin: r.margin,
+    marginPercent: +r.marginPercent.toFixed(1),
     nights: r.nights || 0,
     travelDays: r.travelDays || 0,
     assembly: Object.entries(s.asm || {}).filter(([, v]) => v).map(([id]) => ITEM_INDEX[id]?.label || id),
@@ -3389,6 +3427,15 @@ function SettingsPanel({
       partnerTrucks: arr
     });
   };
+  const setCityCost = (i, patch) => {
+    const arr = (p.workerCostByCity || []).map((c, j) => j === i ? {
+      ...c,
+      ...patch
+    } : c);
+    upd({
+      workerCostByCity: arr
+    });
+  };
   return /*#__PURE__*/React.createElement("div", {
     className: "rounded-2xl border-2 bg-white p-5 mb-4",
     style: {
@@ -3419,6 +3466,68 @@ function SettingsPanel({
     }),
     suffix: "×"
   })), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2"
+  }, "Себестойност и марж (вътрешно, не се вижда от клиента)"), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"
+  }, /*#__PURE__*/React.createElement(Num, {
+    label: "Работник (по подразбиране)",
+    value: p.workerCostDefault,
+    onChange: v => upd({
+      workerCostDefault: v
+    }),
+    suffix: "€/ч"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Камион (градско)",
+    value: p.truckCostPerHour,
+    step: 0.5,
+    onChange: v => upd({
+      truckCostPerHour: v
+    }),
+    suffix: "€/ч"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Камион (по km)",
+    value: p.truckCostPerKm,
+    step: 0.05,
+    onChange: v => upd({
+      truckCostPerKm: v
+    }),
+    suffix: "€/км"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-2 mb-4"
+  }, (p.workerCostByCity || []).map((c, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    className: "grid grid-cols-[1fr_90px_28px] gap-2 items-end"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "block"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-[11px] text-slate-500"
+  }, "Град"), /*#__PURE__*/React.createElement("input", {
+    value: c.city,
+    onChange: e => setCityCost(i, {
+      city: e.target.value
+    }),
+    className: "w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1"
+  })), /*#__PURE__*/React.createElement(Num, {
+    label: "Работник",
+    value: c.rate,
+    onChange: v => setCityCost(i, {
+      rate: v
+    }),
+    suffix: "€/ч"
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => upd({
+      workerCostByCity: p.workerCostByCity.filter((_, j) => j !== i)
+    }),
+    className: "h-9 rounded-lg border border-slate-200 text-slate-400"
+  }, "×"))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => upd({
+      workerCostByCity: [...(p.workerCostByCity || []), {
+        city: "",
+        rate: p.workerCostDefault
+      }]
+    }),
+    className: "text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600"
+  }, "+ Ставка за град")), /*#__PURE__*/React.createElement("div", {
     className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2"
   }, "Ставки и скорости"), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"
@@ -4380,7 +4489,56 @@ function RecordDetail({
     style: {
       color: ink
     }
-  }, /*#__PURE__*/React.createElement("span", null, "Общо"), /*#__PURE__*/React.createElement("span", null, r.total, " ", p?.currency))))));
+  }, /*#__PURE__*/React.createElement("span", null, "Общо"), /*#__PURE__*/React.createElement("span", null, r.total, " ", p?.currency)))), typeof r.totalCost === "number" && /*#__PURE__*/React.createElement("div", {
+    className: "rounded-2xl p-5 mt-3 mb-8",
+    style: {
+      background: "#fff8ef",
+      border: "1px solid #f3ddbd"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-sm font-semibold mb-3",
+    style: {
+      color: ink
+    }
+  }, "💰 Себестойност и марж (вътрешно)"), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-1.5 text-sm"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500"
+  }, "Труд", r.costCity ? ` (${r.costCity}, ${r.workerCostRate} €/ч)` : ""), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, r.laborCost, " ", p?.currency)), /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500"
+  }, "Камион"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, r.truckCost, " ", p?.currency)), /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3 font-semibold pt-1.5 mt-1 border-t border-[#f3ddbd]"
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, "Себестойност общо"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, r.totalCost, " ", p?.currency)), /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3 font-bold"
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, "Марж"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: r.margin >= 0 ? "#166534" : "#dc2626"
+    }
+  }, r.margin, " ", p?.currency, " (", r.marginPercent, "%)"))))));
 }
 function LogPanel({
   onClose,
@@ -4688,7 +4846,14 @@ function KorektCalculator() {
     baseIsOnRoute,
     needCar,
     nights,
-    oneWayDriveH
+    oneWayDriveH,
+    costCity,
+    workerCostRate,
+    laborCost,
+    truckCost,
+    totalCost,
+    margin,
+    marginPercent
   } = r;
   const localEst = s.service === "local" ? estimateKm(s.city, s.pickupHood, s.dropoffHood, Number(p.cityRoadFactor) || 1.3) : null;
   const isAssembly = s.service === "assembly";
@@ -4761,6 +4926,7 @@ function KorektCalculator() {
 
   // --- автоматичен запис на калкулацията при показване на цената ---
   const [showLog, setShowLog] = useState(false);
+  const [showMargin, setShowMargin] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
   const recordKey = useRef(null);
   const recordNumber = useRef(null); // поредният номер на тази калкулация (генерира се веднъж)
@@ -4883,7 +5049,14 @@ function KorektCalculator() {
       borderColor: showLog ? ink : "#e2e6ec",
       color: showLog ? ink : "#64748b"
     }
-  }, "📋 Записи"), /*#__PURE__*/React.createElement("button", {
+  }, "📋 Записи"), step === 3 && vol >= 0 && total > 0 && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowMargin(v => !v),
+    className: "text-sm font-semibold px-3 py-2 rounded-full border transition",
+    style: {
+      borderColor: showMargin ? "#b45309" : "#e2e6ec",
+      color: showMargin ? "#b45309" : "#64748b"
+    }
+  }, "💰 Марж"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowSettings(v => !v),
     className: "text-sm font-semibold px-3 py-2 rounded-full border transition",
     style: {
@@ -4899,7 +5072,56 @@ function KorektCalculator() {
   }, p.phone))), showLog && /*#__PURE__*/React.createElement(LogPanel, {
     onClose: () => setShowLog(false),
     p: p
-  }), showSettings && /*#__PURE__*/React.createElement(SettingsPanel, {
+  }), showMargin && step === 3 && /*#__PURE__*/React.createElement("div", {
+    className: "rounded-2xl p-5 mb-4",
+    style: {
+      background: "#fff8ef",
+      border: "1px solid #f3ddbd"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-sm font-semibold mb-3",
+    style: {
+      color: ink
+    }
+  }, "💰 Себестойност и марж (вътрешно, не се вижда от клиента)"), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-1.5 text-sm"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500"
+  }, "Труд", costCity ? ` (${costCity}, ${workerCostRate} ${p.currency}/ч)` : ""), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, laborCost, " ", p.currency)), /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500"
+  }, "Камион"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, truckCost, " ", p.currency)), /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3 font-semibold pt-1.5 mt-1 border-t border-[#f3ddbd]"
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, "Себестойност общо"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, totalCost, " ", p.currency)), /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3 font-bold"
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, "Марж"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: margin >= 0 ? "#166534" : "#dc2626"
+    }
+  }, margin, " ", p.currency, " (", marginPercent.toFixed(1), "%)")))), showSettings && /*#__PURE__*/React.createElement(SettingsPanel, {
     p: p,
     setP: setP,
     saveState: paramSave

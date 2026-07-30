@@ -12,6 +12,13 @@ const DEFAULTS = {
   currency: "€",
 
   deviationFactor: 1.15, // коеф. на отклонение върху крайната цена (буфер за непредвидени разходи)
+
+  // Себестойност (реален разход) и марж — вътрешни данни, не се показват на клиента
+  workerCostDefault: 12,  // €/час реален разход за работник, ако градът не е зададен по-долу
+  workerCostByCity: [],   // [{ city:"София", rate:14 }, ...] — различна ставка по градове
+  truckCostPerHour: 8,    // €/час реален разход за камион при градски (почасови) курсове
+  truckCostPerKm: 0.3,    // €/км реален разход за камион при курсове по километри
+
   workerRate: 18,        // €/час на работник
   truckRate: 20,         // €/час транспорт (за градско)
   kmRate: 0.7,           // €/км за извънградско (собствен камион)
@@ -1222,7 +1229,22 @@ function computePrice(s, p) {
     add(`Отклонение (${percent >= 0 ? "+" : ""}${percent}%)`, total * (deviationFactor - 1));
   }
 
-  return { total: Math.round(total), lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, autoHandlingClock, hoursManual, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours };
+  // СЕБЕСТОЙНОСТ И МАРЖ — вътрешни данни (реален разход), не влияят на цената на клиента.
+  // Ставката за работник е по градове — тръгва от базата/града, в който реално се работи.
+  const costCity = s.service === "intercity" ? s.pickupCity : (s.city || null);
+  const cityCostEntry = (p.workerCostByCity || []).find((c) => c.city === costCity);
+  const workerCostRate = n(cityCostEntry ? cityCostEntry.rate : p.workerCostDefault);
+  const laborCost = manHours * workerCostRate;
+  const truckCostRate = usesFieldCrew ? 0 : n(isCourse || isDisposal ? p.truckCostPerKm : p.truckCostPerHour);
+  const truckCostBasis = isCourse || isDisposal ? totalKm : handlingClock;
+  const truckCost = usesFieldCrew ? 0 : truckCostBasis * truckCostRate;
+  const totalCost = laborCost + truckCost;
+  const margin = total - totalCost;
+  const marginPercent = total > 0 ? (margin / total) * 100 : 0;
+
+  return { total: Math.round(total), lines,
+    costCity, workerCostRate, laborCost: Math.round(laborCost), truckCost: Math.round(truckCost),
+    totalCost: Math.round(totalCost), margin: Math.round(margin), marginPercent, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, autoHandlingClock, hoursManual, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours };
 }
 
 /* ================= ЗАПИС НА КАЛКУЛАЦИИ (база данни) ================= *
@@ -1372,6 +1394,13 @@ function buildRecord(s, p, r, id, calcNumber) {
     assemblyHours: +r.asmOnlyHours.toFixed(2),
     courseMode: r.isCourse ? (r.dayCrewMode ? "пътуваща бригада" : r.localCrewMode ? `местен екип (${r.baseCity})` : r.selfUnloadMode ? "клиентът разтоварва сам" : "почасово") : null,
     manualHours: r.isManualHoursService ? +n(s.manualHours || 0).toFixed(2) : null,
+    costCity: r.costCity || null,
+    workerCostRate: r.workerCostRate,
+    laborCost: r.laborCost,
+    truckCost: r.truckCost,
+    totalCost: r.totalCost,
+    margin: r.margin,
+    marginPercent: +r.marginPercent.toFixed(1),
     nights: r.nights || 0,
     travelDays: r.travelDays || 0,
     assembly: Object.entries(s.asm || {}).filter(([, v]) => v).map(([id]) => ITEM_INDEX[id]?.label || id),
@@ -1703,6 +1732,10 @@ function SettingsPanel({ p, setP, saveState }) {
     const arr = p.partnerTrucks.map((t, j) => (j === i ? { ...t, ...patch } : t));
     upd({ partnerTrucks: arr });
   };
+  const setCityCost = (i, patch) => {
+    const arr = (p.workerCostByCity || []).map((c, j) => (j === i ? { ...c, ...patch } : c));
+    upd({ workerCostByCity: arr });
+  };
   return (
     <div className="rounded-2xl border-2 bg-white p-5 mb-4" style={{ borderColor: accent }}>
       <div className="flex items-center justify-between mb-3">
@@ -1719,6 +1752,30 @@ function SettingsPanel({ p, setP, saveState }) {
       <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Отклонение върху крайната цена</div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <Num label="Коеф. отклонение" value={p.deviationFactor} step={0.01} onChange={(v) => upd({ deviationFactor: v })} suffix="×" />
+      </div>
+
+      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Себестойност и марж (вътрешно, не се вижда от клиента)</div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+        <Num label="Работник (по подразбиране)" value={p.workerCostDefault} onChange={(v) => upd({ workerCostDefault: v })} suffix="€/ч" />
+        <Num label="Камион (градско)" value={p.truckCostPerHour} step={0.5} onChange={(v) => upd({ truckCostPerHour: v })} suffix="€/ч" />
+        <Num label="Камион (по km)" value={p.truckCostPerKm} step={0.05} onChange={(v) => upd({ truckCostPerKm: v })} suffix="€/км" />
+      </div>
+      <div className="space-y-2 mb-4">
+        {(p.workerCostByCity || []).map((c, i) => (
+          <div key={i} className="grid grid-cols-[1fr_90px_28px] gap-2 items-end">
+            <label className="block">
+              <span className="text-[11px] text-slate-500">Град</span>
+              <input value={c.city} onChange={(e) => setCityCost(i, { city: e.target.value })} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
+            </label>
+            <Num label="Работник" value={c.rate} onChange={(v) => setCityCost(i, { rate: v })} suffix="€/ч" />
+            <button onClick={() => upd({ workerCostByCity: p.workerCostByCity.filter((_, j) => j !== i) })}
+              className="h-9 rounded-lg border border-slate-200 text-slate-400">×</button>
+          </div>
+        ))}
+        <button onClick={() => upd({ workerCostByCity: [...(p.workerCostByCity || []), { city: "", rate: p.workerCostDefault }] })}
+          className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600">
+          + Ставка за град
+        </button>
       </div>
 
       <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Ставки и скорости</div>
@@ -2106,6 +2163,30 @@ function RecordDetail({ record: r, p, onClose }) {
             </div>
           </div>
         </div>
+
+        {typeof r.totalCost === "number" && (
+          <div className="rounded-2xl p-5 mt-3 mb-8" style={{ background: "#fff8ef", border: "1px solid #f3ddbd" }}>
+            <div className="text-sm font-semibold mb-3" style={{ color: ink }}>💰 Себестойност и марж (вътрешно)</div>
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Труд{r.costCity ? ` (${r.costCity}, ${r.workerCostRate} €/ч)` : ""}</span>
+                <span style={{ color: ink }}>{r.laborCost} {p?.currency}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Камион</span>
+                <span style={{ color: ink }}>{r.truckCost} {p?.currency}</span>
+              </div>
+              <div className="flex justify-between gap-3 font-semibold pt-1.5 mt-1 border-t border-[#f3ddbd]">
+                <span style={{ color: ink }}>Себестойност общо</span>
+                <span style={{ color: ink }}>{r.totalCost} {p?.currency}</span>
+              </div>
+              <div className="flex justify-between gap-3 font-bold">
+                <span style={{ color: ink }}>Марж</span>
+                <span style={{ color: r.margin >= 0 ? "#166534" : "#dc2626" }}>{r.margin} {p?.currency} ({r.marginPercent}%)</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2254,7 +2335,7 @@ export default function KorektCalculator() {
     setS((prev) => ({ ...prev, [field]: { ...prev[field], [id]: value } }));
 
   const r = useMemo(() => computePrice(s, p), [s, p]);
-  const { total, lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto, crewByProtocol, autoCrew, crewManual, reqCrew, isCourse, autoHandlingClock, hoursManual, disHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, wrapMeters, wrapHours, rolls, protectMeters, protectManHours, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH } = r;
+  const { total, lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto, crewByProtocol, autoCrew, crewManual, reqCrew, isCourse, autoHandlingClock, hoursManual, disHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, wrapMeters, wrapHours, rolls, protectMeters, protectManHours, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, costCity, workerCostRate, laborCost, truckCost, totalCost, margin, marginPercent } = r;
   const localEst = s.service === "local" ? estimateKm(s.city, s.pickupHood, s.dropoffHood, Number(p.cityRoadFactor) || 1.3) : null;
   const isAssembly = s.service === "assembly";
   const isTRD = s.service === "trd";
@@ -2316,6 +2397,7 @@ export default function KorektCalculator() {
 
   // --- автоматичен запис на калкулацията при показване на цената ---
   const [showLog, setShowLog] = useState(false);
+  const [showMargin, setShowMargin] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
   const recordKey = useRef(null);
   const recordNumber = useRef(null); // поредният номер на тази калкулация (генерира се веднъж)
@@ -2405,6 +2487,11 @@ export default function KorektCalculator() {
             <button onClick={() => setShowLog((v) => !v)}
               className="text-sm font-semibold px-3 py-2 rounded-full border transition"
               style={{ borderColor: showLog ? ink : "#e2e6ec", color: showLog ? ink : "#64748b" }}>📋 Записи</button>
+            {step === 3 && vol >= 0 && total > 0 && (
+              <button onClick={() => setShowMargin((v) => !v)}
+                className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+                style={{ borderColor: showMargin ? "#b45309" : "#e2e6ec", color: showMargin ? "#b45309" : "#64748b" }}>💰 Марж</button>
+            )}
             <button onClick={() => setShowSettings((v) => !v)}
               className="text-sm font-semibold px-3 py-2 rounded-full border transition"
               style={{ borderColor: showSettings ? accent : "#e2e6ec", color: showSettings ? accent : "#64748b" }}>⚙ Параметри</button>
@@ -2413,6 +2500,29 @@ export default function KorektCalculator() {
         </div>
 
         {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} />}
+        {showMargin && step === 3 && (
+          <div className="rounded-2xl p-5 mb-4" style={{ background: "#fff8ef", border: "1px solid #f3ddbd" }}>
+            <div className="text-sm font-semibold mb-3" style={{ color: ink }}>💰 Себестойност и марж (вътрешно, не се вижда от клиента)</div>
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Труд{costCity ? ` (${costCity}, ${workerCostRate} ${p.currency}/ч)` : ""}</span>
+                <span style={{ color: ink }}>{laborCost} {p.currency}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Камион</span>
+                <span style={{ color: ink }}>{truckCost} {p.currency}</span>
+              </div>
+              <div className="flex justify-between gap-3 font-semibold pt-1.5 mt-1 border-t border-[#f3ddbd]">
+                <span style={{ color: ink }}>Себестойност общо</span>
+                <span style={{ color: ink }}>{totalCost} {p.currency}</span>
+              </div>
+              <div className="flex justify-between gap-3 font-bold">
+                <span style={{ color: ink }}>Марж</span>
+                <span style={{ color: margin >= 0 ? "#166534" : "#dc2626" }}>{margin} {p.currency} ({marginPercent.toFixed(1)}%)</span>
+              </div>
+            </div>
+          </div>
+        )}
         {showSettings && <SettingsPanel p={p} setP={setP} saveState={paramSave} />}
 
         <div className="flex gap-2 mb-8">
