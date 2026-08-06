@@ -258,13 +258,24 @@ const NEIGHBORHOODS = {
     { name: "Лозенец", lat: 42.674, lng: 23.328 },
     { name: "Изгрев", lat: 42.667, lng: 23.355 },
     { name: "Изток", lat: 42.671, lng: 23.352 },
-    { name: "Младост", lat: 42.650, lng: 23.377 },
+    { name: "Младост", lat: 42.649, lng: 23.378 }, // общо, ако не е посочен номер на комплекса
+    { name: "Младост 1", lat: 42.658, lng: 23.372 },
+    { name: "Младост 1А", lat: 42.654, lng: 23.368 },
+    { name: "Младост 2", lat: 42.650, lng: 23.383 },
+    { name: "Младост 3", lat: 42.644, lng: 23.377 },
+    { name: "Младост 4", lat: 42.638, lng: 23.386 },
     { name: "Дружба", lat: 42.660, lng: 23.400 },
+    { name: "Дружба 1", lat: 42.663, lng: 23.396 },
+    { name: "Дружба 2", lat: 42.657, lng: 23.406 },
     { name: "Студентски град", lat: 42.650, lng: 23.345 },
     { name: "Слатина", lat: 42.690, lng: 23.360 },
     { name: "Подуяне", lat: 42.710, lng: 23.345 },
     { name: "Хаджи Димитър", lat: 42.715, lng: 23.355 },
     { name: "Надежда", lat: 42.730, lng: 23.300 },
+    { name: "Надежда 1", lat: 42.723, lng: 23.310 },
+    { name: "Надежда 2", lat: 42.728, lng: 23.303 },
+    { name: "Надежда 3", lat: 42.733, lng: 23.297 },
+    { name: "Надежда 4", lat: 42.737, lng: 23.290 },
     { name: "Банишора", lat: 42.715, lng: 23.310 },
     { name: "Люлин", lat: 42.719, lng: 23.245 },
     { name: "Връбница", lat: 42.735, lng: 23.255 },
@@ -353,6 +364,7 @@ const NEIGHBORHOODS = {
     { name: "Южен", lat: 42.128, lng: 24.755 },
     { name: "Западен", lat: 42.145, lng: 24.720 },
     { name: "Каменица", lat: 42.150, lng: 24.760 },
+    { name: "Каменица 1", lat: 42.148, lng: 24.758 },
     { name: "Гагарин", lat: 42.135, lng: 24.775 },
     { name: "Прослав", lat: 42.130, lng: 24.680 },
     { name: "Коматево", lat: 42.100, lng: 24.730 },
@@ -376,7 +388,9 @@ const NEIGHBORHOODS = {
     { name: "Трошево", lat: 43.215, lng: 27.900 },
     { name: "Младост", lat: 43.235, lng: 27.870 },
     { name: "Вл. Варненчик", lat: 43.230, lng: 27.850 },
+    { name: "Владиславово", lat: 43.225, lng: 27.845 },
     { name: "Кайсиева градина", lat: 43.240, lng: 27.865 },
+    { name: "Победа", lat: 43.225, lng: 27.880 },
     { name: "Аспарухово", lat: 43.180, lng: 27.905 },
     { name: "Галата", lat: 43.160, lng: 27.910 },
     { name: "Виница", lat: 43.240, lng: 27.960 },
@@ -396,10 +410,15 @@ const NEIGHBORHOODS = {
     { name: "Зорница", lat: 42.510, lng: 27.475 },
     { name: "Изгрев", lat: 42.515, lng: 27.465 },
     { name: "Славейков", lat: 42.520, lng: 27.460 },
+    { name: "Победа", lat: 42.505, lng: 27.478 },
     { name: "Меден рудник", lat: 42.470, lng: 27.440 },
     { name: "Долно Езерово", lat: 42.520, lng: 27.420 },
+    { name: "Горно Езерово", lat: 42.545, lng: 27.435 },
     { name: "Сарафово", lat: 42.560, lng: 27.520 },
     { name: "Крайморие", lat: 42.440, lng: 27.480 },
+    { name: "Ветрен", lat: 42.560, lng: 27.400 },
+    { name: "Промишлена зона Север", lat: 42.512, lng: 27.492 },
+    { name: "Промишлена зона Юг", lat: 42.460, lng: 27.458 },
     { name: "Айтос", lat: 42.700, lng: 27.250 },
     { name: "Камено", lat: 42.570, lng: 27.300 },
     { name: "Българово", lat: 42.510, lng: 27.290 },
@@ -407,6 +426,7 @@ const NEIGHBORHOODS = {
     { name: "с. Банево", lat: 42.550, lng: 27.400 },
     { name: "с. Маринка", lat: 42.420, lng: 27.420 },
     { name: "с. Твърдица", lat: 42.420, lng: 27.450 },
+    { name: "с. Рудник", lat: 42.400, lng: 27.500 },
   ],
   "Стара Загора": [
     { name: "Център", lat: 42.425, lng: 25.635 },
@@ -416,6 +436,9 @@ const NEIGHBORHOODS = {
     { name: "Самара", lat: 42.410, lng: 25.645 },
     { name: "Железник", lat: 42.415, lng: 25.610 },
     { name: "Голеш", lat: 42.440, lng: 25.620 },
+    { name: "Възраждане", lat: 42.415, lng: 25.615 },
+    { name: "Лозенец", lat: 42.440, lng: 25.610 },
+    { name: "Индустрия (пром. зона)", lat: 42.400, lng: 25.660 },
     { name: "с. Богомилово", lat: 42.400, lng: 25.580 },
     { name: "с. Хрищени", lat: 42.400, lng: 25.680 },
     { name: "с. Малка Верея", lat: 42.420, lng: 25.550 },
@@ -442,6 +465,7 @@ const NEIGHBORHOODS = {
     { name: "Възраждане", lat: 43.845, lng: 25.940 },
     { name: "Ялта", lat: 43.830, lng: 25.950 },
     { name: "Дружба", lat: 43.820, lng: 25.955 },
+    { name: "Родина", lat: 43.840, lng: 25.930 },
     { name: "Чародейка", lat: 43.815, lng: 25.965 },
     { name: "Средна кула", lat: 43.860, lng: 25.910 },
     { name: "Мартен", lat: 43.900, lng: 26.050 },
@@ -455,6 +479,10 @@ const NEIGHBORHOODS = {
     { name: "Мара Денчева", lat: 43.425, lng: 24.610 },
     { name: "Сторгозия", lat: 43.410, lng: 24.590 },
     { name: "Дружба", lat: 43.400, lng: 24.630 },
+    { name: "Дружба 1", lat: 43.403, lng: 24.627 },
+    { name: "Дружба 2", lat: 43.398, lng: 24.633 },
+    { name: "Дружба 3", lat: 43.395, lng: 24.638 },
+    { name: "Дружба 4", lat: 43.392, lng: 24.642 },
     { name: "Кайлъка", lat: 43.395, lng: 24.605 },
     { name: "с. Ясен", lat: 43.450, lng: 24.550 },
     { name: "с. Гривица", lat: 43.400, lng: 24.680 },
@@ -469,6 +497,8 @@ const NEIGHBORHOODS = {
     { name: "Добруджански", lat: 43.275, lng: 26.945 },
     { name: "Военно училище", lat: 43.260, lng: 26.930 },
     { name: "Дивдядово", lat: 43.240, lng: 26.950 },
+    { name: "Еверест", lat: 43.245, lng: 26.945 },
+    { name: "Индустриална зона", lat: 43.250, lng: 26.960 },
     { name: "Царев брод", lat: 43.320, lng: 26.850 },
     { name: "с. Мадара", lat: 43.280, lng: 27.110 },
     { name: "с. Ивански", lat: 43.200, lng: 27.000 },
@@ -688,6 +718,11 @@ function routesCacheKey(a, b) {
 
 async function fetchRealDistanceKm(cityA, cityB, apiKey) {
   if (!apiKey || !cityA || !cityB) return null;
+  // Google не разпознава кирилски адрес низове ("София, България" → "Address not found") —
+  // пращаме координати вместо адрес, което е и по-точно, и работи без значение от езика.
+  const ptA = CITIES[cityA] || CITIES[findCity(cityA)];
+  const ptB = CITIES[cityB] || CITIES[findCity(cityB)];
+  if (!ptA || !ptB) return null;
   const ck = routesCacheKey(cityA, cityB);
   if (routesCache.has(ck)) return routesCache.get(ck);
   try {
@@ -699,8 +734,8 @@ async function fetchRealDistanceKm(cityA, cityB, apiKey) {
         "X-Goog-FieldMask": "routes.distanceMeters,routes.description",
       },
       body: JSON.stringify({
-        origin: { address: `${cityA}, България` },
-        destination: { address: `${cityB}, България` },
+        origin: { location: { latLng: { latitude: ptA.lat, longitude: ptA.lng } } },
+        destination: { location: { latLng: { latitude: ptB.lat, longitude: ptB.lng } } },
         travelMode: "DRIVE",
         routingPreference: "TRAFFIC_UNAWARE", // без трафик — стабилен резултат
         computeAlternativeRoutes: true,       // питаме за няколко варианта
