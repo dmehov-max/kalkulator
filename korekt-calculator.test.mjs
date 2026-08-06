@@ -2002,6 +2002,17 @@ testAsync("калкулации: обновяване на съществува�
   ok(!calledUrl.includes("on_conflict"), "PATCH не хаби пореден номер, за разлика от upsert:");
   eq(calledBody.id, undefined, "PATCH тялото не бива да пренасочва ID:");
 });
+testAsync("калкулации: рутинният автосейв (touchStatus=false) НЕ праща status в PATCH тялото", () => {
+  // регресия: автосейвът смъкваше "потвърдена" обратно на "заявка"/"калкулация" при всяка
+  // промяна в калкулатора, защото винаги пращаше изчислен статус в PATCH-а
+  let calledBody = null;
+  globalThis.fetch = async (url, opts) => { calledBody = JSON.parse(opts.body); return { ok: true }; };
+  return E.pushCalcToSupabase({ id: "calc:1", status: "калкулация", total: 100 }, "https://x.supabase.co", "key", true, false).then(() => {
+    ok(!("status" in calledBody), "PATCH тялото не бива да съдържа status при touchStatus=false:");
+    ok("data" in calledBody, "данните все пак трябва да се обновят:");
+    delete globalThis.fetch;
+  });
+});
 testAsync("калкулации: изтеглянето от Supabase разопакова записите", async () => {
   globalThis.fetch = async () => ({ ok: true, json: async () => ([{ id: "calc:1", calc_number: 5, status: "заявка", data: { total: 100, createdAt: "2026-01-01" } }]) });
   const rows = await E.fetchCalcsFromSupabase("https://x.supabase.co", "key");

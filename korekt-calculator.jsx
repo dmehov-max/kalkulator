@@ -1575,14 +1575,18 @@ function stripSecrets(p) {
 // isUpdate=false (първи запис): молим базата да върне calc_number (return=representation),
 // за да покажем на клиента СЪЩИЯ номер, който после се вижда в "Записи" — преди това картата
 // показваше отделен, чисто локален брояч, който се разминаваше с номера в базата.
-async function pushCalcToSupabase(record, url, key, isUpdate) {
+// touchStatus=false: обновява само данните (data), без да пипа status колоната — ползва се
+// от рутинния автосейв, за да не смъква "потвърдена" обратно на "заявка"/"калкулация" само
+// защото клиентът пипна нещо в калкулатора след като операторът вече е потвърдил офертата.
+// Статусът се сменя изрично само при insert, "Изпрати заявка" и "Потвърди".
+async function pushCalcToSupabase(record, url, key, isUpdate, touchStatus = true) {
   if (!url || !key || !record.id) return { ok: false };
   try {
     const res = isUpdate
       ? await fetch(`${url}/rest/v1/calculations?id=eq.${encodeURIComponent(record.id)}`, {
           method: "PATCH",
           headers: supabaseHeaders(key, { "Content-Type": "application/json", Prefer: "return=minimal" }),
-          body: JSON.stringify({ status: record.status || "калкулация", data: record }),
+          body: JSON.stringify(touchStatus ? { status: record.status || "калкулация", data: record } : { data: record }),
         })
       : await fetch(`${url}/rest/v1/calculations?on_conflict=id&select=calc_number`, {
           method: "POST",
@@ -1682,11 +1686,11 @@ async function loadCalcs(p) {
 }
 
 function toCSV(rows) {
-  const head = ["Дата", "Услуга", "Град", "От", "До", "Км", "Обем м³", "Курсове", "Бригада", "Часове", "Цена €", "Име", "Телефон", "Имейл", "Статус"];
+  const head = ["№", "Дата", "Услуга", "Град", "От", "До", "Км", "Обем м³", "Курсове", "Бригада", "Часове", "Цена €", "Марж €", "Марж %", "Име", "Телефон", "Имейл", "Статус"];
   const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const body = rows.map((r) => [
-    new Date(r.createdAt).toLocaleString("bg-BG"), r.service, r.city || r.destination || "",
-    r.from || "", r.to || "", r.km, r.volumeM3, r.trips, r.crew, r.hours, r.total,
+    r.calcNumber ?? "", new Date(r.createdAt).toLocaleString("bg-BG"), r.service, r.city || r.destination || "",
+    r.from || "", r.to || "", r.km, r.volumeM3, r.trips, r.crew, r.hours, r.total, r.margin ?? "", r.marginPercent ?? "",
     r.contact?.name || "", r.contact?.phone || "", r.contact?.email || "", r.status,
   ].map(esc).join(","));
   return [head.map(esc).join(","), ...body].join("\n");
@@ -2440,6 +2444,7 @@ function LogPanel({ onClose, p }) {
   const [err, setErr] = useState(false);
   const [confirming, setConfirming] = useState(null);
   const [confirmingWhich, setConfirmingWhich] = useState(null); // ред, чакащ второ потвърждение (inline, не native confirm)
+  const [confirmError, setConfirmError] = useState(null); // ключ на ред, чието потвърждение не мина в базата
   const [selected, setSelected] = useState(null);
   const refresh = async () => { setRows(null); const d = await loadCalcs(p); setRows(d); setErr(d.length === 0); };
   useEffect(() => { refresh(); }, []);
@@ -2447,12 +2452,16 @@ function LogPanel({ onClose, p }) {
   const confirmRow = async (row) => {
     setConfirmingWhich(null);
     setConfirming(row.key);
+    setConfirmError(null);
     const { key, ...record } = row;
     record.status = "потвърдена";
-    pushCalcToSupabase(record, p?.supabaseUrl, p?.supabaseKey, true);
+    // изчакваме реалния резултат от базата — иначе при 5xx статусът тихо не се сменя,
+    // но списъкът се опреснява все едно е минало
+    const res = await pushCalcToSupabase(record, p?.supabaseUrl, p?.supabaseKey, true);
     await saveCalc(key, record);
     await refresh();
     setConfirming(null);
+    if (p?.supabaseUrl && p?.supabaseKey && !res?.ok) setConfirmError(key);
   };
 
   const download = () => {
@@ -2539,6 +2548,11 @@ function LogPanel({ onClose, p }) {
                         background: r.status === "потвърдена" ? "#dcfce7" : r.status === "заявка" ? "#fff8ef" : "#f1f5f9",
                         color: r.status === "потвърдена" ? "#166534" : r.status === "заявка" ? accent : "#64748b",
                       }}>{r.status || "калкулация"}</span>
+                      {confirmError === r.key && (
+                        <span className="ml-1 text-[11px] font-medium" style={{ color: "#dc2626" }} title="Базата не отговори — опитайте пак">
+                          ⚠ не се запази
+                        </span>
+                      )}
                     </td>
                     <td className="py-1.5 px-1 whitespace-nowrap">
                       {confirmingWhich === r.key ? (
@@ -2771,7 +2785,9 @@ export default function KorektCalculator() {
     setSaveState("saving");
     const t = setTimeout(async () => {
       const wasFirstPush = !pushedRef.current;
-      pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey, pushedRef.current).then((res) => {
+      // след първия запис рутинният автосейв вече не пипа status — иначе "потвърдена",
+      // сложена от оператор през "Записи", би паднала обратно при следваща промяна тук
+      pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey, pushedRef.current, wasFirstPush).then((res) => {
         // номерът от базата е авторитетният — синхронизираме показания номер с него,
         // за да не се разминава картата с цената от таблицата в "Записи"
         if (wasFirstPush && res?.ok && res.calcNumber != null && res.calcNumber !== recordNumber.current) {
@@ -2807,7 +2823,7 @@ export default function KorektCalculator() {
               }),
               body: JSON.stringify(
                 isUpdate
-                  ? { status: cur.rec.status || "калкулация", data: cur.rec }
+                  ? { data: cur.rec } // без status — да не смъкне "потвърдена" на затваряне на страницата
                   : { id: cur.rec.id, status: cur.rec.status || "калкулация", data: cur.rec }
               ),
             }
