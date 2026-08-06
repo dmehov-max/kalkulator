@@ -737,6 +737,14 @@ const BG_TRANSLIT = {
 function translitBG(str) {
   return String(str || "").toLowerCase().split("").map(ch => BG_TRANSLIT[ch] ?? ch).join("");
 }
+
+// проста, но достатъчна валидация за контактната форма — не претендира за пълна RFC точност,
+// само хваща очевидно грешно въведени данни (напр. "not-an-email")
+const isValidEmail = v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v || "").trim());
+const isValidPhone = v => {
+  const digits = String(v || "").replace(/[\s\-()]/g, "");
+  return /^\+?\d{6,15}$/.test(digits);
+};
 const totalVolume = qty => Object.entries(qty).reduce((s, [id, cnt]) => s + (ITEM_INDEX[id]?.m3 || 0) * cnt, 0);
 // часове за разглобяване и за сглобяване (по отделни отметки на вещ)
 // Отметките dis/asm може да са:
@@ -2616,6 +2624,11 @@ function computePrice(s, p) {
   const baseIsOnRoute = baseCity ? baseOnRoute(s.pickupCity, baseCity, s.dropoffCity, n(p.roadFactorBG || 1.25), n(p.routeDetourTolerance || 1.1)) : false;
   // кола трябва, ако базата е встрани от маршрута ИЛИ служителят я е поискал изрично
   const needCar = !!baseCity && (!baseIsOnRoute || !!s.forceCar);
+
+  // реални разходи, платени "на трето лице" за материали/превоз (кола, стреч, велпапе,
+  // чували, такса сметище) — начисляват се на клиента почти на себестойност, но без тях
+  // маржът в панел "Марж" излизаше завишен, все едно е чиста печалба
+  let extraCostTotal = 0;
   let handlingManHours;
   if (dayCrewMode) {
     handlingManHours = 0; // трудът се плаща на ден, не на час
@@ -2632,7 +2645,9 @@ function computePrice(s, p) {
     add(`Местна бригада ${baseCity ? `(${baseCity})` : ""} — ${crewWorkH.toFixed(1)} ч работа + ${crewDriveH.toFixed(1)} ч път × ${people} души × ${n(p.workerRate)} ${p.currency}/ч`, crewHours * people * n(p.workerRate));
     handlingManHours += crewHours * people;
     if (baseCity && needCar) {
-      add(`Кола ${baseCity} → ${s.dropoffCity} — ${2 * baseKm} км × ${n(p.carRatePerKm)} ${p.currency}/км`, 2 * baseKm * n(p.carRatePerKm), true);
+      const fee = 2 * baseKm * n(p.carRatePerKm);
+      add(`Кола ${baseCity} → ${s.dropoffCity} — ${2 * baseKm} км × ${n(p.carRatePerKm)} ${p.currency}/км`, fee, true);
+      extraCostTotal += fee;
     }
   } else if (isDisposal) {
     // изнасяне + път до сметището и обратно + изсипване
@@ -2658,7 +2673,9 @@ function computePrice(s, p) {
       add(`Пълнене на ${sacks} чувала — ${h.toFixed(1)} чч × ${disposalRate} ${p.currency}/ч`, h * disposalRate);
     }
     if (sacks > 0) {
-      add(`Чували — ${sacks} бр. × ${n(p.sackPrice)} ${p.currency}/бр.`, sacks * n(p.sackPrice), true);
+      const fee = sacks * n(p.sackPrice);
+      add(`Чували — ${sacks} бр. × ${n(p.sackPrice)} ${p.currency}/бр.`, fee, true);
+      extraCostTotal += fee;
     }
     {
       const h = roundHalf(jobClock);
@@ -2690,6 +2707,7 @@ function computePrice(s, p) {
     const carFee = Math.max(carKmFee, n(p.labourMinCarFee || 0));
     if (carFee > 0) {
       add(labourKm ? `Кола за бригадата — ${2 * labourKm} км × ${n(p.carRatePerKm)} ${p.currency}/км` : `Кола за бригадата (в града) — минимална такса`, carFee, true);
+      extraCostTotal += carFee;
     }
   } else if (isManualHoursService) {
     // монтаж на мебели / ТРД — часовете се въвеждат ръчно от служителя (по преценка на място),
@@ -2712,6 +2730,7 @@ function computePrice(s, p) {
     const carFee = Math.max(carKmFee, n(p.labourMinCarFee || 0));
     if (carFee > 0) {
       add(labourKm ? `Кола за бригадата — ${2 * labourKm} км × ${n(p.carRatePerKm)} ${p.currency}/км` : `Кола за бригадата (в града) — минимална такса`, carFee, true);
+      extraCostTotal += carFee;
     }
   } else if (selfUnloadMode) {
     // клиентът разтоварва сам — плаща се само товаренето при него
@@ -2826,6 +2845,7 @@ function computePrice(s, p) {
     const fee = n((p.landfillFees || {})[wasteType]);
     if (fee > 0) {
       add(`Такса сметище (${WASTE_LABEL[wasteType]}) — ${trips} курс${trips === 1 ? "" : "а"} × ${fee} ${p.currency}`, trips * fee);
+      extraCostTotal += trips * fee;
     }
   } else if (!isCourse) {
     const h = roundHalf(handlingClock);
@@ -2835,39 +2855,51 @@ function computePrice(s, p) {
     if (totalKm) add(`Транспорт — ${totalKm} км × ${rate} ${p.currency}/км`, totalKm * rate);
   }
 
-  // материали
+  // материали — реален разход почти на себестойност, приспада се в марж панела по-долу
   if (protectMeters) {
-    add(`Велпапе / автопласт — ${protectMeters} м × ${n(p.protectPricePerM)} ${p.currency}/м`, protectMeters * n(p.protectPricePerM), true);
+    const fee = protectMeters * n(p.protectPricePerM);
+    add(`Велпапе / автопласт — ${protectMeters} м × ${n(p.protectPricePerM)} ${p.currency}/м`, fee, true);
+    extraCostTotal += fee;
   }
-  if (rolls) add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(4)} ${p.currency}/м`, rolls * n(p.stretchRollPrice), true);
-
-  // праг
-  const floor = n(p.minPrice[s.service === "disposal" || usesFieldCrew ? "local" : s.service]);
-  if (total < floor) {
-    lines.push({
-      label: "Изравняване до минимум",
-      amount: floor - total
-    });
-    total = floor;
+  if (rolls) {
+    const fee = rolls * n(p.stretchRollPrice);
+    add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(4)} ${p.currency}/м`, fee, true);
+    extraCostTotal += fee;
   }
 
-  // отклонение (буфер) върху крайната калкулация — последна стъпка, върху всичко по-горе
+  // отклонение (буфер) — прилага се ПРЕДИ прага за минимум, за да е минималната цена,
+  // която въвеждаш в Параметри, наистина минимумът, който клиентът вижда (а не мин×буфер)
   const deviationFactor = n(p.deviationFactor || 1) || 1;
   if (deviationFactor !== 1) {
     const percent = Math.round((deviationFactor - 1) * 100);
     add(`Отклонение (${percent >= 0 ? "+" : ""}${percent}%)`, total * (deviationFactor - 1));
   }
 
+  // праг — след отклонението
+  const floor = n(p.minPrice[s.service === "disposal" || usesFieldCrew ? "local" : s.service]);
+  if (total < floor) {
+    lines.push({
+      label: "Изравняване до минимум",
+      amount: Math.round(floor - total)
+    });
+    total = floor;
+  }
+
+  // никога не показваме отрицателна (или безсмислена) цена на клиента, независимо от
+  // комбинацията параметри (напр. отрицателен коеф. на отклонение)
+  total = Math.max(0, total);
+
   // СЕБЕСТОЙНОСТ И МАРЖ — вътрешни данни (реален разход), не влияят на цената на клиента.
   // Ставката за работник е по градове — тръгва от базата/града, в който реално се работи.
   const costCity = s.service === "intercity" ? s.pickupCity : s.city || null;
-  const cityCostEntry = (p.workerCostByCity || []).find(c => c.city === costCity);
+  const cityCostEntry = (p.workerCostByCity || []).find(c => normHood(c.city) === normHood(costCity));
   const workerCostRate = n(cityCostEntry ? cityCostEntry.rate : p.workerCostDefault);
   const laborCost = manHours * workerCostRate;
   const truckCostRate = usesFieldCrew ? 0 : n(isCourse || isDisposal ? p.truckCostPerKm : p.truckCostPerHour);
   const truckCostBasis = isCourse || isDisposal ? totalKm : handlingClock;
   const truckCost = usesFieldCrew ? 0 : truckCostBasis * truckCostRate;
-  const totalCost = laborCost + truckCost;
+  // материали + кола + такса сметище (реален разход, минус за да не изглежда маржа завишен)
+  const totalCost = laborCost + truckCost + extraCostTotal;
   const margin = total - totalCost;
   const marginPercent = total > 0 ? margin / total * 100 : 0;
   return {
@@ -3042,11 +3074,14 @@ function loadDraft() {
     return null;
   }
 }
-function saveDraftLS(step, s) {
+function saveDraftLS(step, s, recordKey, recordNumber, pushed) {
   try {
     localStorage.setItem(DRAFT_KEY, JSON.stringify({
       step,
       s,
+      recordKey,
+      recordNumber,
+      pushed,
       savedAt: Date.now()
     }));
   } catch (e) {/* без значение — просто няма да се възстанови */}
@@ -3674,12 +3709,18 @@ function SettingsPanel({
   p,
   setP,
   saveState,
+  syncedAt: syncedAtMs,
   notify
 }) {
   const upd = patch => setP({
     ...p,
     ...patch
   });
+  const syncedAt = syncedAtMs ? new Date(syncedAtMs).toLocaleTimeString("bg-BG", {
+    hour: "2-digit",
+    minute: "2-digit"
+  }) : null;
+  const [confirmReset, setConfirmReset] = useState(false);
   const exportParams = () => {
     const blob = new Blob([JSON.stringify(p, null, 2)], {
       type: "application/json"
@@ -3737,9 +3778,9 @@ function SettingsPanel({
   }, "⚙ Параметри на калкулатора"), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-right",
     style: {
-      color: saveState === "error" ? "#dc2626" : "#94a3b8"
+      color: saveState === "error" || saveState === "sync-error" ? "#dc2626" : saveState === "saved-sheet" ? "#16a34a" : saveState === "saved" ? "#b45309" : "#94a3b8"
     }
-  }, saveState === "saving" ? "Записване…" : saveState === "saved-sheet" ? "Записано в базата ✓" : saveState === "saved" ? "Записано ✓" : saveState === "unavailable" ? "Важи за сесията (без трайно хранилище)" : saveState === "error" ? "Грешка при запис" : "")), /*#__PURE__*/React.createElement(Section, {
+  }, saveState === "saving" ? "Записване…" : saveState === "saved-sheet" ? `Записано в споделената база ✓${syncedAt ? ` (${syncedAt})` : ""}` : saveState === "sync-error" ? "⚠ Не се синхронизира с екипа — пазено само в този браузър" : saveState === "saved" ? "⚠ Само локално (без споделена база)" : saveState === "unavailable" ? "Важи за сесията (без трайно хранилище)" : saveState === "error" ? "Грешка при запис" : "")), /*#__PURE__*/React.createElement(Section, {
     title: "Отклонение върху крайната цена"
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 md:grid-cols-4 gap-3"
@@ -3925,7 +3966,7 @@ function SettingsPanel({
     className: "space-y-2"
   }, p.partnerTrucks.map((t, i) => /*#__PURE__*/React.createElement("div", {
     key: t.id,
-    className: "grid grid-cols-[1fr_90px_90px_28px] gap-2 items-end"
+    className: "grid grid-cols-[1fr_90px_90px_100px_28px] gap-2 items-end"
   }, /*#__PURE__*/React.createElement("label", {
     className: "block"
   }, /*#__PURE__*/React.createElement("span", {
@@ -3934,6 +3975,9 @@ function SettingsPanel({
     value: t.name,
     onChange: e => setPartner(i, {
       name: e.target.value
+    }),
+    onBlur: e => setPartner(i, {
+      name: e.target.value.trim()
     }),
     className: "w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1"
   })), /*#__PURE__*/React.createElement(Num, {
@@ -3950,6 +3994,14 @@ function SettingsPanel({
     onChange: v => setPartner(i, {
       kmRate: v
     })
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Товароносимост",
+    value: t.payloadKg ?? "",
+    step: 100,
+    onChange: v => setPartner(i, {
+      payloadKg: v
+    }),
+    suffix: "кг"
   }), /*#__PURE__*/React.createElement("button", {
     onClick: () => upd({
       partnerTrucks: p.partnerTrucks.filter((_, j) => j !== i)
@@ -3960,7 +4012,9 @@ function SettingsPanel({
       partnerTrucks: [...p.partnerTrucks, {
         id: "p" + Date.now(),
         name: "Нов камион",
-        capacity: 30
+        capacity: 30,
+        kmRate: n(p.kmRate) || 0.7,
+        payloadKg: 3500
       }]
     }),
     className: "text-xs font-medium",
@@ -4263,7 +4317,56 @@ function SettingsPanel({
       }
     }),
     suffix: "€"
-  }))), /*#__PURE__*/React.createElement(Section, {
+  })), /*#__PURE__*/React.createElement("p", {
+    className: "text-[11px] text-slate-400 mt-2"
+  }, "Междуградско и „Само хамали/Монтаж/ТРД\" нямат зададен минимум — цената им е изцяло по часове/км.")), /*#__PURE__*/React.createElement(Section, {
+    title: "Бригада по обем"
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "text-[11px] text-slate-400 mb-2"
+  }, "Брой хора според обема на преместването — влияе пряко на цената. Редовете се четат отгоре надолу, важи първият праг, в който обемът се събира."), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-2"
+  }, p.crewTiers.map((tier, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    className: "grid grid-cols-[1fr_1fr_28px] gap-2 items-end"
+  }, /*#__PURE__*/React.createElement(Num, {
+    label: "До обем",
+    value: tier.maxM3,
+    step: 1,
+    onChange: v => upd({
+      crewTiers: p.crewTiers.map((t, j) => j === i ? {
+        ...t,
+        maxM3: v
+      } : t)
+    }),
+    suffix: "м³"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Бригада",
+    value: tier.crew,
+    step: 1,
+    onChange: v => upd({
+      crewTiers: p.crewTiers.map((t, j) => j === i ? {
+        ...t,
+        crew: v
+      } : t)
+    }),
+    suffix: "души"
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => upd({
+      crewTiers: p.crewTiers.filter((_, j) => j !== i)
+    }),
+    className: "w-7 h-9 rounded-lg border border-slate-200 text-slate-400 hover:text-red-500"
+  }, "×"))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => upd({
+      crewTiers: [...p.crewTiers, {
+        maxM3: 999,
+        crew: 8
+      }]
+    }),
+    className: "text-xs font-medium",
+    style: {
+      color: accent
+    }
+  }, "+ Добави праг"))), /*#__PURE__*/React.createElement(Section, {
     title: "Изхвърляне на отпадък"
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 md:grid-cols-4 gap-3"
@@ -4412,6 +4515,7 @@ function SettingsPanel({
       supabaseKey: e.target.value
     }),
     placeholder: "eyJhbGci...",
+    type: "password",
     className: "w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1"
   }))), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap items-center gap-2 mt-4"
@@ -4428,10 +4532,23 @@ function SettingsPanel({
     accept: "application/json,.json",
     className: "hidden",
     onChange: importParams
-  })), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setP(structuredClone(DEFAULTS)),
-    className: "text-xs font-medium text-slate-500 hover:text-slate-700 underline ml-auto"
-  }, "Върни по подразбиране")), /*#__PURE__*/React.createElement("p", {
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "ml-auto"
+  }, confirmReset ? /*#__PURE__*/React.createElement("span", {
+    className: "text-xs"
+  }, "Ще изтрие и връзката към Supabase базата — сигурни ли сте?", " ", /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setP(structuredClone(DEFAULTS));
+      setConfirmReset(false);
+    },
+    className: "font-semibold text-red-600 underline"
+  }, "Да, върни"), " · ", /*#__PURE__*/React.createElement("button", {
+    onClick: () => setConfirmReset(false),
+    className: "text-slate-500 underline"
+  }, "Отказ")) : /*#__PURE__*/React.createElement("button", {
+    onClick: () => setConfirmReset(true),
+    className: "text-xs font-medium text-slate-500 hover:text-slate-700 underline"
+  }, "Върни по подразбиране"))), /*#__PURE__*/React.createElement("p", {
     className: "text-[11px] text-slate-400 mt-2"
   }, "Свалените настройки са файл, който можете да заредите по всяко време — работи и когато средата не пази данни."));
 }
@@ -5238,7 +5355,8 @@ function KorektCalculator() {
       alive = false;
     };
   }, [s.service, s.pickupCity, s.dropoffCity, p.mapsApiKey]);
-  const [paramSave, setParamSave] = useState("idle"); // idle | saving | saved | error
+  const [paramSave, setParamSave] = useState("idle"); // idle | saving | saved | saved-sheet | sync-error | unavailable | error
+  const [paramSyncedAt, setParamSyncedAt] = useState(null); // час на последната УСПЕШНА синхронизация със споделената база
 
   useEffect(() => {
     let alive = true;
@@ -5266,27 +5384,45 @@ function KorektCalculator() {
   useEffect(() => {
     if (!paramsLoaded) return;
     setParamSave("saving");
+    let cancelled = false;
     const t = setTimeout(() => {
       (async () => {
         // не пазим трайно временно изпразнено поле (напр. докато служителят трие старото число, за да въведе ново)
         const clean = sanitizeNumericParams(p, DEFAULTS);
+        // ако sanitize е заменил нещо (изчистено поле → стойност по подразбиране), връщаме го
+        // и в екрана — иначе полето остава да изглежда празно, докато реално пазим друго число
+        if (JSON.stringify(clean) !== JSON.stringify(p)) setP(clean);
         const okLocal = await saveParams(clean);
-        const okRemote = await pushParamsToSupabase(clean, p.supabaseUrl, p.supabaseKey);
-        setParamSave(okRemote ? "saved-sheet" : okLocal ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
+        const hasRemoteConfig = !!(clean.supabaseUrl && clean.supabaseKey);
+        let okRemote = await pushParamsToSupabase(clean, clean.supabaseUrl, clean.supabaseKey);
+        if (!okRemote && hasRemoteConfig && !cancelled) {
+          // споделената база не отговори (напр. заспал проект/503) — един автоматичен повторен опит
+          await new Promise(r => setTimeout(r, 4000));
+          if (cancelled) return;
+          okRemote = await pushParamsToSupabase(clean, clean.supabaseUrl, clean.supabaseKey);
+        }
+        if (cancelled) return;
+        if (okRemote) setParamSyncedAt(Date.now());
+        setParamSave(okRemote ? "saved-sheet" : hasRemoteConfig ? "sync-error" // конфигурирано е, но записът в споделената база не мина — сериозно
+        : okLocal ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
       })();
     }, 600);
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [p, paramsLoaded]);
 
   // --- чернова на текущата калкулация (за да наистина не се губи при презареждане) ---
+  // пазим и ключа/номера на записа, за да не се трупат дубликати (№2, №3...) при презареждане
   useEffect(() => {
     if (!s.service) {
       clearDraftLS();
       return;
     } // нищо избрано още — няма какво да пазим
-    const t = setTimeout(() => saveDraftLS(step, s), 400);
+    const t = setTimeout(() => saveDraftLS(step, s, recordKey.current, recordNumber.current, pushedRef.current), 400);
     return () => clearTimeout(t);
-  }, [step, s]);
+  }, [step, s, calcNumberState]);
   useEffect(() => {
     if (draftRestored) notify("Възстановихме предишната Ви незавършена калкулация.", "info");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5296,10 +5432,12 @@ function KorektCalculator() {
   const [showLog, setShowLog] = useState(false);
   const [showMargin, setShowMargin] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
-  const recordKey = useRef(null);
-  const recordNumber = useRef(null); // поредният номер на тази калкулация (генерира се веднъж)
-  const pushedRef = useRef(false); // дали вече е създаден ред в Supabase — след това само PATCH (update), не upsert
-  const [calcNumberState, setCalcNumberState] = useState(null); // за показване в резултата
+  // при възстановена чернова пазим СЪЩИЯ ключ/номер на записа, вместо да създаваме нов —
+  // иначе презареждане на страницата трупа дубликати (№2, №3...) за една и съща заявка
+  const recordKey = useRef(initialDraft?.recordKey || null);
+  const recordNumber = useRef(initialDraft?.recordNumber || null); // поредният номер на тази калкулация (генерира се веднъж)
+  const pushedRef = useRef(!!initialDraft?.pushed); // дали вече е създаден ред в Supabase — след това само PATCH (update), не upsert
+  const [calcNumberState, setCalcNumberState] = useState(initialDraft?.recordNumber || null); // за показване в резултата
 
   // Всяка калкулация се пази автоматично — без клиентът да прави нищо.
   // Записът се обновява при промяна, вместо да се дублира.
@@ -5381,6 +5519,14 @@ function KorektCalculator() {
   const submitRequest = async () => {
     if (!s.name.trim() || !s.phone.trim()) {
       notify("Моля, попълнете поне име и телефон, за да изпратите заявка.", "error");
+      return;
+    }
+    if (!isValidPhone(s.phone)) {
+      notify("Телефонният номер не изглежда валиден — проверете го (само цифри, поне 6).", "error");
+      return;
+    }
+    if (s.email.trim() && !isValidEmail(s.email)) {
+      notify("Имейлът не изглежда валиден (напр. име@домейн.бг).", "error");
       return;
     }
     const key = recordKey.current || `${CALC_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -5540,12 +5686,17 @@ function KorektCalculator() {
     style: {
       color: margin >= 0 ? "#166534" : "#dc2626"
     }
-  }, margin, " ", p.currency, " (", marginPercent.toFixed(1), "%)")))), showSettings && /*#__PURE__*/React.createElement(SettingsPanel, {
+  }, margin, " ", p.currency, " (", marginPercent.toFixed(1), "%)")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: showSettings ? "block" : "none"
+    }
+  }, /*#__PURE__*/React.createElement(SettingsPanel, {
     p: p,
     setP: setP,
     saveState: paramSave,
+    syncedAt: paramSyncedAt,
     notify: notify
-  }), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-2 mb-8"
   }, STEPS.map((label, i) => /*#__PURE__*/React.createElement("div", {
     key: label,
@@ -6693,6 +6844,8 @@ function KorektCalculator() {
     className: "rounded-xl border border-slate-200 px-4 py-3 text-sm"
   }), /*#__PURE__*/React.createElement("input", {
     placeholder: "Телефон",
+    type: "tel",
+    inputMode: "tel",
     value: s.phone,
     onChange: e => set({
       phone: e.target.value
@@ -6700,6 +6853,8 @@ function KorektCalculator() {
     className: "rounded-xl border border-slate-200 px-4 py-3 text-sm"
   }), /*#__PURE__*/React.createElement("input", {
     placeholder: "Имейл",
+    type: "email",
+    inputMode: "email",
     value: s.email,
     onChange: e => set({
       email: e.target.value

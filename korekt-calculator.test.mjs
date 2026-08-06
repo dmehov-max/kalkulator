@@ -28,7 +28,7 @@ const engineSrc =
   haversineKm, normHood, findHood, cityCenter, estimateKm, crewFor, ownTruck,
   fleetFor, tripsFor, bestTruck, computePrice, totalWeight, findCity, protectMetersFor, BASES, nearestBase, baseOnRoute, mergeParams, buildRecord, toCSV, disHoursFor, wrapMetersFor, CITIES, estimateKmAny, pointFor,
   saveCalc, loadCalcs, saveParams, loadParams, CALC_PREFIX, PARAMS_KEY, fetchParamsFromSupabase, pushParamsToSupabase, pushCalcToSupabase, fetchCalcsFromSupabase, fetchCatalogItemsFromSupabase, pushCatalogItemToSupabase, applyExtraCatalogItems, nextCalcNumber, CALC_COUNTER_KEY, fetchRealDistanceKm, routesCache, ROUTES_CACHE_KEY, roundHalf, sanitizeNumericParams,
-  storageSet, storageGet, storageList, getStorageMode, hasStorage };\n`;
+  storageSet, storageGet, storageList, getStorageMode, hasStorage, isValidEmail, isValidPhone };\n`;
 
 const tmp = path.join(os.tmpdir(), `korekt-engine-${Date.now()}.mjs`);
 fs.writeFileSync(tmp, engineSrc);
@@ -768,6 +768,21 @@ test("стълби: без асансьор на голяма мебел про�
 });
 
 
+/* --- Валидация на контактна форма --- */
+test("имейл: отхвърля \"not-an-email\"", () => {
+  ok(!E.isValidEmail("not-an-email"));
+});
+test("имейл: приема нормален адрес", () => {
+  ok(E.isValidEmail("client@example.bg"));
+});
+test("телефон: приема български номер с интервали", () => {
+  ok(E.isValidPhone("0882 944 098"));
+});
+test("телефон: отхвърля твърде кратко/нечислово", () => {
+  ok(!E.isValidPhone("abc"));
+  ok(!E.isValidPhone("123"));
+});
+
 /* --- Демонтаж/монтаж по вещ --- */
 test("демонтаж: неотметнат не добавя часове", () => {
   eq(calc({ qty: { wardrobe3: 1 } }).disHours, 0);
@@ -897,14 +912,23 @@ test("отклонение: коефициент 1 не добавя перо", 
   const r = calc({ qty: { boxM: 5 } }, { ...P, deviationFactor: 1 });
   ok(!r.lines.some((l) => l.label.startsWith("Отклонение")), "не бива да има перо при ×1");
 });
-test("отклонение: прилага се и след изравняване до минимум", () => {
+test("минимум: прилага се СЛЕД отклонението — зададеният минимум е реалният под, не мин.×буфер", () => {
   // изкуствено висок праг, за да сме сигурни, че изравняването реално се задейства
   const params = { ...P, minPrice: { ...P.minPrice, local: 100000 } };
   const r = calc({ qty: { boxS: 1 }, pickupHood: "Център", dropoffHood: "Център" }, params);
   ok(r.lines.some((l) => l.label === "Изравняване до минимум"));
-  const line = r.lines.find((l) => l.label.startsWith("Отклонение"));
-  ok(line, "отклонението трябва да важи и върху минималната цена");
-  near(r.total, Math.round(100000 * P.deviationFactor), 1);
+  eq(r.total, 100000, "минималната цена от Параметри трябва да е точната крайна цена, не умножена по отклонението:");
+});
+test("минимум: сумата на реда \"Изравняване до минимум\" е закръглена (без дълги десетични опашки)", () => {
+  const params = { ...P, minPrice: { ...P.minPrice, local: 100000 } };
+  const r = calc({ qty: { boxS: 1 }, pickupHood: "Център", dropoffHood: "Център" }, params);
+  const line = r.lines.find((l) => l.label === "Изравняване до минимум");
+  eq(line.amount, Math.round(line.amount), "сумата трябва да е цяло число, не 609.4397714285715:");
+});
+test("отклонение: отрицателен коефициент никога не праща цена под 0", () => {
+  const params = { ...P, deviationFactor: -1 };
+  const r = calc({ qty: { boxS: 1 }, pickupHood: "Център", dropoffHood: "Център" }, params);
+  ok(r.total >= 0, `цената никога не бива да е отрицателна, получено ${r.total}`);
 });
 /* --- Себестойност и марж (вътрешни данни) --- */
 test("себестойност: използва ставката по подразбиране без град в списъка", () => {
@@ -935,6 +959,17 @@ test("марж: цена минус себестойност, с положит�
 test("марж: при само хамали/монтаж/ТРД няма разход за камион (клиентски транспорт)", () => {
   const r = calc({ service: "labour", city: "София", qty: { boxL: 10 } });
   eq(r.truckCost, 0);
+});
+test("себестойност: заден интервал в града не бива да чупи градската ставка", () => {
+  const params = { ...P, workerCostByCity: [{ city: "Пловдив ", rate: 5.5 }] }; // интервал накрая, както в реален запис
+  const r = calc({ qty: { boxM: 5 }, city: "Пловдив", pickupHood: "Център", dropoffHood: "Център" }, params);
+  eq(r.workerCostRate, 5.5, "трябва да намери \"Пловдив \" въпреки задния интервал:");
+});
+test("марж: материалите (стреч/велпапе) намаляват маржа — не са чиста печалба", () => {
+  const withMaterials = calc({ qty: { mattress: 2 } }); // matrac е wrapReq: задължителен стреч
+  const line = withMaterials.lines.find((l) => l.label.startsWith("Стреч"));
+  ok(line && line.amount > 0, "трябва да има начислен стреч, за да тества нещо реално:");
+  ok(withMaterials.totalCost >= line.amount, "себестойността трябва да включва поне разхода за стреч фолио:");
 });
 test("демонтаж: показва се като отделно перо в разбивката", () => {
   const r = calc({ qty: { wardrobe3: 1 }, dis: { wardrobe3: true } });
