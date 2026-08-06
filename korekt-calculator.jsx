@@ -1549,16 +1549,24 @@ function buildRecord(s, p, r, id, calcNumber, createdBy) {
     assembly: Object.entries(s.asm || {}).filter(([, v]) => v).map(([id]) => ITEM_INDEX[id]?.label || id),
     wrapMeters: r.wrapMeters,
     protectMeters: r.protectMeters,
-    protectMeters: r.protectMeters,
     stretchRolls: r.rolls,
     items,
     breakdown: r.lines,
     total: r.total,
     rates: { worker: p.workerRate, truck: p.truckRate, km: p.kmRate },
-    paramsSnapshot: p, // ставките, с които е направена калкулацията
+    // ставките, с които е направена калкулацията — БЕЗ credentials. Записите се четат
+    // с анонимния ключ от всеки, отворил "Записи", затова supabaseKey/mapsApiKey/supabaseUrl
+    // НЕ бива да се копират тук (иначе течат обратно към браузъра на всеки, който гледа записа)
+    paramsSnapshot: stripSecrets(p),
     contact: null,
     status: "калкулация",
   };
+}
+
+// маха credentials от снапшота на параметрите преди запис в споделената база
+function stripSecrets(p) {
+  const { supabaseUrl, supabaseKey, mapsApiKey, ...safe } = p || {};
+  return safe;
 }
 
 // изпраща записа към Supabase (споделена база), ако е зададена връзка
