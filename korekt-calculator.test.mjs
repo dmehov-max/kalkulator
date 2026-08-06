@@ -1976,21 +1976,27 @@ testAsync("настройки: невалиден отговор не се пр�
 });
 testAsync("калкулации: изпращат се към Supabase с ID за upsert", async () => {
   let calledUrl = null, calledBody = null;
-  globalThis.fetch = async (url, opts) => { calledUrl = url; calledBody = JSON.parse(opts.body); return { ok: true }; };
+  globalThis.fetch = async (url, opts) => { calledUrl = url; calledBody = JSON.parse(opts.body); return { ok: true, json: async () => ([{ calc_number: 12 }]) }; };
   const result = await E.pushCalcToSupabase({ id: "calc:1", status: "калкулация", total: 100 }, "https://x.supabase.co", "key");
-  ok(result, "трябва да върне true:");
+  ok(result.ok, "трябва да върне ok:true:");
   ok(calledUrl.includes("on_conflict=id"), "трябва да пази по ID:");
   eq(calledBody.id, "calc:1");
   delete globalThis.fetch;
 });
+testAsync("калкулации: при първи запис връща calc_number от базата (за синхрон с картата на клиента)", async () => {
+  globalThis.fetch = async () => ({ ok: true, json: async () => ([{ calc_number: 42 }]) });
+  const result = await E.pushCalcToSupabase({ id: "calc:1", status: "калкулация", total: 100 }, "https://x.supabase.co", "key");
+  eq(result.calcNumber, 42);
+  delete globalThis.fetch;
+});
 testAsync("калкулации: без ID не се изпраща", async () => {
-  eq(await E.pushCalcToSupabase({ total: 100 }, "https://x.supabase.co", "key"), false);
+  eq((await E.pushCalcToSupabase({ total: 100 }, "https://x.supabase.co", "key")).ok, false);
 });
 testAsync("калкулации: обновяване на съществуващ ред е PATCH, не upsert (да не хаби номера)", async () => {
   let calledUrl = null, calledMethod = null, calledBody = null;
   globalThis.fetch = async (url, opts) => { calledUrl = url; calledMethod = opts.method; calledBody = JSON.parse(opts.body); return { ok: true }; };
   const result = await E.pushCalcToSupabase({ id: "calc:1", status: "калкулация", total: 100 }, "https://x.supabase.co", "key", true);
-  ok(result, "трябва да върне true:");
+  ok(result.ok, "трябва да върне ok:true:");
   eq(calledMethod, "PATCH", "обновяване не бива да е POST/upsert:");
   ok(calledUrl.includes("id=eq.") && calledUrl.includes(encodeURIComponent("calc:1")), "трябва да филтрира по ID:");
   ok(!calledUrl.includes("on_conflict"), "PATCH не хаби пореден номер, за разлика от upsert:");

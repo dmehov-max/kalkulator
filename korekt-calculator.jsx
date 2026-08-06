@@ -1572,8 +1572,11 @@ function stripSecrets(p) {
 // изпраща записа към Supabase (споделена база), ако е зададена връзка
 // isUpdate=true праща PATCH на съществуващ ред (не хаби пореден номер от bigserial
 // последователността, за разлика от upsert — виж проекта: "защо в записите липсват номера")
+// isUpdate=false (първи запис): молим базата да върне calc_number (return=representation),
+// за да покажем на клиента СЪЩИЯ номер, който после се вижда в "Записи" — преди това картата
+// показваше отделен, чисто локален брояч, който се разминаваше с номера в базата.
 async function pushCalcToSupabase(record, url, key, isUpdate) {
-  if (!url || !key || !record.id) return false;
+  if (!url || !key || !record.id) return { ok: false };
   try {
     const res = isUpdate
       ? await fetch(`${url}/rest/v1/calculations?id=eq.${encodeURIComponent(record.id)}`, {
@@ -1581,15 +1584,18 @@ async function pushCalcToSupabase(record, url, key, isUpdate) {
           headers: supabaseHeaders(key, { "Content-Type": "application/json", Prefer: "return=minimal" }),
           body: JSON.stringify({ status: record.status || "калкулация", data: record }),
         })
-      : await fetch(`${url}/rest/v1/calculations?on_conflict=id`, {
+      : await fetch(`${url}/rest/v1/calculations?on_conflict=id&select=calc_number`, {
           method: "POST",
-          headers: supabaseHeaders(key, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
+          headers: supabaseHeaders(key, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" }),
           body: JSON.stringify({ id: record.id, status: record.status || "калкулация", data: record }),
         });
-    return res.ok;
+    if (!res.ok) return { ok: false };
+    if (isUpdate) return { ok: true };
+    const rows = await res.json().catch(() => null);
+    return { ok: true, calcNumber: rows?.[0]?.calc_number ?? null };
   } catch (e) {
     console.error("supabase push failed", e);
-    return false;
+    return { ok: false };
   }
 }
 
@@ -2273,6 +2279,12 @@ function RecordDetail({ record: r, p, onClose }) {
   const lift = (a) => (!a ? "" : a.elevator ? (a.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор") : "без асансьор");
   const disSet = new Set(r.disassembly || []);
   const asmSet = new Set(r.assembly || []);
+  // докато диалогът е отворен, страницата отдолу не бива да се скролва (особено на телефон)
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/40 p-4" onClick={onClose}>
       <div className="w-full max-w-lg my-8" onClick={(e) => e.stopPropagation()}>
@@ -2427,11 +2439,13 @@ function LogPanel({ onClose, p }) {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState(false);
   const [confirming, setConfirming] = useState(null);
+  const [confirmingWhich, setConfirmingWhich] = useState(null); // ред, чакащ второ потвърждение (inline, не native confirm)
   const [selected, setSelected] = useState(null);
   const refresh = async () => { setRows(null); const d = await loadCalcs(p); setRows(d); setErr(d.length === 0); };
   useEffect(() => { refresh(); }, []);
 
   const confirmRow = async (row) => {
+    setConfirmingWhich(null);
     setConfirming(row.key);
     const { key, ...record } = row;
     record.status = "потвърдена";
@@ -2449,8 +2463,16 @@ function LogPanel({ onClose, p }) {
     a.click();
   };
 
-  const sum = (rows || []).reduce((t, r) => t + (r.total || 0), 0);
+  // разбити по статус — сборът на всичко без значение от статус не казва нищо съдържателно
+  // (смесва чернови, изоставени формуляри и реални потвърдени поръчки)
+  const byStatus = (st) => (rows || []).filter((r) => (r.status || "калкулация") === st);
+  const requests = byStatus("заявка");
+  const confirmed = byStatus("потвърдена");
+  const requestsSum = requests.reduce((t, r) => t + (r.total || 0), 0);
+  const confirmedSum = confirmed.reduce((t, r) => t + (r.total || 0), 0);
   const withContact = (rows || []).filter((r) => r.contact).length;
+  const conversionBase = requests.length + confirmed.length;
+  const conversionPct = conversionBase ? Math.round((confirmed.length / conversionBase) * 100) : null;
   const displayNum = (r) => (r.calcNumber ? `№${r.calcNumber}` : r.key.slice(-5));
 
   return (
@@ -2459,7 +2481,7 @@ function LogPanel({ onClose, p }) {
         <div className="font-bold" style={{ color: ink }}>📋 Записани калкулации</div>
         <div className="flex gap-2">
           <button onClick={refresh} className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600">Обнови</button>
-          {rows?.length > 0 && <button onClick={download} className="text-xs font-semibold px-3 py-1.5 rounded-full text-white" style={{ background: accent }}>Изтегли CSV</button>}
+          {rows?.length > 0 && <button onClick={download} className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600">⬇ Изтегли CSV</button>}
           <button onClick={onClose} className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600">Затвори</button>
         </div>
       </div>
@@ -2475,8 +2497,14 @@ function LogPanel({ onClose, p }) {
 
       {rows?.length > 0 && (
         <>
-          <div className="grid grid-cols-3 gap-2 mb-3">
-            {[["Калкулации", rows.length], ["С контакти", withContact], ["Общо стойност", `${sum} €`]].map(([k, v]) => (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
+            {[
+              ["Всичко", rows.length],
+              ["Заявки", `${requests.length} · ${requestsSum} €`],
+              ["Потвърдени", `${confirmed.length} · ${confirmedSum} €`],
+              ["С контакти", withContact],
+              ["Конверсия", conversionPct == null ? "—" : `${conversionPct}%`],
+            ].map(([k, v]) => (
               <div key={k} className="rounded-xl px-3 py-2" style={{ background: "#eef1f5" }}>
                 <div className="text-[11px] text-slate-500">{k}</div>
                 <div className="font-bold text-sm" style={{ color: ink }}>{v}</div>
@@ -2505,7 +2533,7 @@ function LogPanel({ onClose, p }) {
                     <td className="py-1.5 px-1 text-slate-500 whitespace-nowrap">{r.createdBy || "—"}</td>
                     <td className="py-1.5 px-1 text-slate-700">{recordRouteLabel(r)}</td>
                     <td className="py-1.5 px-1 text-right text-slate-600">{r.volumeM3}</td>
-                    <td className="py-1.5 px-1 text-right font-semibold" style={{ color: ink }}>{r.total} €</td>
+                    <td className="py-1.5 px-1 text-right font-semibold whitespace-nowrap" style={{ color: ink }}>{r.total} €</td>
                     <td className="py-1.5 px-1 whitespace-nowrap">
                       <span className="px-2 py-0.5 rounded-full text-[11px]" style={{
                         background: r.status === "потвърдена" ? "#dcfce7" : r.status === "заявка" ? "#fff8ef" : "#f1f5f9",
@@ -2513,18 +2541,31 @@ function LogPanel({ onClose, p }) {
                       }}>{r.status || "калкулация"}</span>
                     </td>
                     <td className="py-1.5 px-1 whitespace-nowrap">
-                      <div className="flex gap-1 justify-end">
-                        <button onClick={() => setSelected(r)}
-                          className="text-[11px] font-medium px-2 py-1 rounded-full border border-slate-200 text-slate-600">
-                          Отвори
-                        </button>
-                        {r.status !== "потвърдена" && (
+                      {confirmingWhich === r.key ? (
+                        <div className="flex items-center gap-1 justify-end text-[11px]">
+                          <span className="text-slate-500">Сигурни ли сте?</span>
                           <button onClick={() => confirmRow(r)} disabled={confirming === r.key}
-                            className="text-[11px] font-semibold px-2 py-1 rounded-full text-white disabled:opacity-50" style={{ background: ink }}>
-                            {confirming === r.key ? "…" : "Потвърди"}
+                            className="font-semibold px-2 py-1 rounded-full text-white disabled:opacity-50" style={{ background: "#16a34a" }}>
+                            {confirming === r.key ? "…" : "Да, потвърди"}
                           </button>
-                        )}
-                      </div>
+                          <button onClick={() => setConfirmingWhich(null)} className="px-2 py-1 rounded-full border border-slate-200 text-slate-500">
+                            Отказ
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-1 justify-end">
+                          <button onClick={() => setSelected(r)}
+                            className="text-[11px] font-semibold px-2 py-1 rounded-full text-white" style={{ background: ink }}>
+                            Отвори
+                          </button>
+                          {r.status !== "потвърдена" && (
+                            <button onClick={() => setConfirmingWhich(r.key)}
+                              className="text-[11px] font-medium px-2 py-1 rounded-full border border-slate-200 text-slate-600">
+                              Потвърди
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -2721,14 +2762,23 @@ export default function KorektCalculator() {
     }
     const key = recordKey.current;
     const rec = buildRecord(s, p, r, key, recordNumber.current, userName);
+    // само пазим въведения контакт в чернова — статус "заявка" се вдига единствено при
+    // реално натиснат бутон "Изпрати заявка" (submitRequest), не от остатъчен текст в полето
     if (s.name || s.phone || s.email) {
       rec.contact = { name: s.name, phone: s.phone, email: s.email };
-      rec.status = "заявка";
     }
     pending.current = { key, rec };            // готов веднага, дори да не дочакаме таймера
     setSaveState("saving");
     const t = setTimeout(async () => {
-      pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey, pushedRef.current);
+      const wasFirstPush = !pushedRef.current;
+      pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey, pushedRef.current).then((res) => {
+        // номерът от базата е авторитетният — синхронизираме показания номер с него,
+        // за да не се разминава картата с цената от таблицата в "Записи"
+        if (wasFirstPush && res?.ok && res.calcNumber != null && res.calcNumber !== recordNumber.current) {
+          recordNumber.current = res.calcNumber;
+          setCalcNumberState(res.calcNumber);
+        }
+      });
       pushedRef.current = true;
       const ok = await saveCalc(key, rec);
       setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
@@ -2795,7 +2845,13 @@ export default function KorektCalculator() {
     rec.contact = { name: s.name, phone: s.phone, email: s.email };
     rec.status = "заявка";
     setSaveState("saving");
-    pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey, pushedRef.current);
+    const wasFirstPush = !pushedRef.current;
+    pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey, pushedRef.current).then((res) => {
+      if (wasFirstPush && res?.ok && res.calcNumber != null && res.calcNumber !== recordNumber.current) {
+        recordNumber.current = res.calcNumber;
+        setCalcNumberState(res.calcNumber);
+      }
+    });
     pushedRef.current = true;
     const ok = await saveCalc(key, rec);
     setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
