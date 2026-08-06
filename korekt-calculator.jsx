@@ -64,6 +64,8 @@ const DEFAULTS = {
   boxPerFloor: 0.3,      // €/етаж на кашон без асансьор
   appliancePerFloor: 3,  // €/етаж на нормален уред (пералня/хладилник)
   heavyAppliancePerFloor: 5, // €/етаж на нестандартен уред (двуврат хлад., Miele)
+  furniturePerFloor: 3,  // €/етаж на обикновена мебел без асансьор (гардероб, легло, маса...) —
+                          // преди 2026-08-06 тези вещи изобщо не се таксуваха на етаж (мъртва настройка)
 
   // Носене на дълго разстояние до/от камиона (на адрес) — реално време, не само такса
   carryFreeDistanceM: 20,   // м — до толкова разстояние не се брои допълнително
@@ -184,6 +186,17 @@ const CATALOG = [
   ]},
 ];
 const ITEM_INDEX = Object.fromEntries(CATALOG.flatMap((g) => g.items).map((i) => [i.id, i]));
+// латиница → кирилица не се прави еднозначно, затова вървим обратно: транслитерираме
+// кирилските етикети към латиница по официалната БГ транслитерация и сравняваме с нея,
+// за да намираме "hladilnik" при търсене на "Хладилник"
+const BG_TRANSLIT = {
+  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ж: "zh", з: "z", и: "i", й: "y",
+  к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u",
+  ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sht", ъ: "a", ь: "y", ю: "yu", я: "ya",
+};
+function translitBG(str) {
+  return String(str || "").toLowerCase().split("").map((ch) => BG_TRANSLIT[ch] ?? ch).join("");
+}
 const totalVolume = (qty) => Object.entries(qty).reduce((s, [id, cnt]) => s + (ITEM_INDEX[id]?.m3 || 0) * cnt, 0);
 // часове за разглобяване и за сглобяване (по отделни отметки на вещ)
 // Отметките dis/asm може да са:
@@ -230,6 +243,13 @@ const wrapMetersFor = (qty, wrap) =>
 const totalWeight = (qty) =>
   Object.entries(qty).reduce((s, [id, cnt]) => s + (ITEM_INDEX[id]?.kg || 0) * cnt, 0);
 const countKind = (qty, kind) => Object.entries(qty).reduce((s, [id, cnt]) => s + (ITEM_INDEX[id]?.kind === kind ? cnt : 0), 0);
+// вещи без изрична категория (кашон/уред/едрогабаритно) — "обикновена мебел":
+// гардероби, легла, маси, столове и пр. Носят се по стълби също като уредите.
+const FLOOR_FEE_KINDS = new Set(["box", "sack", "appliance", "appliance_heavy", "oversized"]);
+const countFurniture = (qty) => Object.entries(qty).reduce((s, [id, cnt]) => {
+  const it = ITEM_INDEX[id];
+  return s + (it && cnt > 0 && !FLOOR_FEE_KINDS.has(it.kind) ? cnt : 0);
+}, 0);
 
 /* -------- Квартали с приблизителни координати (за оценка на км) -------- */
 const NEIGHBORHOODS = {
@@ -1171,11 +1191,12 @@ function computePrice(s, p) {
   const appNormal = countKind(s.qty, "appliance");
   const appHeavy = countKind(s.qty, "appliance_heavy");
   const oversized = countKind(s.qty, "oversized");
+  const furniture = countFurniture(s.qty); // обикновени мебели (гардероб, легло, маса...) — без категория
   // стандартни вещи: стълби само при липса на асансьор
   const floorsStd = (a) => (a.floor >= 1 && !a.elevator ? a.floor : 0);
   // едрогабаритни (диван 3-ка и под.): не влизат в пътнически асансьор → стълби, освен при товарен
   const floorsOvr = (a) => (a.floor >= 1 && !(a.elevator && a.elevatorType === "cargo") ? a.floor : 0);
-  const perFloorStd = n(p.floorFeeNoElevator) + boxes * n(p.boxPerFloor) + appNormal * n(p.appliancePerFloor) + appHeavy * n(p.heavyAppliancePerFloor);
+  const perFloorStd = n(p.floorFeeNoElevator) + boxes * n(p.boxPerFloor) + appNormal * n(p.appliancePerFloor) + appHeavy * n(p.heavyAppliancePerFloor) + furniture * n(p.furniturePerFloor);
   const perFloorOvr = oversized * n(p.heavyAppliancePerFloor);
   // при изхвърляне няма адрес на доставка (само сметище); при самостоятелно разтоварване стълбите там са за сметка на клиента
   const skipDropoffFloors = isDisposal || selfUnloadMode || usesFieldCrew;
@@ -1187,8 +1208,12 @@ function computePrice(s, p) {
     if (floorsStdTot && boxes) parts.push(`${boxes} каш.`);
     if (floorsStdTot && appNormal) parts.push(`${appNormal} уред`);
     if (floorsStdTot && appHeavy) parts.push(`${appHeavy} спец.`);
+    if (floorsStdTot && furniture) parts.push(`${furniture} мебел`);
     if (floorsOvrTot && oversized) parts.push(`${oversized} едрогаб.`);
-    add(`Стълби без асансьор${parts.length ? " · " + parts.join(", ") : ""}`, stairs);
+    const floorParts = [];
+    if (floorsStd(s.pickup)) floorParts.push(`${s.pickupHood || s.pickupCity || "товарене"}: ${floorsStd(s.pickup)} ет.`);
+    if (!skipDropoffFloors && floorsStd(s.dropoff)) floorParts.push(`${s.dropoffHood || s.dropoffCity || "разтоварване"}: ${floorsStd(s.dropoff)} ет.`);
+    add(`Стълби без асансьор${parts.length ? " · " + parts.join(", ") : ""}${floorParts.length ? " (" + floorParts.join(", ") + ")" : ""}`, stairs);
   }
 
   // ТРАНСПОРТ (перо) — само за времето, в което камионът реално участва.
@@ -1216,7 +1241,7 @@ function computePrice(s, p) {
     add(`Велпапе / автопласт — ${protectMeters} м × ${n(p.protectPricePerM)} ${p.currency}/м`,
         protectMeters * n(p.protectPricePerM), true);
   }
-  if (rolls) add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(3)} ${p.currency}/м`, rolls * n(p.stretchRollPrice), true);
+  if (rolls) add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(4)} ${p.currency}/м`, rolls * n(p.stretchRollPrice), true);
 
   // праг
   const floor = n(p.minPrice[(s.service === "disposal" || usesFieldCrew) ? "local" : s.service]);
@@ -1299,6 +1324,39 @@ async function storageList(prefix) {
 }
 const PARAMS_KEY = "config:pricing";
 const USER_NAME_KEY = "korekt:userName"; // име на колегата на това устройство — само за отбелязване в записите, не е вход/парола
+
+// чернова на текущата (незавършена) калкулация — за да не се губи при презареждане/затворен таб,
+// въпреки надписа "данните се записват автоматично" под формата за заявка
+const DRAFT_KEY = "korekt:draft";
+const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000; // не възстановяваме чернова, по-стара от денонощие
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (!parsed.savedAt || Date.now() - parsed.savedAt > DRAFT_MAX_AGE_MS) return null;
+    return parsed;
+  } catch (e) { return null; }
+}
+function saveDraftLS(step, s) {
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ step, s, savedAt: Date.now() })); }
+  catch (e) { /* без значение — просто няма да се възстанови */ }
+}
+function clearDraftLS() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* без значение */ }
+}
+
+// --- Достъп до вътрешните панели (Записи / Параметри / Марж) ---------------
+// ВНИМАНИЕ: това е само ключалка на ВРАТАТА на UI — спира случаен посетител
+// от едно кликване. НЕ е истинска сигурност: паролата стои в изходния код
+// на страницата (вижда се от всеки, който отвори DevTools), а Supabase anon
+// ключът в DEFAULTS остава публичен и позволява директно четене на таблицата
+// през REST API, независимо от тази ключалка. За истинска защита на личните
+// данни на клиентите трябва Supabase Auth + RLS политика, ограничаваща SELECT
+// само до логнати (автентикирани) потребители — виж бележката в README/паметта.
+const ADMIN_PASSWORD = "korekt-tim-2026"; // смени по всяко време — просто текст тук
+const ADMIN_UNLOCK_KEY = "korekt:adminUnlocked";
 
 // "" (изпразнено поле по средата на писане) не бива да замести число трайно —
 // пази стойността по подразбиране, докато не дойде истинско ново число
@@ -1745,7 +1803,7 @@ function Section({ title, children }) {
   );
 }
 
-function SettingsPanel({ p, setP, saveState }) {
+function SettingsPanel({ p, setP, saveState, notify }) {
   const upd = (patch) => setP({ ...p, ...patch });
 
   const exportParams = () => {
@@ -1762,7 +1820,7 @@ function SettingsPanel({ p, setP, saveState }) {
     const reader = new FileReader();
     reader.onload = () => {
       try { setP(mergeParams(JSON.parse(String(reader.result)))); }
-      catch (err) { alert("Файлът не е валиден файл с настройки."); }
+      catch (err) { notify?.("Файлът не е валиден файл с настройки.", "error"); }
     };
     reader.readAsText(file);
     e.target.value = "";
@@ -1872,6 +1930,7 @@ function SettingsPanel({ p, setP, saveState }) {
           <Num label="Ставка монтаж/демонтаж" value={p.disAsmRate} step={1} onChange={(v) => upd({ disAsmRate: v })} suffix="€/ч" />
           <Num label="Кашон/етаж" value={p.boxPerFloor} step={0.05} onChange={(v) => upd({ boxPerFloor: v })} suffix="€" />
           <Num label="Уред/етаж" value={p.appliancePerFloor} step={0.5} onChange={(v) => upd({ appliancePerFloor: v })} suffix="€" />
+          <Num label="Мебел/етаж" value={p.furniturePerFloor} step={0.5} onChange={(v) => upd({ furniturePerFloor: v })} suffix="€" />
           <Num label="Спец. уред/етаж" value={p.heavyAppliancePerFloor} step={0.5} onChange={(v) => upd({ heavyAppliancePerFloor: v })} suffix="€" />
           <Num label="Плоска база/етаж" value={p.floorFeeNoElevator} step={0.5} onChange={(v) => upd({ floorFeeNoElevator: v })} suffix="€" />
           <Num label="Безплатно носене до" value={p.carryFreeDistanceM} step={5} onChange={(v) => upd({ carryFreeDistanceM: v })} suffix="м" />
@@ -2117,7 +2176,7 @@ function RecordDetail({ record: r, p, onClose }) {
           <div className="grid grid-cols-2 gap-2 mt-4">
             {[
               ["Време труд", `${(r.manHours || 0).toFixed(1)} чч`],
-              ["Бригада", `${r.crew} души · ${(r.hours || 0).toFixed(1)} ч`],
+              ["Бригада · общо на обекта", `${r.crew} души · ${(r.hours || 0).toFixed(1)} ч`],
               ["Курсове", `${r.trips || 0}`],
               ["Дни за изпълнение", `${r.workDays || 1} ${r.workDays === 1 ? "ден" : "дни"}`],
             ].map(([k, v]) => (
@@ -2365,8 +2424,21 @@ function LogPanel({ onClose, p }) {
   );
 }
 
+// начално състояние на калкулацията (стъпка 1) — извадено извън компонента, за да служи и като
+// база при сливане с възстановена чернова (schema-safe, ако по-късно добавим ново поле)
+const INITIAL_S = {
+  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {},
+  pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
+  dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
+  extras: { packing: false, materials: false, disassembly: false },
+  name: "", phone: "", email: "",
+};
+
 export default function KorektCalculator() {
-  const [step, setStep] = useState(0);
+  // възстановяваме недовършена калкулация (ако има) — веднъж, синхронно, преди първия рендер
+  const [initialDraft] = useState(() => loadDraft());
+  const [step, setStep] = useState(() => initialDraft?.step || 0);
+  const [draftRestored] = useState(() => !!(initialDraft?.s?.service));
   const [userName, setUserNameState] = useState(() => {
     try { return localStorage.getItem(USER_NAME_KEY) || ""; } catch (e) { return ""; }
   });
@@ -2374,17 +2446,34 @@ export default function KorektCalculator() {
     setUserNameState(name);
     try { localStorage.setItem(USER_NAME_KEY, name); } catch (e) { /* без значение */ }
   };
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(userName);
+  // ненатрапчиво съобщение долу вдясно — заменя alert(), не блокира страницата
+  const [toast, setToast] = useState(null); // { msg, kind: "info"|"success"|"error" }
+  const toastTimer = useRef(null);
+  const notify = (msg, kind = "info") => {
+    setToast({ msg, kind });
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), kind === "error" ? 7000 : 4000);
+  };
   const [showSettings, setShowSettings] = useState(false);
+  // вътрешни панели зад лека парола — виж бележката при ADMIN_PASSWORD по-горе
+  const [adminUnlocked, setAdminUnlocked] = useState(() => {
+    try { return sessionStorage.getItem(ADMIN_UNLOCK_KEY) === "1"; } catch (e) { return false; }
+  });
+  const [pendingAdminAction, setPendingAdminAction] = useState(null); // функция, изчакваща парола
+  const [adminPw, setAdminPw] = useState("");
+  const guardAdmin = (action) => {
+    if (adminUnlocked) { action(); return; }
+    setAdminPw("");
+    setPendingAdminAction(() => action);
+  };
   const [p, setP] = useState(() => structuredClone(DEFAULTS));
   const [openGroups, setOpenGroups] = useState({ "Хол и трапезария": true });
   const [itemSearch, setItemSearch] = useState("");
-  const [s, setS] = useState({
-    service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {},
-    pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
-    dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
-    extras: { packing: false, materials: false, disassembly: false },
-    name: "", phone: "", email: "",
-  });
+  const [s, setS] = useState(() =>
+    initialDraft?.s ? { ...INITIAL_S, ...initialDraft.s } : structuredClone(INITIAL_S)
+  );
   const set = (patch) => setS((prev) => ({ ...prev, ...patch }));
   const setQty = (id, cnt) => setS((prev) => ({ ...prev, qty: { ...prev.qty, [id]: cnt } }));
   const toggle = (field, id) => setS((prev) => ({ ...prev, [field]: { ...prev[field], [id]: !prev[field][id] } }));
@@ -2454,6 +2543,18 @@ export default function KorektCalculator() {
     }, 600);
     return () => clearTimeout(t);
   }, [p, paramsLoaded]);
+
+  // --- чернова на текущата калкулация (за да наистина не се губи при презареждане) ---
+  useEffect(() => {
+    if (!s.service) { clearDraftLS(); return; } // нищо избрано още — няма какво да пазим
+    const t = setTimeout(() => saveDraftLS(step, s), 400);
+    return () => clearTimeout(t);
+  }, [step, s]);
+
+  useEffect(() => {
+    if (draftRestored) notify("Възстановихме предишната Ви незавършена калкулация.", "info");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // --- автоматичен запис на калкулацията при показване на цената ---
   const [showLog, setShowLog] = useState(false);
@@ -2533,6 +2634,10 @@ export default function KorektCalculator() {
   }, [p.supabaseUrl, p.supabaseKey]);
 
   const submitRequest = async () => {
+    if (!s.name.trim() || !s.phone.trim()) {
+      notify("Моля, попълнете поне име и телефон, за да изпратите заявка.", "error");
+      return;
+    }
     const key = recordKey.current || `${CALC_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     recordKey.current = key;
     const rec = buildRecord(s, p, r, key, recordNumber.current, userName);
@@ -2543,9 +2648,11 @@ export default function KorektCalculator() {
     pushedRef.current = true;
     const ok = await saveCalc(key, rec);
     setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
-    alert(ok
+    if (ok) clearDraftLS(); // заявката е потвърдена — чернова вече не е нужна
+    notify(ok
       ? "Заявката е записана. Ще се свържем с Вас."
-      : "Заявката не можа да се запише автоматично. Моля, обадете се на " + p.phone + ".");
+      : "Заявката не можа да се запише автоматично. Моля, обадете се на " + p.phone + ".",
+      ok ? "success" : "error");
   };
 
   const canNext =
@@ -2562,20 +2669,33 @@ export default function KorektCalculator() {
             <div className="text-xs text-slate-500 -mt-0.5">Калкулатор за приблизителна цена</div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => { const name = prompt("Твоето име (показва се в записите като автор на калкулацията):", userName); if (name !== null) setUserName(name.trim()); }}
-              className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-              style={{ borderColor: userName ? ink : "#e2e6ec", color: userName ? ink : "#64748b" }}>👤 {userName || "Кой сте Вие?"}</button>
-            <button onClick={() => setShowLog((v) => !v)}
-              className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-              style={{ borderColor: showLog ? ink : "#e2e6ec", color: showLog ? ink : "#64748b" }}>📋 Записи</button>
-            {step === 3 && vol >= 0 && total > 0 && (
-              <button onClick={() => setShowMargin((v) => !v)}
+            {editingName ? (
+              <form onSubmit={(e) => { e.preventDefault(); setUserName(nameDraft.trim()); setEditingName(false); }}>
+                <input autoFocus value={nameDraft} onChange={(e) => setNameDraft(e.target.value)}
+                  onBlur={() => { setUserName(nameDraft.trim()); setEditingName(false); }}
+                  onKeyDown={(e) => { if (e.key === "Escape") { setNameDraft(userName); setEditingName(false); } }}
+                  placeholder="Твоето име"
+                  title="Показва се в записите като автор на калкулацията"
+                  className="text-sm font-semibold px-3 py-2 rounded-full border outline-none w-36"
+                  style={{ borderColor: ink }} />
+              </form>
+            ) : (
+              <button onClick={() => { setNameDraft(userName); setEditingName(true); }}
+                title="Показва се в записите като автор на калкулацията"
                 className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-                style={{ borderColor: showMargin ? "#b45309" : "#e2e6ec", color: showMargin ? "#b45309" : "#64748b" }}>💰 Марж</button>
+                style={{ borderColor: userName ? ink : "#e2e6ec", color: userName ? ink : "#64748b" }}>👤 {userName || "Кой сте Вие?"}</button>
             )}
-            <button onClick={() => setShowSettings((v) => !v)}
+            <button onClick={() => guardAdmin(() => setShowLog((v) => !v))}
               className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-              style={{ borderColor: showSettings ? accent : "#e2e6ec", color: showSettings ? accent : "#64748b" }}>⚙ Параметри</button>
+              style={{ borderColor: showLog ? ink : "#e2e6ec", color: showLog ? ink : "#64748b" }}>{adminUnlocked ? "📋" : "🔒"} Записи</button>
+            {step === 3 && vol >= 0 && total > 0 && (
+              <button onClick={() => guardAdmin(() => setShowMargin((v) => !v))}
+                className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+                style={{ borderColor: showMargin ? "#b45309" : "#e2e6ec", color: showMargin ? "#b45309" : "#64748b" }}>{adminUnlocked ? "💰" : "🔒"} Марж</button>
+            )}
+            <button onClick={() => guardAdmin(() => setShowSettings((v) => !v))}
+              className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+              style={{ borderColor: showSettings ? accent : "#e2e6ec", color: showSettings ? accent : "#64748b" }}>{adminUnlocked ? "⚙" : "🔒"} Параметри</button>
             <a href={p.phoneHref} className="text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: ink }}>{p.phone}</a>
           </div>
         </div>
@@ -2604,7 +2724,7 @@ export default function KorektCalculator() {
             </div>
           </div>
         )}
-        {showSettings && <SettingsPanel p={p} setP={setP} saveState={paramSave} />}
+        {showSettings && <SettingsPanel p={p} setP={setP} saveState={paramSave} notify={notify} />}
 
         <div className="flex gap-2 mb-8">
           {STEPS.map((label, i) => (
@@ -2623,12 +2743,12 @@ export default function KorektCalculator() {
                 <h2 className="text-xl font-bold" style={{ color: ink }}>Какъв тип услуга Ви трябва?</h2>
                 {[
                   { id: "local", t: "Градско преместване", d: "В рамките на Вашия град", m: p.minPrice.local },
-                  { id: "intercity", t: "Междуградско", d: "От всяка точка на страната", m: 0 },
+                  { id: "intercity", t: "Междуградско", d: "От всяка точка на страната", m: 0, tag: "цена по километри" },
                   { id: "international", t: "Международно", d: "Транспорт от и за ЕС", m: p.minPrice.international },
-                  { id: "disposal", t: "Изхвърляне на отпадък", d: "Изнасяне и извозване до сметище", m: 0 },
-                  { id: "labour", t: "Само хамали (без камион)", d: "Опаковане, разглобяване и товарене в Ваш транспорт", m: 0 },
-                  { id: "assembly", t: "Монтаж на мебели", d: "Напр. офис мебели — само монтаж, без пренасяне", m: 0 },
-                  { id: "trd", t: "Товаро-разтоварна дейност", d: "Товарене/разтоварване на тир или камион на място", m: 0 },
+                  { id: "disposal", t: "Изхвърляне на отпадък", d: "Изнасяне и извозване до сметище", m: 0, tag: "цена по обем" },
+                  { id: "labour", t: "Само хамали (без камион)", d: "Опаковане, разглобяване и товарене във Ваш транспорт", m: 0, tag: "цена на час" },
+                  { id: "assembly", t: "Монтаж на мебели", d: "Напр. офис мебели — само монтаж, без пренасяне", m: 0, tag: "цена на час" },
+                  { id: "trd", t: "Товаро-разтоварна дейност", d: "Товарене/разтоварване на тир или камион на място", m: 0, tag: "цена на час" },
                 ].map((o) => (
                   <button key={o.id} onClick={() => { set({ service: o.id, truckId: null }); setStep(1); }}
                     className={`w-full text-left rounded-2xl border p-5 bg-white transition hover:shadow-sm ${s.service === o.id ? "" : "border-slate-200"}`}
@@ -2639,7 +2759,7 @@ export default function KorektCalculator() {
                         {o.m ? (
                           <><div className="text-xs text-slate-400">от</div><div className="font-bold" style={{ color: accent }}>{o.m} {p.currency}</div></>
                         ) : (
-                          <div className="text-xs text-slate-400">цена по километри</div>
+                          <div className="text-xs text-slate-400">{o.tag || "цена по договаряне"}</div>
                         )}
                       </div>
                     </div>
@@ -2949,8 +3069,12 @@ export default function KorektCalculator() {
                     <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden mb-3">
                       {(() => {
                         const q = itemSearch.trim().toLowerCase();
-                        const hits = CATALOG.flatMap((g) => g.items)
-                          .filter((it) => it.label.toLowerCase().includes(q));
+                        const qLatin = translitBG(q);
+                        const hits = CATALOG.flatMap((g) => g.items.map((it) => ({ ...it, group: g.group })))
+                          .filter((it) => {
+                            const label = it.label.toLowerCase();
+                            return label.includes(q) || translitBG(label).includes(qLatin);
+                          });
                         if (!hits.length) return <div className="px-4 py-3 text-sm text-slate-400">Няма намерена вещ.</div>;
                         return (
                           <div className="px-4 py-1 divide-y divide-slate-50">
@@ -2961,7 +3085,7 @@ export default function KorektCalculator() {
                                   <div className="min-w-0 pr-3">
                                     <div className="text-sm text-slate-700 truncate">{it.label}</div>
                                     <div className="text-xs text-slate-400">
-                                      {it.m3} м³ · {it.kg} кг/бр{cnt > 0 ? ` · избрани ${cnt}` : ""}
+                                      {it.group} · {it.m3} м³ · {it.kg} кг/бр{cnt > 0 ? ` · избрани ${cnt}` : ""}
                                     </div>
                                   </div>
                                   <Stepper value={cnt} onChange={(v) => setQty(it.id, v)} />
@@ -2973,7 +3097,7 @@ export default function KorektCalculator() {
                       })()}
                     </div>
                   )}
-                  {vol > 0 && !itemSearch.trim() && (
+                  {vol > 0 && (
                     <div className="rounded-2xl border-2 bg-white p-4 mb-3" style={{ borderColor: accent }}>
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-semibold" style={{ color: ink }}>Избрани вещи</span>
@@ -3118,7 +3242,8 @@ export default function KorektCalculator() {
                         </div>
                       </div>
                       <div className="w-24">
-                        <Num value={s.hoursOverride || ""} step={0.5} onChange={(v) => set({ hoursOverride: v || 0 })} suffix="ч" />
+                        <Num value={hoursManual ? s.hoursOverride : Number(autoHandlingClock.toFixed(1))}
+                          step={0.5} onChange={(v) => set({ hoursOverride: v || 0 })} suffix="ч" />
                       </div>
                     </div>
                     {hoursManual && (
@@ -3275,7 +3400,9 @@ export default function KorektCalculator() {
                   </p>
                   {wrapMeters > 0 && (
                     <div className="text-xs mt-2" style={{ color: ink }}>
-                      Стреч: <b>{wrapMeters} м</b> → <b>{rolls.toFixed(1)} ролки</b> × {p.stretchRollPrice} {p.currency}
+                      Стреч: <b>{wrapMeters} м</b> × {(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(4)} {p.currency}/м
+                      {" ≈ "}<b>{(rolls * n(p.stretchRollPrice)).toFixed(2)} {p.currency}</b>
+                      <span className="text-slate-400"> (материал за {rolls.toFixed(2)} ролки, таксува се пропорционално)</span>
                     </div>
                   )}
                   {protectMeters > 0 && (
@@ -3321,7 +3448,7 @@ export default function KorektCalculator() {
                   <div className="grid grid-cols-2 gap-2 mt-4">
                     {[
                       ["Време труд", `${manHours.toFixed(1)} чч`],
-                      ["Бригада", `${isDisposal ? disposalTotalCrew : crew} души${crewByProtocol ? " (протокол)" : ""} · ${clockHours.toFixed(1)} ч`],
+                      ["Бригада · общо на обекта", `${isDisposal ? disposalTotalCrew : crew} души${crewByProtocol ? " (протокол)" : ""} · ${clockHours.toFixed(1)} ч`],
                       ["Курсове", `${trips}`],
                       ["Дни за изпълнение", `${workDays} ${workDays === 1 ? "ден" : "дни"}${workDays > 1 ? ` (макс. ${p.dayHours} ч/ден)` : ""}`],
                     ].map(([k, v]) => (
@@ -3397,6 +3524,9 @@ export default function KorektCalculator() {
                       <span className="text-right" style={{ color: ink }}>
                         {s.pickup.building}, {s.pickup.floor === 0 ? "партер" : `${s.pickup.floor} ет.`} ·{" "}
                         {s.pickup.elevator ? (s.pickup.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор") : "без асансьор"}
+                        {n(s.pickup.carryDistanceM) > n(p.carryFreeDistanceM || 0) && (
+                          <> · <b>{s.pickup.carryDistanceM} м</b> до камиона</>
+                        )}
                       </span>
                     </div>
                     <div className="flex justify-between gap-3">
@@ -3404,6 +3534,9 @@ export default function KorektCalculator() {
                       <span className="text-right" style={{ color: ink }}>
                         {s.dropoff.building}, {s.dropoff.floor === 0 ? "партер" : `${s.dropoff.floor} ет.`} ·{" "}
                         {s.dropoff.elevator ? (s.dropoff.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор") : "без асансьор"}
+                        {!(isDisposal || selfUnloadMode || usesFieldCrew) && n(s.dropoff.carryDistanceM) > n(p.carryFreeDistanceM || 0) && (
+                          <> · <b>{s.dropoff.carryDistanceM} м</b> до камиона</>
+                        )}
                       </span>
                     </div>
                   </div>
@@ -3461,7 +3594,7 @@ export default function KorektCalculator() {
                   </div>
 
                   <p className="text-xs text-slate-500 mt-4 pt-3 border-t border-slate-100 leading-relaxed">
-                    Тази цена е ориентировъчна, генерирана на база нашия опит с изкуствен интелект.
+                    Тази цена е ориентировъчна, изчислена по нашата ценова формула на база дългогодишния ни опит.
                     Запазваме си правото за обоснована промяна на генерираната цена.
                   </p>
                 </div>
@@ -3498,6 +3631,40 @@ export default function KorektCalculator() {
           {/* Sidebar */}
         </div>
       </div>
+      {toast && (
+        <div role="status" className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-sm px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white flex items-start gap-3"
+          style={{ background: toast.kind === "error" ? "#dc2626" : toast.kind === "success" ? "#16a34a" : ink }}>
+          <span>{toast.msg}</span>
+          <button onClick={() => setToast(null)} aria-label="Затвори" className="opacity-70 hover:opacity-100 leading-none">✕</button>
+        </div>
+      )}
+      {pendingAdminAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setPendingAdminAction(null)}>
+          <form onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (adminPw === ADMIN_PASSWORD) {
+                setAdminUnlocked(true);
+                try { sessionStorage.setItem(ADMIN_UNLOCK_KEY, "1"); } catch (err) { /* без значение */ }
+                const action = pendingAdminAction;
+                setPendingAdminAction(null);
+                action();
+              } else {
+                notify("Грешна парола.", "error");
+              }
+            }}
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <div className="text-sm font-semibold mb-1" style={{ color: ink }}>🔒 Вътрешен достъп</div>
+            <p className="text-xs text-slate-500 mb-3">Записите, параметрите и маржът съдържат вътрешни данни и данни на клиенти — само за екипа.</p>
+            <input autoFocus type="password" value={adminPw} onChange={(e) => setAdminPw(e.target.value)}
+              placeholder="Парола" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mb-3" />
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => setPendingAdminAction(null)} className="text-sm px-3 py-2 text-slate-500">Отказ</button>
+              <button type="submit" className="text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: accent }}>Вход</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

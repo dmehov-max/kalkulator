@@ -168,6 +168,9 @@ const DEFAULTS = {
   // €/етаж на нормален уред (пералня/хладилник)
   heavyAppliancePerFloor: 5,
   // €/етаж на нестандартен уред (двуврат хлад., Miele)
+  furniturePerFloor: 3,
+  // €/етаж на обикновена мебел без асансьор (гардероб, легло, маса...) —
+  // преди 2026-08-06 тези вещи изобщо не се таксуваха на етаж (мъртва настройка)
 
   // Носене на дълго разстояние до/от камиона (на адрес) — реално време, не само такса
   carryFreeDistanceM: 20,
@@ -696,6 +699,44 @@ const CATALOG = [{
   }]
 }];
 const ITEM_INDEX = Object.fromEntries(CATALOG.flatMap(g => g.items).map(i => [i.id, i]));
+// латиница → кирилица не се прави еднозначно, затова вървим обратно: транслитерираме
+// кирилските етикети към латиница по официалната БГ транслитерация и сравняваме с нея,
+// за да намираме "hladilnik" при търсене на "Хладилник"
+const BG_TRANSLIT = {
+  а: "a",
+  б: "b",
+  в: "v",
+  г: "g",
+  д: "d",
+  е: "e",
+  ж: "zh",
+  з: "z",
+  и: "i",
+  й: "y",
+  к: "k",
+  л: "l",
+  м: "m",
+  н: "n",
+  о: "o",
+  п: "p",
+  р: "r",
+  с: "s",
+  т: "t",
+  у: "u",
+  ф: "f",
+  х: "h",
+  ц: "ts",
+  ч: "ch",
+  ш: "sh",
+  щ: "sht",
+  ъ: "a",
+  ь: "y",
+  ю: "yu",
+  я: "ya"
+};
+function translitBG(str) {
+  return String(str || "").toLowerCase().split("").map(ch => BG_TRANSLIT[ch] ?? ch).join("");
+}
 const totalVolume = qty => Object.entries(qty).reduce((s, [id, cnt]) => s + (ITEM_INDEX[id]?.m3 || 0) * cnt, 0);
 // часове за разглобяване и за сглобяване (по отделни отметки на вещ)
 // Отметките dis/asm може да са:
@@ -743,6 +784,13 @@ const wrapMetersFor = (qty, wrap) => Object.entries(qty).reduce((s, [id, cnt]) =
 }, 0);
 const totalWeight = qty => Object.entries(qty).reduce((s, [id, cnt]) => s + (ITEM_INDEX[id]?.kg || 0) * cnt, 0);
 const countKind = (qty, kind) => Object.entries(qty).reduce((s, [id, cnt]) => s + (ITEM_INDEX[id]?.kind === kind ? cnt : 0), 0);
+// вещи без изрична категория (кашон/уред/едрогабаритно) — "обикновена мебел":
+// гардероби, легла, маси, столове и пр. Носят се по стълби също като уредите.
+const FLOOR_FEE_KINDS = new Set(["box", "sack", "appliance", "appliance_heavy", "oversized"]);
+const countFurniture = qty => Object.entries(qty).reduce((s, [id, cnt]) => {
+  const it = ITEM_INDEX[id];
+  return s + (it && cnt > 0 && !FLOOR_FEE_KINDS.has(it.kind) ? cnt : 0);
+}, 0);
 
 /* -------- Квартали с приблизителни координати (за оценка на км) -------- */
 const NEIGHBORHOODS = {
@@ -2606,11 +2654,12 @@ function computePrice(s, p) {
   const appNormal = countKind(s.qty, "appliance");
   const appHeavy = countKind(s.qty, "appliance_heavy");
   const oversized = countKind(s.qty, "oversized");
+  const furniture = countFurniture(s.qty); // обикновени мебели (гардероб, легло, маса...) — без категория
   // стандартни вещи: стълби само при липса на асансьор
   const floorsStd = a => a.floor >= 1 && !a.elevator ? a.floor : 0;
   // едрогабаритни (диван 3-ка и под.): не влизат в пътнически асансьор → стълби, освен при товарен
   const floorsOvr = a => a.floor >= 1 && !(a.elevator && a.elevatorType === "cargo") ? a.floor : 0;
-  const perFloorStd = n(p.floorFeeNoElevator) + boxes * n(p.boxPerFloor) + appNormal * n(p.appliancePerFloor) + appHeavy * n(p.heavyAppliancePerFloor);
+  const perFloorStd = n(p.floorFeeNoElevator) + boxes * n(p.boxPerFloor) + appNormal * n(p.appliancePerFloor) + appHeavy * n(p.heavyAppliancePerFloor) + furniture * n(p.furniturePerFloor);
   const perFloorOvr = oversized * n(p.heavyAppliancePerFloor);
   // при изхвърляне няма адрес на доставка (само сметище); при самостоятелно разтоварване стълбите там са за сметка на клиента
   const skipDropoffFloors = isDisposal || selfUnloadMode || usesFieldCrew;
@@ -2622,8 +2671,12 @@ function computePrice(s, p) {
     if (floorsStdTot && boxes) parts.push(`${boxes} каш.`);
     if (floorsStdTot && appNormal) parts.push(`${appNormal} уред`);
     if (floorsStdTot && appHeavy) parts.push(`${appHeavy} спец.`);
+    if (floorsStdTot && furniture) parts.push(`${furniture} мебел`);
     if (floorsOvrTot && oversized) parts.push(`${oversized} едрогаб.`);
-    add(`Стълби без асансьор${parts.length ? " · " + parts.join(", ") : ""}`, stairs);
+    const floorParts = [];
+    if (floorsStd(s.pickup)) floorParts.push(`${s.pickupHood || s.pickupCity || "товарене"}: ${floorsStd(s.pickup)} ет.`);
+    if (!skipDropoffFloors && floorsStd(s.dropoff)) floorParts.push(`${s.dropoffHood || s.dropoffCity || "разтоварване"}: ${floorsStd(s.dropoff)} ет.`);
+    add(`Стълби без асансьор${parts.length ? " · " + parts.join(", ") : ""}${floorParts.length ? " (" + floorParts.join(", ") + ")" : ""}`, stairs);
   }
 
   // ТРАНСПОРТ (перо) — само за времето, в което камионът реално участва.
@@ -2649,7 +2702,7 @@ function computePrice(s, p) {
   if (protectMeters) {
     add(`Велпапе / автопласт — ${protectMeters} м × ${n(p.protectPricePerM)} ${p.currency}/м`, protectMeters * n(p.protectPricePerM), true);
   }
-  if (rolls) add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(3)} ${p.currency}/м`, rolls * n(p.stretchRollPrice), true);
+  if (rolls) add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(4)} ${p.currency}/м`, rolls * n(p.stretchRollPrice), true);
 
   // праг
   const floor = n(p.minPrice[s.service === "disposal" || usesFieldCrew ? "local" : s.service]);
@@ -2835,6 +2888,48 @@ async function storageList(prefix) {
 }
 const PARAMS_KEY = "config:pricing";
 const USER_NAME_KEY = "korekt:userName"; // име на колегата на това устройство — само за отбелязване в записите, не е вход/парола
+
+// чернова на текущата (незавършена) калкулация — за да не се губи при презареждане/затворен таб,
+// въпреки надписа "данните се записват автоматично" под формата за заявка
+const DRAFT_KEY = "korekt:draft";
+const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000; // не възстановяваме чернова, по-стара от денонощие
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (!parsed.savedAt || Date.now() - parsed.savedAt > DRAFT_MAX_AGE_MS) return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+function saveDraftLS(step, s) {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      step,
+      s,
+      savedAt: Date.now()
+    }));
+  } catch (e) {/* без значение — просто няма да се възстанови */}
+}
+function clearDraftLS() {
+  try {
+    localStorage.removeItem(DRAFT_KEY);
+  } catch (e) {/* без значение */}
+}
+
+// --- Достъп до вътрешните панели (Записи / Параметри / Марж) ---------------
+// ВНИМАНИЕ: това е само ключалка на ВРАТАТА на UI — спира случаен посетител
+// от едно кликване. НЕ е истинска сигурност: паролата стои в изходния код
+// на страницата (вижда се от всеки, който отвори DevTools), а Supabase anon
+// ключът в DEFAULTS остава публичен и позволява директно четене на таблицата
+// през REST API, независимо от тази ключалка. За истинска защита на личните
+// данни на клиентите трябва Supabase Auth + RLS политика, ограничаваща SELECT
+// само до логнати (автентикирани) потребители — виж бележката в README/паметта.
+const ADMIN_PASSWORD = "korekt-tim-2026"; // смени по всяко време — просто текст тук
+const ADMIN_UNLOCK_KEY = "korekt:adminUnlocked";
 
 // "" (изпразнено поле по средата на писане) не бива да замести число трайно —
 // пази стойността по подразбиране, докато не дойде истинско ново число
@@ -3441,7 +3536,8 @@ function Section({
 function SettingsPanel({
   p,
   setP,
-  saveState
+  saveState,
+  notify
 }) {
   const upd = patch => setP({
     ...p,
@@ -3464,7 +3560,7 @@ function SettingsPanel({
       try {
         setP(mergeParams(JSON.parse(String(reader.result))));
       } catch (err) {
-        alert("Файлът не е валиден файл с настройки.");
+        notify?.("Файлът не е валиден файл с настройки.", "error");
       }
     };
     reader.readAsText(file);
@@ -3816,6 +3912,14 @@ function SettingsPanel({
     step: 0.5,
     onChange: v => upd({
       appliancePerFloor: v
+    }),
+    suffix: "€"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Мебел/етаж",
+    value: p.furniturePerFloor,
+    step: 0.5,
+    onChange: v => upd({
+      furniturePerFloor: v
     }),
     suffix: "€"
   }), /*#__PURE__*/React.createElement(Num, {
@@ -4425,7 +4529,7 @@ function RecordDetail({
     }
   }, r.weightKg, " кг"))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-2 mt-4"
-  }, [["Време труд", `${(r.manHours || 0).toFixed(1)} чч`], ["Бригада", `${r.crew} души · ${(r.hours || 0).toFixed(1)} ч`], ["Курсове", `${r.trips || 0}`], ["Дни за изпълнение", `${r.workDays || 1} ${r.workDays === 1 ? "ден" : "дни"}`]].map(([k, v]) => /*#__PURE__*/React.createElement("div", {
+  }, [["Време труд", `${(r.manHours || 0).toFixed(1)} чч`], ["Бригада · общо на обекта", `${r.crew} души · ${(r.hours || 0).toFixed(1)} ч`], ["Курсове", `${r.trips || 0}`], ["Дни за изпълнение", `${r.workDays || 1} ${r.workDays === 1 ? "ден" : "дни"}`]].map(([k, v]) => /*#__PURE__*/React.createElement("div", {
     key: k,
     className: "rounded-xl px-3 py-2",
     style: {
@@ -4755,8 +4859,65 @@ function LogPanel({
     onClose: () => setSelected(null)
   }));
 }
+
+// начално състояние на калкулацията (стъпка 1) — извадено извън компонента, за да служи и като
+// база при сливане с възстановена чернова (schema-safe, ако по-късно добавим ново поле)
+const INITIAL_S = {
+  service: null,
+  city: "",
+  country: "",
+  km: 0,
+  localKm: 12,
+  pickupHood: "",
+  dropoffHood: "",
+  pickupCity: "",
+  dropoffCity: "",
+  truckId: null,
+  courseMode: "hourly",
+  baseCity: "",
+  labourBase: "",
+  crewOverride: 0,
+  manualHours: 0,
+  kmOverride: 0,
+  hoursOverride: 0,
+  forceCar: false,
+  weFill: true,
+  landfillKm: 0,
+  wasteType: "household",
+  disposalTrucks: 1,
+  qty: {},
+  dis: {},
+  asm: {},
+  wrap: {},
+  protect: {},
+  pickup: {
+    building: "Апартамент",
+    floor: 0,
+    elevator: false,
+    elevatorType: "passenger",
+    carryDistanceM: 0
+  },
+  dropoff: {
+    building: "Апартамент",
+    floor: 0,
+    elevator: false,
+    elevatorType: "passenger",
+    carryDistanceM: 0
+  },
+  extras: {
+    packing: false,
+    materials: false,
+    disassembly: false
+  },
+  name: "",
+  phone: "",
+  email: ""
+};
 function KorektCalculator() {
-  const [step, setStep] = useState(0);
+  // възстановяваме недовършена калкулация (ако има) — веднъж, синхронно, преди първия рендер
+  const [initialDraft] = useState(() => loadDraft());
+  const [step, setStep] = useState(() => initialDraft?.step || 0);
+  const [draftRestored] = useState(() => !!initialDraft?.s?.service);
   const [userName, setUserNameState] = useState(() => {
     try {
       return localStorage.getItem(USER_NAME_KEY) || "";
@@ -4770,63 +4931,47 @@ function KorektCalculator() {
       localStorage.setItem(USER_NAME_KEY, name);
     } catch (e) {/* без значение */}
   };
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(userName);
+  // ненатрапчиво съобщение долу вдясно — заменя alert(), не блокира страницата
+  const [toast, setToast] = useState(null); // { msg, kind: "info"|"success"|"error" }
+  const toastTimer = useRef(null);
+  const notify = (msg, kind = "info") => {
+    setToast({
+      msg,
+      kind
+    });
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), kind === "error" ? 7000 : 4000);
+  };
   const [showSettings, setShowSettings] = useState(false);
+  // вътрешни панели зад лека парола — виж бележката при ADMIN_PASSWORD по-горе
+  const [adminUnlocked, setAdminUnlocked] = useState(() => {
+    try {
+      return sessionStorage.getItem(ADMIN_UNLOCK_KEY) === "1";
+    } catch (e) {
+      return false;
+    }
+  });
+  const [pendingAdminAction, setPendingAdminAction] = useState(null); // функция, изчакваща парола
+  const [adminPw, setAdminPw] = useState("");
+  const guardAdmin = action => {
+    if (adminUnlocked) {
+      action();
+      return;
+    }
+    setAdminPw("");
+    setPendingAdminAction(() => action);
+  };
   const [p, setP] = useState(() => structuredClone(DEFAULTS));
   const [openGroups, setOpenGroups] = useState({
     "Хол и трапезария": true
   });
   const [itemSearch, setItemSearch] = useState("");
-  const [s, setS] = useState({
-    service: null,
-    city: "",
-    country: "",
-    km: 0,
-    localKm: 12,
-    pickupHood: "",
-    dropoffHood: "",
-    pickupCity: "",
-    dropoffCity: "",
-    truckId: null,
-    courseMode: "hourly",
-    baseCity: "",
-    labourBase: "",
-    crewOverride: 0,
-    manualHours: 0,
-    kmOverride: 0,
-    hoursOverride: 0,
-    forceCar: false,
-    weFill: true,
-    landfillKm: 0,
-    wasteType: "household",
-    disposalTrucks: 1,
-    qty: {},
-    dis: {},
-    asm: {},
-    wrap: {},
-    protect: {},
-    pickup: {
-      building: "Апартамент",
-      floor: 0,
-      elevator: false,
-      elevatorType: "passenger",
-      carryDistanceM: 0
-    },
-    dropoff: {
-      building: "Апартамент",
-      floor: 0,
-      elevator: false,
-      elevatorType: "passenger",
-      carryDistanceM: 0
-    },
-    extras: {
-      packing: false,
-      materials: false,
-      disassembly: false
-    },
-    name: "",
-    phone: "",
-    email: ""
-  });
+  const [s, setS] = useState(() => initialDraft?.s ? {
+    ...INITIAL_S,
+    ...initialDraft.s
+  } : structuredClone(INITIAL_S));
   const set = patch => setS(prev => ({
     ...prev,
     ...patch
@@ -4996,6 +5141,20 @@ function KorektCalculator() {
     return () => clearTimeout(t);
   }, [p, paramsLoaded]);
 
+  // --- чернова на текущата калкулация (за да наистина не се губи при презареждане) ---
+  useEffect(() => {
+    if (!s.service) {
+      clearDraftLS();
+      return;
+    } // нищо избрано още — няма какво да пазим
+    const t = setTimeout(() => saveDraftLS(step, s), 400);
+    return () => clearTimeout(t);
+  }, [step, s]);
+  useEffect(() => {
+    if (draftRestored) notify("Възстановихме предишната Ви незавършена калкулация.", "info");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // --- автоматичен запис на калкулацията при показване на цената ---
   const [showLog, setShowLog] = useState(false);
   const [showMargin, setShowMargin] = useState(false);
@@ -5083,6 +5242,10 @@ function KorektCalculator() {
     };
   }, [p.supabaseUrl, p.supabaseKey]);
   const submitRequest = async () => {
+    if (!s.name.trim() || !s.phone.trim()) {
+      notify("Моля, попълнете поне име и телефон, за да изпратите заявка.", "error");
+      return;
+    }
     const key = recordKey.current || `${CALC_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     recordKey.current = key;
     const rec = buildRecord(s, p, r, key, recordNumber.current, userName);
@@ -5097,7 +5260,8 @@ function KorektCalculator() {
     pushedRef.current = true;
     const ok = await saveCalc(key, rec);
     setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
-    alert(ok ? "Заявката е записана. Ще се свържем с Вас." : "Заявката не можа да се запише автоматично. Моля, обадете се на " + p.phone + ".");
+    if (ok) clearDraftLS(); // заявката е потвърдена — чернова вече не е нужна
+    notify(ok ? "Заявката е записана. Ще се свържем с Вас." : "Заявката не можа да се запише автоматично. Моля, обадете се на " + p.phone + ".", ok ? "success" : "error");
   };
   const canNext = step === 0 && s.service || step === 1 && (s.service === "labour" || isManualHoursService ? !!findCity(s.city) : s.service === "disposal" ? !!s.city : s.service === "local" ? s.city && (!NEIGHBORHOODS[s.city] || s.pickupHood.trim() && s.dropoffHood.trim()) : s.service === "intercity" ? !!findCity(s.pickupCity) && !!findCity(s.dropoffCity) : s.country) || step === 2 && (isManualHoursService ? n(s.manualHours || 0) > 0 : vol > 0);
   return /*#__PURE__*/React.createElement("div", {
@@ -5123,38 +5287,65 @@ function KorektCalculator() {
     className: "text-xs text-slate-500 -mt-0.5"
   }, "Калкулатор за приблизителна цена")), /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-2"
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      const name = prompt("Твоето име (показва се в записите като автор на калкулацията):", userName);
-      if (name !== null) setUserName(name.trim());
+  }, editingName ? /*#__PURE__*/React.createElement("form", {
+    onSubmit: e => {
+      e.preventDefault();
+      setUserName(nameDraft.trim());
+      setEditingName(false);
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    autoFocus: true,
+    value: nameDraft,
+    onChange: e => setNameDraft(e.target.value),
+    onBlur: () => {
+      setUserName(nameDraft.trim());
+      setEditingName(false);
     },
+    onKeyDown: e => {
+      if (e.key === "Escape") {
+        setNameDraft(userName);
+        setEditingName(false);
+      }
+    },
+    placeholder: "Твоето име",
+    title: "Показва се в записите като автор на калкулацията",
+    className: "text-sm font-semibold px-3 py-2 rounded-full border outline-none w-36",
+    style: {
+      borderColor: ink
+    }
+  })) : /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setNameDraft(userName);
+      setEditingName(true);
+    },
+    title: "Показва се в записите като автор на калкулацията",
     className: "text-sm font-semibold px-3 py-2 rounded-full border transition",
     style: {
       borderColor: userName ? ink : "#e2e6ec",
       color: userName ? ink : "#64748b"
     }
   }, "👤 ", userName || "Кой сте Вие?"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setShowLog(v => !v),
+    onClick: () => guardAdmin(() => setShowLog(v => !v)),
     className: "text-sm font-semibold px-3 py-2 rounded-full border transition",
     style: {
       borderColor: showLog ? ink : "#e2e6ec",
       color: showLog ? ink : "#64748b"
     }
-  }, "📋 Записи"), step === 3 && vol >= 0 && total > 0 && /*#__PURE__*/React.createElement("button", {
-    onClick: () => setShowMargin(v => !v),
+  }, adminUnlocked ? "📋" : "🔒", " Записи"), step === 3 && vol >= 0 && total > 0 && /*#__PURE__*/React.createElement("button", {
+    onClick: () => guardAdmin(() => setShowMargin(v => !v)),
     className: "text-sm font-semibold px-3 py-2 rounded-full border transition",
     style: {
       borderColor: showMargin ? "#b45309" : "#e2e6ec",
       color: showMargin ? "#b45309" : "#64748b"
     }
-  }, "💰 Марж"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setShowSettings(v => !v),
+  }, adminUnlocked ? "💰" : "🔒", " Марж"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => guardAdmin(() => setShowSettings(v => !v)),
     className: "text-sm font-semibold px-3 py-2 rounded-full border transition",
     style: {
       borderColor: showSettings ? accent : "#e2e6ec",
       color: showSettings ? accent : "#64748b"
     }
-  }, "⚙ Параметри"), /*#__PURE__*/React.createElement("a", {
+  }, adminUnlocked ? "⚙" : "🔒", " Параметри"), /*#__PURE__*/React.createElement("a", {
     href: p.phoneHref,
     className: "text-sm font-semibold px-4 py-2 rounded-full text-white",
     style: {
@@ -5215,7 +5406,8 @@ function KorektCalculator() {
   }, margin, " ", p.currency, " (", marginPercent.toFixed(1), "%)")))), showSettings && /*#__PURE__*/React.createElement(SettingsPanel, {
     p: p,
     setP: setP,
-    saveState: paramSave
+    saveState: paramSave,
+    notify: notify
   }), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-2 mb-8"
   }, STEPS.map((label, i) => /*#__PURE__*/React.createElement("div", {
@@ -5251,7 +5443,8 @@ function KorektCalculator() {
     id: "intercity",
     t: "Междуградско",
     d: "От всяка точка на страната",
-    m: 0
+    m: 0,
+    tag: "цена по километри"
   }, {
     id: "international",
     t: "Международно",
@@ -5261,22 +5454,26 @@ function KorektCalculator() {
     id: "disposal",
     t: "Изхвърляне на отпадък",
     d: "Изнасяне и извозване до сметище",
-    m: 0
+    m: 0,
+    tag: "цена по обем"
   }, {
     id: "labour",
     t: "Само хамали (без камион)",
-    d: "Опаковане, разглобяване и товарене в Ваш транспорт",
-    m: 0
+    d: "Опаковане, разглобяване и товарене във Ваш транспорт",
+    m: 0,
+    tag: "цена на час"
   }, {
     id: "assembly",
     t: "Монтаж на мебели",
     d: "Напр. офис мебели — само монтаж, без пренасяне",
-    m: 0
+    m: 0,
+    tag: "цена на час"
   }, {
     id: "trd",
     t: "Товаро-разтоварна дейност",
     d: "Товарене/разтоварване на тир или камион на място",
-    m: 0
+    m: 0,
+    tag: "цена на час"
   }].map(o => /*#__PURE__*/React.createElement("button", {
     key: o.id,
     onClick: () => {
@@ -5311,7 +5508,7 @@ function KorektCalculator() {
     }
   }, o.m, " ", p.currency)) : /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-slate-400"
-  }, "цена по километри")))))), step === 1 && /*#__PURE__*/React.createElement("div", {
+  }, o.tag || "цена по договаряне")))))), step === 1 && /*#__PURE__*/React.createElement("div", {
     className: "space-y-4"
   }, /*#__PURE__*/React.createElement("h2", {
     className: "text-xl font-bold",
@@ -5679,7 +5876,14 @@ function KorektCalculator() {
     className: "rounded-2xl border border-slate-200 bg-white overflow-hidden mb-3"
   }, (() => {
     const q = itemSearch.trim().toLowerCase();
-    const hits = CATALOG.flatMap(g => g.items).filter(it => it.label.toLowerCase().includes(q));
+    const qLatin = translitBG(q);
+    const hits = CATALOG.flatMap(g => g.items.map(it => ({
+      ...it,
+      group: g.group
+    }))).filter(it => {
+      const label = it.label.toLowerCase();
+      return label.includes(q) || translitBG(label).includes(qLatin);
+    });
     if (!hits.length) return /*#__PURE__*/React.createElement("div", {
       className: "px-4 py-3 text-sm text-slate-400"
     }, "Няма намерена вещ.");
@@ -5696,12 +5900,12 @@ function KorektCalculator() {
         className: "text-sm text-slate-700 truncate"
       }, it.label), /*#__PURE__*/React.createElement("div", {
         className: "text-xs text-slate-400"
-      }, it.m3, " м³ · ", it.kg, " кг/бр", cnt > 0 ? ` · избрани ${cnt}` : "")), /*#__PURE__*/React.createElement(Stepper, {
+      }, it.group, " · ", it.m3, " м³ · ", it.kg, " кг/бр", cnt > 0 ? ` · избрани ${cnt}` : "")), /*#__PURE__*/React.createElement(Stepper, {
         value: cnt,
         onChange: v => setQty(it.id, v)
       }));
     }));
-  })()), vol > 0 && !itemSearch.trim() && /*#__PURE__*/React.createElement("div", {
+  })()), vol > 0 && /*#__PURE__*/React.createElement("div", {
     className: "rounded-2xl border-2 bg-white p-4 mb-3",
     style: {
       borderColor: accent
@@ -5896,7 +6100,7 @@ function KorektCalculator() {
   }, " · променено ръчно"))), /*#__PURE__*/React.createElement("div", {
     className: "w-24"
   }, /*#__PURE__*/React.createElement(Num, {
-    value: s.hoursOverride || "",
+    value: hoursManual ? s.hoursOverride : Number(autoHandlingClock.toFixed(1)),
     step: 0.5,
     onChange: v => set({
       hoursOverride: v || 0
@@ -6116,7 +6320,9 @@ function KorektCalculator() {
     style: {
       color: ink
     }
-  }, "Стреч: ", /*#__PURE__*/React.createElement("b", null, wrapMeters, " м"), " → ", /*#__PURE__*/React.createElement("b", null, rolls.toFixed(1), " ролки"), " × ", p.stretchRollPrice, " ", p.currency), protectMeters > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "Стреч: ", /*#__PURE__*/React.createElement("b", null, wrapMeters, " м"), " × ", (n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(4), " ", p.currency, "/м", " ≈ ", /*#__PURE__*/React.createElement("b", null, (rolls * n(p.stretchRollPrice)).toFixed(2), " ", p.currency), /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-400"
+  }, " (материал за ", rolls.toFixed(2), " ролки, таксува се пропорционално)")), protectMeters > 0 && /*#__PURE__*/React.createElement("div", {
     className: "text-xs mt-1",
     style: {
       color: ink
@@ -6167,7 +6373,7 @@ function KorektCalculator() {
     }
   }, weight, " кг"))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-2 mt-4"
-  }, [["Време труд", `${manHours.toFixed(1)} чч`], ["Бригада", `${isDisposal ? disposalTotalCrew : crew} души${crewByProtocol ? " (протокол)" : ""} · ${clockHours.toFixed(1)} ч`], ["Курсове", `${trips}`], ["Дни за изпълнение", `${workDays} ${workDays === 1 ? "ден" : "дни"}${workDays > 1 ? ` (макс. ${p.dayHours} ч/ден)` : ""}`]].map(([k, v]) => /*#__PURE__*/React.createElement("div", {
+  }, [["Време труд", `${manHours.toFixed(1)} чч`], ["Бригада · общо на обекта", `${isDisposal ? disposalTotalCrew : crew} души${crewByProtocol ? " (протокол)" : ""} · ${clockHours.toFixed(1)} ч`], ["Курсове", `${trips}`], ["Дни за изпълнение", `${workDays} ${workDays === 1 ? "ден" : "дни"}${workDays > 1 ? ` (макс. ${p.dayHours} ч/ден)` : ""}`]].map(([k, v]) => /*#__PURE__*/React.createElement("div", {
     key: k,
     className: "rounded-xl px-3 py-2",
     style: {
@@ -6259,7 +6465,7 @@ function KorektCalculator() {
     style: {
       color: ink
     }
-  }, s.pickup.building, ", ", s.pickup.floor === 0 ? "партер" : `${s.pickup.floor} ет.`, " ·", " ", s.pickup.elevator ? s.pickup.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор" : "без асансьор")), /*#__PURE__*/React.createElement("div", {
+  }, s.pickup.building, ", ", s.pickup.floor === 0 ? "партер" : `${s.pickup.floor} ет.`, " ·", " ", s.pickup.elevator ? s.pickup.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор" : "без асансьор", n(s.pickup.carryDistanceM) > n(p.carryFreeDistanceM || 0) && /*#__PURE__*/React.createElement(React.Fragment, null, " · ", /*#__PURE__*/React.createElement("b", null, s.pickup.carryDistanceM, " м"), " до камиона"))), /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between gap-3"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-slate-500"
@@ -6268,7 +6474,7 @@ function KorektCalculator() {
     style: {
       color: ink
     }
-  }, s.dropoff.building, ", ", s.dropoff.floor === 0 ? "партер" : `${s.dropoff.floor} ет.`, " ·", " ", s.dropoff.elevator ? s.dropoff.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор" : "без асансьор"))), /*#__PURE__*/React.createElement("div", {
+  }, s.dropoff.building, ", ", s.dropoff.floor === 0 ? "партер" : `${s.dropoff.floor} ет.`, " ·", " ", s.dropoff.elevator ? s.dropoff.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор" : "без асансьор", !(isDisposal || selfUnloadMode || usesFieldCrew) && n(s.dropoff.carryDistanceM) > n(p.carryFreeDistanceM || 0) && /*#__PURE__*/React.createElement(React.Fragment, null, " · ", /*#__PURE__*/React.createElement("b", null, s.dropoff.carryDistanceM, " м"), " до камиона")))), /*#__PURE__*/React.createElement("div", {
     className: "text-xs font-semibold text-slate-400 uppercase tracking-wide mt-4 mb-2"
   }, "Вещи"), /*#__PURE__*/React.createElement("div", {
     className: "space-y-1"
@@ -6326,7 +6532,7 @@ function KorektCalculator() {
     }
   }, /*#__PURE__*/React.createElement("span", null, "Общо"), /*#__PURE__*/React.createElement("span", null, total, " ", p.currency))), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-slate-500 mt-4 pt-3 border-t border-slate-100 leading-relaxed"
-  }, "Тази цена е ориентировъчна, генерирана на база нашия опит с изкуствен интелект. Запазваме си правото за обоснована промяна на генерираната цена.")), /*#__PURE__*/React.createElement("div", {
+  }, "Тази цена е ориентировъчна, изчислена по нашата ценова формула на база дългогодишния ни опит. Запазваме си правото за обоснована промяна на генерираната цена.")), /*#__PURE__*/React.createElement("div", {
     className: "rounded-2xl border border-slate-200 bg-white p-5"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-sm font-semibold mb-1",
@@ -6380,7 +6586,63 @@ function KorektCalculator() {
     style: {
       background: ink
     }
-  }, step === 2 ? "Изчисли цена →" : "Напред →"))))));
+  }, step === 2 ? "Изчисли цена →" : "Напред →"))))), toast && /*#__PURE__*/React.createElement("div", {
+    role: "status",
+    className: "fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-sm px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white flex items-start gap-3",
+    style: {
+      background: toast.kind === "error" ? "#dc2626" : toast.kind === "success" ? "#16a34a" : ink
+    }
+  }, /*#__PURE__*/React.createElement("span", null, toast.msg), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setToast(null),
+    "aria-label": "Затвори",
+    className: "opacity-70 hover:opacity-100 leading-none"
+  }, "✕")), pendingAdminAction && /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4",
+    onClick: () => setPendingAdminAction(null)
+  }, /*#__PURE__*/React.createElement("form", {
+    onClick: e => e.stopPropagation(),
+    onSubmit: e => {
+      e.preventDefault();
+      if (adminPw === ADMIN_PASSWORD) {
+        setAdminUnlocked(true);
+        try {
+          sessionStorage.setItem(ADMIN_UNLOCK_KEY, "1");
+        } catch (err) {/* без значение */}
+        const action = pendingAdminAction;
+        setPendingAdminAction(null);
+        action();
+      } else {
+        notify("Грешна парола.", "error");
+      }
+    },
+    className: "w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-sm font-semibold mb-1",
+    style: {
+      color: ink
+    }
+  }, "🔒 Вътрешен достъп"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-slate-500 mb-3"
+  }, "Записите, параметрите и маржът съдържат вътрешни данни и данни на клиенти — само за екипа."), /*#__PURE__*/React.createElement("input", {
+    autoFocus: true,
+    type: "password",
+    value: adminPw,
+    onChange: e => setAdminPw(e.target.value),
+    placeholder: "Парола",
+    className: "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mb-3"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2 justify-end"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setPendingAdminAction(null),
+    className: "text-sm px-3 py-2 text-slate-500"
+  }, "Отказ"), /*#__PURE__*/React.createElement("button", {
+    type: "submit",
+    className: "text-sm font-semibold px-4 py-2 rounded-full text-white",
+    style: {
+      background: accent
+    }
+  }, "Вход")))));
 }
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(KorektCalculator));
 </script>

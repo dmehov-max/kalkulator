@@ -752,6 +752,20 @@ test("стълби: партер не се таксува", () => {
   const r = calc({ qty: { washer: 1, sofa3: 1 }, pickup: addr(0, false) });
   eq(stairAmount(r), 0);
 });
+test("стълби: обикновена мебел (гардероб, без категория) по €/етаж на мебел", () => {
+  const r = calc({ qty: { wardrobe2: 1 }, pickup: addr(2, false) });
+  eq(stairAmount(r), 2 * P.furniturePerFloor);
+});
+test("стълби: диван 2-местен (без категория) НЕ е освободен от такса", () => {
+  const r = calc({ qty: { sofa2: 2 }, pickup: addr(5, false), dropoff: addr(5, false) });
+  ok(stairAmount(r) > 0, "мебелите без категория трябва да се таксуват на етаж");
+  eq(stairAmount(r), 2 /* адреса */ * 5 /* етажа */ * 2 /* дивана */ * P.furniturePerFloor);
+});
+test("стълби: без асансьор на голяма мебел променя крайната цена спрямо партер", () => {
+  const партер = calc({ qty: { sofa2: 2 }, pickup: addr(0, false), dropoff: addr(0, false) });
+  const петиЕтаж = calc({ qty: { sofa2: 2 }, pickup: addr(5, false), dropoff: addr(5, false) });
+  ok(петиЕтаж.total > партер.total, "5-и етаж без асансьор трябва да е по-скъпо от партер дори само с мебели");
+});
 
 
 /* --- Демонтаж/монтаж по вещ --- */
@@ -1066,6 +1080,14 @@ test("стреч: материалът влиза като отделно пер
   const line = r.lines.find((l) => l.label.startsWith("Стреч"));
   ok(line, "липсва перо за стреч фолио");
   near(line.amount, r.rolls * P.stretchRollPrice, 0.01);
+});
+test("стреч: показаната ставка на метър, умножена по метрите, съвпада с показаната сума", () => {
+  // регресия: ставката се показваше закръглена до 3 знака ("0.047"), а сумата се смяташе
+  // с пълна точност — 20×0.047=0.94 на екран срещу реално начислени 0.93
+  const r = calc({ qty: { sofa2: 2, boxM: 20 } });
+  const line = r.lines.find((l) => l.label.startsWith("Стреч"));
+  const rateShown = Number(line.label.match(/× ([\d.]+) €\/м/)[1]);
+  near(rateShown * r.wrapMeters, line.amount, 0.01, "показаната ставка × метрите трябва да съвпада със сумата:");
 });
 test("стреч: опаковането добавя и часове труд", () => {
   const r = calc({ qty: { fridge: 1, washer: 1 } });
