@@ -116,7 +116,7 @@ const DEFAULTS = {
 
   supabaseUrl: "https://ncwiyhndgyssepaqyiss.supabase.co",     // Supabase проект — база данни за калкулации и настройки
   supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jd2l5aG5kZ3lzc2VwYXF5aXNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzMjU0MzUsImV4cCI6MjEwMDkwMTQzNX0.ve7p8ZKe0DYgD_LrY0rcPyHAGF-NNLuh0R-2noess7w", // anon public ключ — безопасен за браузъра
-  mapsApiKey: "",        // Google Maps Routes API ключ — за реални пътни разстояния
+  mapsApiKey: "",        // Google Maps Routes API ключ — за реални пътни разстояния (пази се в Supabase, не тук — виж README)
 
   phone: "0882 944 098",
   phoneHref: "tel:+359882944098",
