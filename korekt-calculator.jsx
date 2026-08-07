@@ -2249,7 +2249,7 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify }) {
       <Section title="Партньорски камиони (междуградско/международно)">
         <div className="space-y-2">
           {p.partnerTrucks.map((t, i) => (
-            <div key={t.id} className="grid grid-cols-[1fr_90px_90px_100px_28px] gap-2 items-end">
+            <div key={t.id} className="grid grid-cols-2 sm:grid-cols-[1fr_90px_90px_100px_28px] gap-2 items-end">
               <label className="block">
                 <span className="text-[11px] text-slate-500">Име</span>
                 <input value={t.name} onChange={(e) => setPartner(i, { name: e.target.value })}
@@ -2260,7 +2260,7 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify }) {
               <Num label="€/км" value={t.kmRate ?? ""} step={0.05} onChange={(v) => setPartner(i, { kmRate: v })} />
               <Num label="Товароносимост" value={t.payloadKg ?? ""} step={100} onChange={(v) => setPartner(i, { payloadKg: v })} suffix="кг" />
               <button onClick={() => upd({ partnerTrucks: p.partnerTrucks.filter((_, j) => j !== i) })}
-                className="w-7 h-9 rounded-lg border border-slate-200 text-slate-400 hover:text-red-500">×</button>
+                className="col-span-2 sm:col-span-1 sm:w-7 h-9 rounded-lg border border-slate-200 text-slate-400 hover:text-red-500">×</button>
             </div>
           ))}
           <button onClick={() => upd({ partnerTrucks: [...p.partnerTrucks, { id: "p" + Date.now(), name: "Нов камион", capacity: 30, kmRate: n(p.kmRate) || 0.7, payloadKg: 3500 }] })}
@@ -3327,12 +3327,12 @@ export default function KorektCalculator() {
   return (
     <div className="min-h-screen w-full" style={{ background: "#f6f7f9", fontFamily: "'Inter', system-ui, sans-serif" }}>
       <div className="max-w-3xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
           <div>
             <div className="text-2xl font-extrabold tracking-tight" style={{ color: ink }}>КОРЕКТ<span style={{ color: accent }}>.</span></div>
             <div className="text-xs text-slate-500 -mt-0.5">Калкулатор за приблизителна цена</div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {editingName ? (
               <form onSubmit={(e) => { e.preventDefault(); setUserName(nameDraft.trim()); setEditingName(false); }}>
                 <input autoFocus value={nameDraft} onChange={(e) => setNameDraft(e.target.value)}
@@ -3408,7 +3408,7 @@ export default function KorektCalculator() {
           ))}
         </div>
 
-        <div className="grid gap-6 items-start">
+        <div className="grid grid-cols-1 gap-6 items-start">
           <div className="space-y-4">
             {/* STEP 0 */}
             {step === 0 && (
@@ -3587,7 +3587,7 @@ export default function KorektCalculator() {
                         <div>
                           <label className="block text-sm font-medium text-slate-600 mb-1">Квартали</label>
                           <p className="text-xs text-slate-400 mb-3">Започнете да пишете и изберете квартал от списъка — километрите се изчисляват автоматично.</p>
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <HoodInput city={s.city} value={s.pickupHood} onChange={(v) => set({ pickupHood: v })} placeholder="Квартал на товарене" />
                             <HoodInput city={s.city} value={s.dropoffHood} onChange={(v) => set({ dropoffHood: v })} placeholder="Квартал на разтоварване" />
                           </div>
@@ -3763,7 +3763,7 @@ export default function KorektCalculator() {
                               return (
                                 <div key={it.id} className="py-2.5 flex items-center justify-between">
                                   <div className="min-w-0 pr-3">
-                                    <div className="text-sm text-slate-700 truncate">{it.label}</div>
+                                    <div className="text-sm text-slate-700">{it.label}</div>
                                     <div className="text-xs text-slate-400">
                                       {it.group} · {it.m3} м³ · {it.kg} кг/бр · 🪜 {floorFeeRateFor(it, p)}{p.currency}/ет. на бр. ({FLOOR_FEE_LABEL[it.kind] || "мебел"}){cnt > 0 ? ` · избрани ${cnt}` : ""}
                                     </div>
@@ -3821,7 +3821,7 @@ export default function KorektCalculator() {
                                   <div key={it.id} className="py-2.5">
                                     <div className="flex items-center justify-between">
                                       <div className="min-w-0 pr-3">
-                                        <div className="text-sm text-slate-700 truncate">{it.label}</div>
+                                        <div className="text-sm text-slate-700">{it.label}</div>
                                         <div className="text-xs text-slate-400">
                                           {it.m3} м³ · {it.kg} кг/бр · 🪜 {floorFeeRateFor(it, p)}{p.currency}/ет. на бр. ({FLOOR_FEE_LABEL[it.kind] || "мебел"}){it.surcharge ? ` · спец. +${it.surcharge}${p.currency}` : ""}
                                           {cnt > 0 ? ` · = ${(cnt * it.m3).toFixed(2)} м³ / ${cnt * it.kg} кг` : ""}
