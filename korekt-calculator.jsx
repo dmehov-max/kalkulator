@@ -3342,6 +3342,54 @@ export default function KorektCalculator() {
     (step === 1 && (s.service === "labour" || isManualHoursService ? !!findCity(s.city) : s.service === "disposal" ? !!s.city : s.service === "local" ? (s.city && (!NEIGHBORHOODS[s.city] || (s.pickupHood.trim() && s.dropoffHood.trim()))) : s.service === "intercity" ? (!!findCity(s.pickupCity) && !!findCity(s.dropoffCity)) : s.country)) ||
     (step === 2 && (isManualHoursService ? n(s.manualHours || 0) > 0 : vol > 0));
 
+  // Целият калкулатор е затворен зад вход — никой без юзър/парола не вижда съветника,
+  // не само Записи/Параметри/Марж. Влизането ползва същия Supabase Auth като преди.
+  if (!authSession) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center p-4" style={{ background: "#f6f7f9", fontFamily: "'Inter', system-ui, sans-serif" }}>
+        <form onSubmit={loginMode === "signup" ? doSignup : doLogin}
+          className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-slate-200">
+          <div className="text-2xl font-extrabold tracking-tight mb-1" style={{ color: ink }}>КОРЕКТ<span style={{ color: accent }}>.</span></div>
+          <div className="text-xs text-slate-500 mb-5">Калкулатор за приблизителна цена — само за екипа</div>
+          {signupDone ? (
+            <>
+              <div className="text-sm font-semibold mb-1" style={{ color: ink }}>📧 Проверете пощата си</div>
+              <p className="text-xs text-slate-500 mb-3">
+                Изпратихме линк за потвърждение на <b>{loginEmail}</b>. Кликнете го, после влезте оттук с паролата, която зададохте.
+              </p>
+              <button type="button" onClick={() => { setSignupDone(false); setLoginMode("signin"); }}
+                className="text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: accent }}>Разбрах</button>
+            </>
+          ) : (
+            <>
+              <div className="text-sm font-semibold mb-1" style={{ color: ink }}>
+                {loginMode === "signup" ? "📝 Регистрация за екипа" : "🔒 Вход за екипа"}
+              </div>
+              <p className="text-xs text-slate-500 mb-3">
+                {loginMode === "signup"
+                  ? `Само с @${SIGNUP_ALLOWED_DOMAIN} имейл.`
+                  : "Калкулаторът е достъпен само за логнати колеги."}
+              </p>
+              <input autoFocus type="email" autoComplete="username" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)}
+                placeholder="Имейл" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mb-2" />
+              <input type="password" autoComplete={loginMode === "signup" ? "new-password" : "current-password"} value={loginPw} onChange={(e) => setLoginPw(e.target.value)}
+                placeholder="Парола" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mb-3" />
+              {loginError && <p className="text-xs mb-3" style={{ color: "#dc2626" }}>{loginError}</p>}
+              <button type="submit" disabled={loginBusy}
+                className="w-full text-sm font-semibold px-4 py-2.5 rounded-full text-white disabled:opacity-50 mb-2" style={{ background: accent }}>
+                {loginBusy ? "…" : loginMode === "signup" ? "Регистрация" : "Вход"}
+              </button>
+              <button type="button" onClick={() => { setLoginMode((m) => (m === "signup" ? "signin" : "signup")); setLoginError(null); }}
+                className="text-xs text-slate-500 underline">
+                {loginMode === "signup" ? "Вече имам акаунт" : "Нямам акаунт — регистрация"}
+              </button>
+            </>
+          )}
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full" style={{ background: "#f6f7f9", fontFamily: "'Inter', system-ui, sans-serif" }}>
       <div className="max-w-3xl mx-auto px-4 py-8">
