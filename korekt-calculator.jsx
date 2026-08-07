@@ -1694,12 +1694,15 @@ function supabaseHeaders(key, extra) {
   return { apikey: key, Authorization: `Bearer ${key}`, ...extra };
 }
 
-async function pushParamsToSupabase(p, url, key) {
+// session (по избор): ако е подаден, заявката минава с JWT-а на логнатия потребител
+// вместо анонимния ключ — нужно е, ако/когато в Supabase се сложи RLS политика,
+// ограничаваща writes върху calc_params до конкретен имейл (виж README)
+async function pushParamsToSupabase(p, url, key, session) {
   if (!url || !key) return false;
   try {
     const res = await fetch(`${url}/rest/v1/calc_params?on_conflict=id`, {
       method: "POST",
-      headers: supabaseHeaders(key, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
+      headers: authHeaders(session, key, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
       body: JSON.stringify({ id: "pricing", value: p }),
     });
     return res.ok;
@@ -2117,10 +2120,14 @@ function Section({ title, children }) {
   );
 }
 
-function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify }) {
+// само този имейл може да редактира ценовите параметри — останалите логнати колеги
+// виждат панела само за справка (заключен), но си запазват достъп до Записи/редакция на калкулации
+const PARAMS_EDITOR_EMAIL = "d.mehov@korekt-bg.com";
+function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify, session }) {
   const upd = (patch) => setP({ ...p, ...patch });
   const syncedAt = syncedAtMs ? new Date(syncedAtMs).toLocaleTimeString("bg-BG", { hour: "2-digit", minute: "2-digit" }) : null;
   const [confirmReset, setConfirmReset] = useState(false);
+  const isParamsEditor = (session?.email || "").trim().toLowerCase() === PARAMS_EDITOR_EMAIL;
 
   const exportParams = () => {
     const blob = new Blob([JSON.stringify(p, null, 2)], { type: "application/json" });
@@ -2173,6 +2180,12 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify }) {
         </div>
       </div>
 
+      {!isParamsEditor && (
+        <div className="mb-4 rounded-xl px-4 py-3 text-sm" style={{ background: "#fff4e5", color: "#92400e" }}>
+          🔒 Само {PARAMS_EDITOR_EMAIL} може да редактира параметрите — тук ги виждаш само за справка.
+        </div>
+      )}
+      <div className={isParamsEditor ? "" : "pointer-events-none opacity-60"} aria-disabled={!isParamsEditor}>
       <Section title="Отклонение върху крайната цена">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Num label="Коеф. отклонение" value={p.deviationFactor} step={0.01} onChange={(v) => upd({ deviationFactor: v })} suffix="×" />
@@ -2424,6 +2437,7 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify }) {
       <p className="text-[11px] text-slate-400 mt-2">
         Свалените настройки са файл, който можете да заредите по всяко време — работи и когато средата не пази данни.
       </p>
+      </div>
     </div>
   );
 }
@@ -3150,12 +3164,12 @@ export default function KorektCalculator() {
         if (JSON.stringify(clean) !== JSON.stringify(p)) setP(clean);
         const okLocal = await saveParams(clean);
         const hasRemoteConfig = !!(clean.supabaseUrl && clean.supabaseKey);
-        let okRemote = await pushParamsToSupabase(clean, clean.supabaseUrl, clean.supabaseKey);
+        let okRemote = await pushParamsToSupabase(clean, clean.supabaseUrl, clean.supabaseKey, authSession);
         if (!okRemote && hasRemoteConfig && !cancelled) {
           // споделената база не отговори (напр. заспал проект/503) — един автоматичен повторен опит
           await new Promise((r) => setTimeout(r, 4000));
           if (cancelled) return;
-          okRemote = await pushParamsToSupabase(clean, clean.supabaseUrl, clean.supabaseKey);
+          okRemote = await pushParamsToSupabase(clean, clean.supabaseUrl, clean.supabaseKey, authSession);
         }
         if (cancelled) return;
         if (okRemote) setParamSyncedAt(Date.now());
@@ -3166,7 +3180,7 @@ export default function KorektCalculator() {
       })();
     }, 600);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [p, paramsLoaded]);
+  }, [p, paramsLoaded, authSession]);
 
   // при възстановена чернова пазим СЪЩИЯ ключ/номер на записа, вместо да създаваме нов —
   // иначе презареждане на страницата трупа дубликати (№2, №3...) за една и съща заявка
@@ -3400,7 +3414,7 @@ export default function KorektCalculator() {
         )}
         {/* остава монтиран, само скрит — за да не се затварят отворените секции при всяко отваряне на панела */}
         <div style={{ display: showSettings ? "block" : "none" }}>
-          <SettingsPanel p={p} setP={setP} saveState={paramSave} syncedAt={paramSyncedAt} notify={notify} />
+          <SettingsPanel p={p} setP={setP} saveState={paramSave} syncedAt={paramSyncedAt} notify={notify} session={authSession} />
         </div>
 
         <div className="flex gap-2 mb-8">

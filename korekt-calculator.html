@@ -3598,12 +3598,16 @@ function supabaseHeaders(key, extra) {
     ...extra
   };
 }
-async function pushParamsToSupabase(p, url, key) {
+
+// session (по избор): ако е подаден, заявката минава с JWT-а на логнатия потребител
+// вместо анонимния ключ — нужно е, ако/когато в Supabase се сложи RLS политика,
+// ограничаваща writes върху calc_params до конкретен имейл (виж README)
+async function pushParamsToSupabase(p, url, key, session) {
   if (!url || !key) return false;
   try {
     const res = await fetch(`${url}/rest/v1/calc_params?on_conflict=id`, {
       method: "POST",
-      headers: supabaseHeaders(key, {
+      headers: authHeaders(session, key, {
         "Content-Type": "application/json",
         Prefer: "resolution=merge-duplicates,return=minimal"
       }),
@@ -4175,12 +4179,17 @@ function Section({
     className: "mt-1 pb-1"
   }, children));
 }
+
+// само този имейл може да редактира ценовите параметри — останалите логнати колеги
+// виждат панела само за справка (заключен), но си запазват достъп до Записи/редакция на калкулации
+const PARAMS_EDITOR_EMAIL = "d.mehov@korekt-bg.com";
 function SettingsPanel({
   p,
   setP,
   saveState,
   syncedAt: syncedAtMs,
-  notify
+  notify,
+  session
 }) {
   const upd = patch => setP({
     ...p,
@@ -4191,6 +4200,7 @@ function SettingsPanel({
     minute: "2-digit"
   }) : null;
   const [confirmReset, setConfirmReset] = useState(false);
+  const isParamsEditor = (session?.email || "").trim().toLowerCase() === PARAMS_EDITOR_EMAIL;
   const exportParams = () => {
     const blob = new Blob([JSON.stringify(p, null, 2)], {
       type: "application/json"
@@ -4259,7 +4269,16 @@ function SettingsPanel({
     style: {
       color: saveState === "error" || saveState === "sync-error" ? "#dc2626" : saveState === "saved-sheet" ? "#16a34a" : saveState === "saved" ? "#b45309" : "#94a3b8"
     }
-  }, saveState === "saving" ? "Записване…" : saveState === "saved-sheet" ? `Записано в споделената база ✓${syncedAt ? ` (${syncedAt})` : ""}` : saveState === "sync-error" ? "⚠ Не се синхронизира с екипа — пазено само в този браузър" : saveState === "saved" ? "⚠ Само локално (без споделена база)" : saveState === "unavailable" ? "Важи за сесията (без трайно хранилище)" : saveState === "error" ? "Грешка при запис" : "")), /*#__PURE__*/React.createElement(Section, {
+  }, saveState === "saving" ? "Записване…" : saveState === "saved-sheet" ? `Записано в споделената база ✓${syncedAt ? ` (${syncedAt})` : ""}` : saveState === "sync-error" ? "⚠ Не се синхронизира с екипа — пазено само в този браузър" : saveState === "saved" ? "⚠ Само локално (без споделена база)" : saveState === "unavailable" ? "Важи за сесията (без трайно хранилище)" : saveState === "error" ? "Грешка при запис" : "")), !isParamsEditor && /*#__PURE__*/React.createElement("div", {
+    className: "mb-4 rounded-xl px-4 py-3 text-sm",
+    style: {
+      background: "#fff4e5",
+      color: "#92400e"
+    }
+  }, "🔒 Само ", PARAMS_EDITOR_EMAIL, " може да редактира параметрите — тук ги виждаш само за справка."), /*#__PURE__*/React.createElement("div", {
+    className: isParamsEditor ? "" : "pointer-events-none opacity-60",
+    "aria-disabled": !isParamsEditor
+  }, /*#__PURE__*/React.createElement(Section, {
     title: "Отклонение върху крайната цена"
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 md:grid-cols-4 gap-3"
@@ -5076,7 +5095,7 @@ function SettingsPanel({
     className: "text-xs font-medium text-slate-500 hover:text-slate-700 underline"
   }, "Върни по подразбиране"))), /*#__PURE__*/React.createElement("p", {
     className: "text-[11px] text-slate-400 mt-2"
-  }, "Свалените настройки са файл, който можете да заредите по всяко време — работи и когато средата не пази данни."));
+  }, "Свалените настройки са файл, който можете да заредите по всяко време — работи и когато средата не пази данни.")));
 }
 function AddressBlock({
   title,
@@ -6188,12 +6207,12 @@ function KorektCalculator() {
         if (JSON.stringify(clean) !== JSON.stringify(p)) setP(clean);
         const okLocal = await saveParams(clean);
         const hasRemoteConfig = !!(clean.supabaseUrl && clean.supabaseKey);
-        let okRemote = await pushParamsToSupabase(clean, clean.supabaseUrl, clean.supabaseKey);
+        let okRemote = await pushParamsToSupabase(clean, clean.supabaseUrl, clean.supabaseKey, authSession);
         if (!okRemote && hasRemoteConfig && !cancelled) {
           // споделената база не отговори (напр. заспал проект/503) — един автоматичен повторен опит
           await new Promise(r => setTimeout(r, 4000));
           if (cancelled) return;
-          okRemote = await pushParamsToSupabase(clean, clean.supabaseUrl, clean.supabaseKey);
+          okRemote = await pushParamsToSupabase(clean, clean.supabaseUrl, clean.supabaseKey, authSession);
         }
         if (cancelled) return;
         if (okRemote) setParamSyncedAt(Date.now());
@@ -6205,7 +6224,7 @@ function KorektCalculator() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [p, paramsLoaded]);
+  }, [p, paramsLoaded, authSession]);
 
   // при възстановена чернова пазим СЪЩИЯ ключ/номер на записа, вместо да създаваме нов —
   // иначе презареждане на страницата трупа дубликати (№2, №3...) за една и съща заявка
@@ -6534,7 +6553,8 @@ function KorektCalculator() {
     setP: setP,
     saveState: paramSave,
     syncedAt: paramSyncedAt,
-    notify: notify
+    notify: notify,
+    session: authSession
   })), /*#__PURE__*/React.createElement("div", {
     className: "flex gap-2 mb-8"
   }, STEPS.map((label, i) => /*#__PURE__*/React.createElement("div", {
