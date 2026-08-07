@@ -2970,6 +2970,13 @@ export default function KorektCalculator() {
     return () => { cancelled = true; clearTimeout(t); };
   }, [p, paramsLoaded]);
 
+  // при възстановена чернова пазим СЪЩИЯ ключ/номер на записа, вместо да създаваме нов —
+  // иначе презареждане на страницата трупа дубликати (№2, №3...) за една и съща заявка
+  const recordKey = useRef(initialDraft?.recordKey || null);
+  const recordNumber = useRef(initialDraft?.recordNumber || null); // поредният номер на тази калкулация (генерира се веднъж)
+  const pushedRef = useRef(!!initialDraft?.pushed); // дали вече е създаден ред в Supabase — след това само PATCH (update), не upsert
+  const [calcNumberState, setCalcNumberState] = useState(initialDraft?.recordNumber || null); // за показване в резултата
+
   // --- чернова на текущата калкулация (за да наистина не се губи при презареждане) ---
   // пазим и ключа/номера на записа, за да не се трупат дубликати (№2, №3...) при презареждане
   useEffect(() => {
@@ -2987,12 +2994,6 @@ export default function KorektCalculator() {
   const [showLog, setShowLog] = useState(false);
   const [showMargin, setShowMargin] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
-  // при възстановена чернова пазим СЪЩИЯ ключ/номер на записа, вместо да създаваме нов —
-  // иначе презареждане на страницата трупа дубликати (№2, №3...) за една и съща заявка
-  const recordKey = useRef(initialDraft?.recordKey || null);
-  const recordNumber = useRef(initialDraft?.recordNumber || null); // поредният номер на тази калкулация (генерира се веднъж)
-  const pushedRef = useRef(!!initialDraft?.pushed); // дали вече е създаден ред в Supabase — след това само PATCH (update), не upsert
-  const [calcNumberState, setCalcNumberState] = useState(initialDraft?.recordNumber || null); // за показване в резултата
 
   // Всяка калкулация се пази автоматично — без клиентът да прави нищо.
   // Записът се обновява при промяна, вместо да се дублира.
