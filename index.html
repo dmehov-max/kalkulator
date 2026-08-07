@@ -3714,6 +3714,7 @@ function buildRecord(s, p, r, id, calcNumber, createdBy) {
     // съветника, вместо да гади от резюмето (items/breakdown), което губи детайли
     formState: s,
     contact: null,
+    requestNumber: s.requestNumber?.trim() || null,
     status: "калкулация"
   };
 }
@@ -3900,9 +3901,9 @@ async function loadCalcs(p, session) {
   return out.sort((a, b) => a.createdAt < b.createdAt ? 1 : -1);
 }
 function toCSV(rows) {
-  const head = ["№", "Дата", "Услуга", "Град", "От", "До", "Км", "Обем м³", "Курсове", "Бригада", "Часове", "Цена €", "Марж €", "Марж %", "Име", "Телефон", "Имейл", "Статус"];
+  const head = ["№", "Заявка №", "Дата", "Услуга", "Град", "От", "До", "Км", "Обем м³", "Курсове", "Бригада", "Часове", "Цена €", "Марж €", "Марж %", "Име", "Телефон", "Имейл", "Статус"];
   const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const body = rows.map(r => [r.calcNumber ?? "", new Date(r.createdAt).toLocaleString("bg-BG"), r.service, r.city || r.destination || "", r.from || "", r.to || "", r.km, r.volumeM3, r.trips, r.crew, r.hours, r.total, r.margin ?? "", r.marginPercent ?? "", r.contact?.name || "", r.contact?.phone || "", r.contact?.email || "", r.status].map(esc).join(","));
+  const body = rows.map(r => [r.calcNumber ?? "", r.requestNumber || "", new Date(r.createdAt).toLocaleString("bg-BG"), r.service, r.city || r.destination || "", r.from || "", r.to || "", r.km, r.volumeM3, r.trips, r.crew, r.hours, r.total, r.margin ?? "", r.marginPercent ?? "", r.contact?.name || "", r.contact?.phone || "", r.contact?.email || "", r.status].map(esc).join(","));
   return [head.map(esc).join(","), ...body].join("\n");
 }
 
@@ -5579,7 +5580,7 @@ function LogPanel({
     if (periodFilter !== "all" && Date.now() - new Date(r.createdAt).getTime() > PERIOD_MS[periodFilter]) return false;
     const q = search.trim().toLowerCase();
     if (q) {
-      const hay = [r.contact?.name, r.contact?.phone, r.contact?.email, r.city, r.from, r.to, r.destination, recordRouteLabel(r), displayNum(r)].filter(Boolean).join(" ").toLowerCase();
+      const hay = [r.contact?.name, r.contact?.phone, r.contact?.email, r.city, r.from, r.to, r.destination, recordRouteLabel(r), displayNum(r), r.requestNumber].filter(Boolean).join(" ").toLowerCase();
       if (!hay.includes(q) && !translitBG(hay).includes(translitBG(q))) return false;
     }
     return true;
@@ -5717,7 +5718,9 @@ function LogPanel({
     style: {
       color: ink
     }
-  }, displayNum(r)), /*#__PURE__*/React.createElement("td", {
+  }, displayNum(r), r.requestNumber && /*#__PURE__*/React.createElement("div", {
+    className: "text-[10px] font-normal text-slate-400"
+  }, "заявка ", r.requestNumber)), /*#__PURE__*/React.createElement("td", {
     className: "py-1.5 px-1 text-slate-500 whitespace-nowrap"
   }, new Date(r.createdAt).toLocaleDateString("bg-BG"), " ", new Date(r.createdAt).toLocaleTimeString("bg-BG", {
     hour: "2-digit",
@@ -5850,7 +5853,8 @@ const INITIAL_S = {
   },
   name: "",
   phone: "",
-  email: ""
+  email: "",
+  requestNumber: ""
 };
 function KorektCalculator() {
   // възстановяваме недовършена калкулация (ако има) — веднъж, синхронно, преди първия рендер
@@ -7499,7 +7503,12 @@ function KorektCalculator() {
     style: {
       background: accent
     }
-  }, "Калкулация №", calcNumberState), /*#__PURE__*/React.createElement("div", {
+  }, "Калкулация №", calcNumberState), s.requestNumber?.trim() && /*#__PURE__*/React.createElement("div", {
+    className: "inline-block text-xs font-semibold px-2.5 py-1 rounded-full mb-2 ml-2",
+    style: {
+      background: "rgba(255,255,255,0.15)"
+    }
+  }, "Заявка № ", s.requestNumber.trim()), /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between items-start"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "text-sm opacity-80"
@@ -7759,6 +7768,13 @@ function KorektCalculator() {
     value: s.email,
     onChange: e => set({
       email: e.target.value
+    }),
+    className: "rounded-xl border border-slate-200 px-4 py-3 text-sm"
+  }), /*#__PURE__*/React.createElement("input", {
+    placeholder: "Номер на заявка (по желание)",
+    value: s.requestNumber,
+    onChange: e => set({
+      requestNumber: e.target.value
     }),
     className: "rounded-xl border border-slate-200 px-4 py-3 text-sm"
   }), /*#__PURE__*/React.createElement("button", {

@@ -1784,6 +1784,7 @@ function buildRecord(s, p, r, id, calcNumber, createdBy) {
     // съветника, вместо да гади от резюмето (items/breakdown), което губи детайли
     formState: s,
     contact: null,
+    requestNumber: s.requestNumber?.trim() || null,
     status: "калкулация",
   };
 }
@@ -1913,10 +1914,10 @@ async function loadCalcs(p, session) {
 }
 
 function toCSV(rows) {
-  const head = ["№", "Дата", "Услуга", "Град", "От", "До", "Км", "Обем м³", "Курсове", "Бригада", "Часове", "Цена €", "Марж €", "Марж %", "Име", "Телефон", "Имейл", "Статус"];
+  const head = ["№", "Заявка №", "Дата", "Услуга", "Град", "От", "До", "Км", "Обем м³", "Курсове", "Бригада", "Часове", "Цена €", "Марж €", "Марж %", "Име", "Телефон", "Имейл", "Статус"];
   const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const body = rows.map((r) => [
-    r.calcNumber ?? "", new Date(r.createdAt).toLocaleString("bg-BG"), r.service, r.city || r.destination || "",
+    r.calcNumber ?? "", r.requestNumber || "", new Date(r.createdAt).toLocaleString("bg-BG"), r.service, r.city || r.destination || "",
     r.from || "", r.to || "", r.km, r.volumeM3, r.trips, r.crew, r.hours, r.total, r.margin ?? "", r.marginPercent ?? "",
     r.contact?.name || "", r.contact?.phone || "", r.contact?.email || "", r.status,
   ].map(esc).join(","));
@@ -2767,7 +2768,7 @@ function LogPanel({ onClose, p, session, onEdit }) {
     if (periodFilter !== "all" && Date.now() - new Date(r.createdAt).getTime() > PERIOD_MS[periodFilter]) return false;
     const q = search.trim().toLowerCase();
     if (q) {
-      const hay = [r.contact?.name, r.contact?.phone, r.contact?.email, r.city, r.from, r.to, r.destination, recordRouteLabel(r), displayNum(r)]
+      const hay = [r.contact?.name, r.contact?.phone, r.contact?.email, r.city, r.from, r.to, r.destination, recordRouteLabel(r), displayNum(r), r.requestNumber]
         .filter(Boolean).join(" ").toLowerCase();
       if (!hay.includes(q) && !translitBG(hay).includes(translitBG(q))) return false;
     }
@@ -2870,7 +2871,10 @@ function LogPanel({ onClose, p, session, onEdit }) {
               <tbody>
                 {pagedRows.map((r) => (
                   <tr key={r.key} className="border-t border-slate-100">
-                    <td className="py-1.5 px-1 font-semibold whitespace-nowrap" style={{ color: ink }}>{displayNum(r)}</td>
+                    <td className="py-1.5 px-1 font-semibold whitespace-nowrap" style={{ color: ink }}>
+                      {displayNum(r)}
+                      {r.requestNumber && <div className="text-[10px] font-normal text-slate-400">заявка {r.requestNumber}</div>}
+                    </td>
                     <td className="py-1.5 px-1 text-slate-500 whitespace-nowrap">{new Date(r.createdAt).toLocaleDateString("bg-BG")} {new Date(r.createdAt).toLocaleTimeString("bg-BG", { hour: "2-digit", minute: "2-digit" })}</td>
                     <td className="py-1.5 px-1 text-slate-500 whitespace-nowrap">{r.createdBy || "—"}</td>
                     <td className="py-1.5 px-1 text-slate-700">{recordRouteLabel(r)}</td>
@@ -2954,7 +2958,7 @@ const INITIAL_S = {
   pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   extras: { packing: false, materials: false, disassembly: false },
-  name: "", phone: "", email: "",
+  name: "", phone: "", email: "", requestNumber: "",
 };
 
 export default function KorektCalculator() {
@@ -4127,6 +4131,11 @@ export default function KorektCalculator() {
                       Калкулация №{calcNumberState}
                     </div>
                   )}
+                  {s.requestNumber?.trim() && (
+                    <div className="inline-block text-xs font-semibold px-2.5 py-1 rounded-full mb-2 ml-2" style={{ background: "rgba(255,255,255,0.15)" }}>
+                      Заявка № {s.requestNumber.trim()}
+                    </div>
+                  )}
                   <div className="flex justify-between items-start">
                     <div>
                       <div className="text-sm opacity-80">Прогнозна цена — по опит</div>
@@ -4331,6 +4340,7 @@ export default function KorektCalculator() {
                     <input placeholder="Име" value={s.name} onChange={(e) => set({ name: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
                     <input placeholder="Телефон" type="tel" inputMode="tel" value={s.phone} onChange={(e) => set({ phone: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
                     <input placeholder="Имейл" type="email" inputMode="email" value={s.email} onChange={(e) => set({ email: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
+                    <input placeholder="Номер на заявка (по желание)" value={s.requestNumber} onChange={(e) => set({ requestNumber: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
                     <button onClick={submitRequest}
                       className="rounded-xl py-3 font-semibold text-white" style={{ background: accent }}>Изпрати заявка</button>
                   </div>
