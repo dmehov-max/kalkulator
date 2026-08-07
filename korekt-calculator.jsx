@@ -1416,15 +1416,78 @@ function clearDraftLS() {
 }
 
 // --- Достъп до вътрешните панели (Записи / Параметри / Марж) ---------------
-// ВНИМАНИЕ: това е само ключалка на ВРАТАТА на UI — спира случаен посетител
-// от едно кликване. НЕ е истинска сигурност: паролата стои в изходния код
-// на страницата (вижда се от всеки, който отвори DevTools), а Supabase anon
-// ключът в DEFAULTS остава публичен и позволява директно четене на таблицата
-// през REST API, независимо от тази ключалка. За истинска защита на личните
-// данни на клиентите трябва Supabase Auth + RLS политика, ограничаваща SELECT
-// само до логнати (автентикирани) потребители — виж бележката в README/паметта.
-const ADMIN_PASSWORD = "korekt-tim-2026"; // смени по всяко време — просто текст тук
-const ADMIN_UNLOCK_KEY = "korekt:adminUnlocked";
+// Истински вход през Supabase Auth (имейл + парола), не UI парола в кода.
+// ВАЖНО — за да заработи реално (не само визуално):
+//   1) в Supabase таблото трябва да съществуват потребители (Authentication → Users)
+//   2) RLS политиките на "calculations" трябва да ограничат SELECT само до
+//      authenticated роля — иначе всеки все още чете директно през anon ключа,
+//      независимо от този login екран. Виж README за точния SQL.
+const AUTH_SESSION_KEY = "korekt:authSession";
+
+function loadAuthSession() {
+  try {
+    const raw = localStorage.getItem(AUTH_SESSION_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    return s && s.access_token ? s : null;
+  } catch (e) { return null; }
+}
+function saveAuthSession(session) {
+  try {
+    if (session) localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
+    else localStorage.removeItem(AUTH_SESSION_KEY);
+  } catch (e) { /* без значение */ }
+}
+async function supabaseSignIn(email, password, url, key) {
+  if (!url || !key) return { ok: false, error: "Няма връзка към Supabase (виж ⚙ Параметри)." };
+  try {
+    const res = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: { apikey: key, "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.access_token) {
+      return { ok: false, error: data?.error_description || data?.msg || "Грешен имейл или парола." };
+    }
+    return {
+      ok: true,
+      session: {
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_at: Date.now() + (Number(data.expires_in) || 3600) * 1000,
+        email: data.user?.email || email,
+      },
+    };
+  } catch (e) {
+    return { ok: false, error: "Мрежова грешка при вход." };
+  }
+}
+async function supabaseRefreshSession(session, url, key) {
+  if (!session?.refresh_token || !url || !key) return null;
+  try {
+    const res = await fetch(`${url}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { apikey: key, "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    if (!data?.access_token) return null;
+    return {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token || session.refresh_token,
+      expires_at: Date.now() + (Number(data.expires_in) || 3600) * 1000,
+      email: data.user?.email || session.email,
+    };
+  } catch (e) { return null; }
+}
+// хедъри за заявки, които трябва да минат като логнат потребител (не анонимно) —
+// ползва JWT-а от сесията вместо анонимния ключ, за да важи RLS "authenticated"
+function authHeaders(session, anonKey, extra) {
+  const token = session?.access_token || anonKey;
+  return { apikey: anonKey, Authorization: `Bearer ${token}`, ...extra };
+}
 
 // "" (изпразнено поле по средата на писане) не бива да замести число трайно —
 // пази стойността по подразбиране, докато не дойде истинско ново число
@@ -1579,18 +1642,18 @@ function stripSecrets(p) {
 // от рутинния автосейв, за да не смъква "потвърдена" обратно на "заявка"/"калкулация" само
 // защото клиентът пипна нещо в калкулатора след като операторът вече е потвърдил офертата.
 // Статусът се сменя изрично само при insert, "Изпрати заявка" и "Потвърди".
-async function pushCalcToSupabase(record, url, key, isUpdate, touchStatus = true) {
+async function pushCalcToSupabase(record, url, key, isUpdate, touchStatus = true, session) {
   if (!url || !key || !record.id) return { ok: false };
   try {
     const res = isUpdate
       ? await fetch(`${url}/rest/v1/calculations?id=eq.${encodeURIComponent(record.id)}`, {
           method: "PATCH",
-          headers: supabaseHeaders(key, { "Content-Type": "application/json", Prefer: "return=minimal" }),
+          headers: authHeaders(session, key, { "Content-Type": "application/json", Prefer: "return=minimal" }),
           body: JSON.stringify(touchStatus ? { status: record.status || "калкулация", data: record } : { data: record }),
         })
       : await fetch(`${url}/rest/v1/calculations?on_conflict=id&select=calc_number`, {
           method: "POST",
-          headers: supabaseHeaders(key, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" }),
+          headers: authHeaders(session, key, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" }),
           body: JSON.stringify({ id: record.id, status: record.status || "калкулация", data: record }),
         });
     if (!res.ok) return { ok: false };
@@ -1603,11 +1666,13 @@ async function pushCalcToSupabase(record, url, key, isUpdate, touchStatus = true
   }
 }
 
-// изтегля всички калкулации от Supabase (видими за всички устройства)
-async function fetchCalcsFromSupabase(url, key) {
+// изтегля всички калкулации от Supabase (видими за всички устройства) — праща логнатата
+// сесия (ако има), за да важи RLS "authenticated"; без сесия разчита на anon (само докато
+// не се сменят политиките — виж бележката при AUTH_SESSION_KEY)
+async function fetchCalcsFromSupabase(url, key, session) {
   if (!url || !key) return [];
   try {
-    const res = await fetch(`${url}/rest/v1/calculations?select=id,calc_number,status,data&order=created_at.desc&limit=500`, { headers: supabaseHeaders(key) });
+    const res = await fetch(`${url}/rest/v1/calculations?select=id,calc_number,status,data&order=created_at.desc&limit=500`, { headers: authHeaders(session, key) });
     if (!res.ok) return [];
     const rows = await res.json();
     return rows.map((row) => ({ ...row.data, key: row.id, calcNumber: row.calc_number, status: row.status }));
@@ -1668,8 +1733,8 @@ async function saveCalc(key, record) {
   return storageSet(key, JSON.stringify(record));
 }
 
-async function loadCalcs(p) {
-  if (p && p.supabaseUrl && p.supabaseKey) return fetchCalcsFromSupabase(p.supabaseUrl, p.supabaseKey);
+async function loadCalcs(p, session) {
+  if (p && p.supabaseUrl && p.supabaseKey) return fetchCalcsFromSupabase(p.supabaseUrl, p.supabaseKey, session);
   const out = [];
   const keys = await storageList(CALC_PREFIX);
   for (const k of keys) {
@@ -2439,7 +2504,7 @@ function RecordDetail({ record: r, p, onClose }) {
   );
 }
 
-function LogPanel({ onClose, p }) {
+function LogPanel({ onClose, p, session }) {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState(false);
   const [confirming, setConfirming] = useState(null);
@@ -2453,7 +2518,7 @@ function LogPanel({ onClose, p }) {
   const [sortDir, setSortDir] = useState("desc");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
-  const refresh = async () => { setRows(null); const d = await loadCalcs(p); setRows(d); setErr(d.length === 0); };
+  const refresh = async () => { setRows(null); const d = await loadCalcs(p, session); setRows(d); setErr(d.length === 0); };
   useEffect(() => { refresh(); }, []);
   useEffect(() => { setPage(1); }, [search, statusFilter, periodFilter]);
 
@@ -2465,7 +2530,7 @@ function LogPanel({ onClose, p }) {
     record.status = "потвърдена";
     // изчакваме реалния резултат от базата — иначе при 5xx статусът тихо не се сменя,
     // но списъкът се опреснява все едно е минало
-    const res = await pushCalcToSupabase(record, p?.supabaseUrl, p?.supabaseKey, true);
+    const res = await pushCalcToSupabase(record, p?.supabaseUrl, p?.supabaseKey, true, true, session);
     await saveCalc(key, record);
     await refresh();
     setConfirming(null);
@@ -2713,18 +2778,59 @@ export default function KorektCalculator() {
     toastTimer.current = setTimeout(() => setToast(null), kind === "error" ? 7000 : 4000);
   };
   const [showSettings, setShowSettings] = useState(false);
-  // вътрешни панели зад лека парола — виж бележката при ADMIN_PASSWORD по-горе
-  const [adminUnlocked, setAdminUnlocked] = useState(() => {
-    try { return sessionStorage.getItem(ADMIN_UNLOCK_KEY) === "1"; } catch (e) { return false; }
-  });
-  const [pendingAdminAction, setPendingAdminAction] = useState(null); // функция, изчакваща парола
-  const [adminPw, setAdminPw] = useState("");
+  const [p, setP] = useState(() => structuredClone(DEFAULTS));
+
+  // --- вътрешни панели зад истински вход (Supabase Auth), не UI парола ---
+  const [authSession, setAuthSession] = useState(() => loadAuthSession());
+  const [pendingAdminAction, setPendingAdminAction] = useState(null); // функция, изчакваща логин
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPw, setLoginPw] = useState("");
+  const [loginError, setLoginError] = useState(null);
+  const [loginBusy, setLoginBusy] = useState(false);
+  const adminUnlocked = !!authSession;
   const guardAdmin = (action) => {
-    if (adminUnlocked) { action(); return; }
-    setAdminPw("");
+    if (authSession) { action(); return; }
+    setLoginError(null);
+    setLoginPw("");
     setPendingAdminAction(() => action);
   };
-  const [p, setP] = useState(() => structuredClone(DEFAULTS));
+  const doLogin = async (e) => {
+    e.preventDefault();
+    setLoginBusy(true);
+    setLoginError(null);
+    const res = await supabaseSignIn(loginEmail.trim(), loginPw, p.supabaseUrl, p.supabaseKey);
+    setLoginBusy(false);
+    if (!res.ok) { setLoginError(res.error); return; }
+    setAuthSession(res.session);
+    saveAuthSession(res.session);
+    const action = pendingAdminAction;
+    setPendingAdminAction(null);
+    setLoginPw("");
+    if (action) action();
+  };
+  const logout = () => {
+    setAuthSession(null);
+    saveAuthSession(null);
+    setShowLog(false); setShowSettings(false); setShowMargin(false);
+  };
+  // опреснява сесията малко преди да изтече, вместо да чака 401 от базата
+  useEffect(() => {
+    if (!authSession) return;
+    const msLeft = authSession.expires_at - Date.now();
+    if (msLeft < 60000) {
+      supabaseRefreshSession(authSession, p.supabaseUrl, p.supabaseKey).then((next) => {
+        if (next) { setAuthSession(next); saveAuthSession(next); }
+        else { setAuthSession(null); saveAuthSession(null); } // refresh token изтекъл/невалиден — обратно на login
+      });
+      return;
+    }
+    const t = setTimeout(() => {
+      supabaseRefreshSession(authSession, p.supabaseUrl, p.supabaseKey).then((next) => {
+        if (next) { setAuthSession(next); saveAuthSession(next); }
+      });
+    }, msLeft - 60000);
+    return () => clearTimeout(t);
+  }, [authSession, p.supabaseUrl, p.supabaseKey]);
   const [openGroups, setOpenGroups] = useState({ "Хол и трапезария": true });
   const [itemSearch, setItemSearch] = useState("");
   const [s, setS] = useState(() =>
@@ -2997,11 +3103,17 @@ export default function KorektCalculator() {
             <button onClick={() => guardAdmin(() => setShowSettings((v) => !v))}
               className="text-sm font-semibold px-3 py-2 rounded-full border transition"
               style={{ borderColor: showSettings ? accent : "#e2e6ec", color: showSettings ? accent : "#64748b" }}>{adminUnlocked ? "⚙" : "🔒"} Параметри</button>
+            {adminUnlocked && (
+              <button onClick={logout} title={authSession?.email || ""}
+                className="text-xs font-medium px-2 py-2 rounded-full text-slate-400 hover:text-slate-600">
+                изход
+              </button>
+            )}
             <a href={p.phoneHref} className="text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: ink }}>{p.phone}</a>
           </div>
         </div>
 
-        {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} />}
+        {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} session={authSession} />}
         {showMargin && step === 3 && (
           <div className="rounded-2xl p-5 mb-4" style={{ background: "#fff8ef", border: "1px solid #f3ddbd" }}>
             <div className="text-sm font-semibold mb-3" style={{ color: ink }}>💰 Себестойност и марж (вътрешно, не се вижда от клиента)</div>
@@ -3944,27 +4056,20 @@ export default function KorektCalculator() {
       )}
       {pendingAdminAction && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setPendingAdminAction(null)}>
-          <form onClick={(e) => e.stopPropagation()}
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (adminPw === ADMIN_PASSWORD) {
-                setAdminUnlocked(true);
-                try { sessionStorage.setItem(ADMIN_UNLOCK_KEY, "1"); } catch (err) { /* без значение */ }
-                const action = pendingAdminAction;
-                setPendingAdminAction(null);
-                action();
-              } else {
-                notify("Грешна парола.", "error");
-              }
-            }}
+          <form onClick={(e) => e.stopPropagation()} onSubmit={doLogin}
             className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-            <div className="text-sm font-semibold mb-1" style={{ color: ink }}>🔒 Вътрешен достъп</div>
-            <p className="text-xs text-slate-500 mb-3">Записите, параметрите и маржът съдържат вътрешни данни и данни на клиенти — само за екипа.</p>
-            <input autoFocus type="password" value={adminPw} onChange={(e) => setAdminPw(e.target.value)}
-              placeholder="Парола" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mb-3" />
+            <div className="text-sm font-semibold mb-1" style={{ color: ink }}>🔒 Вход за екипа</div>
+            <p className="text-xs text-slate-500 mb-3">Записите, параметрите и маржът съдържат вътрешни данни и данни на клиенти — само за логнати колеги.</p>
+            <input autoFocus type="email" autoComplete="username" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)}
+              placeholder="Имейл" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mb-2" />
+            <input type="password" autoComplete="current-password" value={loginPw} onChange={(e) => setLoginPw(e.target.value)}
+              placeholder="Парола" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mb-2" />
+            {loginError && <p className="text-xs mb-2" style={{ color: "#dc2626" }}>{loginError}</p>}
             <div className="flex gap-2 justify-end">
               <button type="button" onClick={() => setPendingAdminAction(null)} className="text-sm px-3 py-2 text-slate-500">Отказ</button>
-              <button type="submit" className="text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: accent }}>Вход</button>
+              <button type="submit" disabled={loginBusy} className="text-sm font-semibold px-4 py-2 rounded-full text-white disabled:opacity-50" style={{ background: accent }}>
+                {loginBusy ? "…" : "Вход"}
+              </button>
             </div>
           </form>
         </div>
