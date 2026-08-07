@@ -68,6 +68,9 @@ const DEFAULTS = {
   heavyAppliancePerFloor: 5, // €/етаж на нестандартен уред (двуврат хлад., Miele)
   furniturePerFloor: 3,  // €/етаж на обикновена мебел без асансьор (гардероб, легло, маса...) —
                           // преди 2026-08-06 тези вещи изобщо не се таксуваха на етаж (мъртва настройка)
+  smallItemPerFloor: 1,  // €/етаж на дребна/лека вещ без категория (картина, килим, лампа, стол...) —
+                          // преди 2026-08-07 се таксуваха по furniturePerFloor като пълна мебел (виж бъг в калк №98:
+                          // 11 картини + килими + столове = "29 мебел" на цената на 29 гардероба)
 
   // Носене на дълго разстояние до/от камиона (на адрес) — реално време, не само такса
   carryFreeDistanceM: 20,   // м — до толкова разстояние не се брои допълнително
@@ -142,12 +145,12 @@ const CATALOG = [
     { id: "vitrine", label: "Витрина (със стъкла)", m3: 1.0, kg: 50, dis: 0.4, asm: 1.2, wrap: 10, wrapReq: true, protect: 6, protectReq: true },
     { id: "table", label: "Маса за хранене", m3: 0.7, kg: 30, dis: 0.2, asm: 0.5, wrap: 8, protect: 5 },
     { id: "tableGlass", label: "Маса със стъклен плот", m3: 0.8, kg: 45, dis: 0.3, asm: 0.7, wrap: 10, wrapReq: true, protect: 8, protectReq: true },
-    { id: "tableSmall", label: "Малка масичка", m3: 0.25, kg: 12, dis: 0.1, asm: 0.25, wrap: 4, protect: 3 },
-    { id: "tableSmallGlass", label: "Малка масичка със стъкло", m3: 0.3, kg: 18, dis: 0.15, asm: 0.35, wrap: 6, wrapReq: true, protect: 5, protectReq: true },
-    { id: "chair", label: "Стол", m3: 0.15, kg: 5, wrap: 3, protect: 2 },
+    { id: "tableSmall", label: "Малка масичка", m3: 0.25, kg: 12, dis: 0.1, asm: 0.25, wrap: 4, protect: 3, kind: "small" },
+    { id: "tableSmallGlass", label: "Малка масичка със стъкло", m3: 0.3, kg: 18, dis: 0.15, asm: 0.35, wrap: 6, wrapReq: true, protect: 5, protectReq: true, kind: "small" },
+    { id: "chair", label: "Стол", m3: 0.15, kg: 5, wrap: 3, protect: 2, kind: "small" },
     { id: "shelf", label: "Библиотека / етажерка", m3: 0.8, kg: 35, dis: 0.3, asm: 0.9, wrap: 8, protect: 6 },
-    { id: "rug", label: "Килим", m3: 0.2, kg: 12, wrap: 4, protect: 3 },
-    { id: "lamp", label: "Лампа (подова/трапезна)", m3: 0.08, kg: 4, wrap: 4, protect: 3 },
+    { id: "rug", label: "Килим", m3: 0.2, kg: 12, wrap: 4, protect: 3, kind: "small" },
+    { id: "lamp", label: "Лампа (подова/трапезна)", m3: 0.08, kg: 4, wrap: 4, protect: 3, kind: "small" },
   ]},
   { group: "Спалня", for: "home", items: [
     { id: "bedSingle", label: "Единично легло", m3: 1.0, kg: 40, dis: 0.4, asm: 0.9, wrap: 8, protect: 6 },
@@ -156,19 +159,19 @@ const CATALOG = [
     { id: "wardrobe2", label: "Гардероб 2-крилен", m3: 1.2, kg: 70, dis: 0.7, asm: 2.0, wrap: 8, protect: 8 },
     { id: "wardrobe3", label: "Гардероб 3-крилен", m3: 1.8, kg: 110, dis: 1.5, asm: 3.0, wrap: 10, protect: 10 },
     { id: "dresser", label: "Скрин / шкаф", m3: 0.6, kg: 40, dis: 0.3, asm: 0.9, wrap: 8, protect: 5 },
-    { id: "nightstand", label: "Нощно шкафче", m3: 0.2, kg: 12, wrap: 4, protect: 3 },
+    { id: "nightstand", label: "Нощно шкафче", m3: 0.2, kg: 12, wrap: 4, protect: 3, kind: "small" },
     { id: "desk", label: "Бюро", m3: 0.6, kg: 30, dis: 0.3, asm: 0.9, wrap: 8, protect: 5 },
   ]},
   { group: "Офис", for: "office", items: [
     { id: "officeDesk", label: "Офис бюро", m3: 0.5, kg: 25, dis: 0.2, asm: 0.5, wrap: 6, protect: 4 },
-    { id: "officeChair", label: "Офис стол (на колела)", m3: 0.3, kg: 12, wrap: 3, protect: 2 },
+    { id: "officeChair", label: "Офис стол (на колела)", m3: 0.3, kg: 12, wrap: 3, protect: 2, kind: "small" },
     { id: "filingCabinet", label: "Шкаф с папки (картотека)", m3: 0.6, kg: 45, wrap: 6, protect: 4 },
     { id: "officeCloset", label: "Офис шкаф / рафтове", m3: 0.8, kg: 50, dis: 0.3, asm: 0.8, wrap: 8, protect: 5 },
     { id: "conferenceTable", label: "Конферентна маса", m3: 1.2, kg: 55, dis: 0.4, asm: 0.9, wrap: 10, protect: 6 },
     { id: "reception", label: "Рецепционно бюро", m3: 1.0, kg: 60, dis: 0.4, asm: 1.0, wrap: 10, protect: 6 },
     { id: "partition", label: "Преграда / параван", m3: 0.4, kg: 20, wrap: 5, protect: 3 },
-    { id: "whiteboard", label: "Бяла дъска / флипчарт", m3: 0.2, kg: 10, wrap: 3, protect: 3 },
-    { id: "printer", label: "Принтер / копирна машина", m3: 0.3, kg: 25, wrap: 5, wrapReq: true, protect: 3 },
+    { id: "whiteboard", label: "Бяла дъска / флипчарт", m3: 0.2, kg: 10, wrap: 3, protect: 3, kind: "small" },
+    { id: "printer", label: "Принтер / копирна машина", m3: 0.3, kg: 25, wrap: 5, wrapReq: true, protect: 3, kind: "small" },
     { id: "serverRack", label: "Сървърна стойка (rack)", m3: 0.6, kg: 60, wrap: 8, wrapReq: true, kind: "appliance_heavy", protect: 6 },
   ]},
   { group: "Уреди", for: "all", items: [
@@ -180,18 +183,18 @@ const CATALOG = [
     { id: "stove", label: "Готварска печка", m3: 0.4, kg: 45, wrap: 8, wrapReq: true, kind: "appliance", protect: 6 },
     { id: "fridgeSxS", label: "Хладилник двуврат (side-by-side)", m3: 1.2, kg: 120, wrap: 16, wrapReq: true, kind: "appliance_heavy", minCrew: 4, protect: 14 },
     { id: "washerMiele", label: "Пералня Miele", m3: 0.4, kg: 85, wrap: 8, wrapReq: true, kind: "appliance_heavy", protect: 6 },
-    { id: "microwave", label: "Микровълнова", m3: 0.1, kg: 15, wrap: 3, wrapReq: true, protect: 2 },
-    { id: "ac", label: "Климатик (двете тела)", m3: 0.3, kg: 35, wrap: 4, wrapReq: true, protect: 4 },
-    { id: "boiler", label: "Бойлер", m3: 0.3, kg: 30, wrap: 4, wrapReq: true, protect: 4 },
+    { id: "microwave", label: "Микровълнова", m3: 0.1, kg: 15, wrap: 3, wrapReq: true, protect: 2, kind: "small" },
+    { id: "ac", label: "Климатик (двете тела)", m3: 0.3, kg: 35, wrap: 4, wrapReq: true, protect: 4, kind: "small" },
+    { id: "boiler", label: "Бойлер", m3: 0.3, kg: 30, wrap: 4, wrapReq: true, protect: 4, kind: "small" },
   ]},
   { group: "Кашони и дребни", for: "all", items: [
     { id: "boxS", label: "Кашон малък", m3: 0.06, kg: 8, kind: "box" },
     { id: "boxM", label: "Кашон среден", m3: 0.1, kg: 12, kind: "box" },
     { id: "boxL", label: "Кашон голям", m3: 0.15, kg: 18, kind: "box" },
     { id: "books", label: "Кашон с книги", m3: 0.06, kg: 25, kind: "box" },
-    { id: "suitcase", label: "Куфар", m3: 0.1, kg: 15 },
-    { id: "bike", label: "Велосипед", m3: 0.4, kg: 12, wrap: 6, protect: 4 },
-    { id: "art", label: "Огледало / картина", m3: 0.15, kg: 5, wrap: 3, wrapReq: true, protect: 4, protectReq: true },
+    { id: "suitcase", label: "Куфар", m3: 0.1, kg: 15, kind: "small" },
+    { id: "bike", label: "Велосипед", m3: 0.4, kg: 12, wrap: 6, protect: 4, kind: "small" },
+    { id: "art", label: "Огледало / картина", m3: 0.15, kg: 5, wrap: 3, wrapReq: true, protect: 4, protectReq: true, kind: "small" },
   ]},
   { group: "Отпадък за изхвърляне", for: "all", items: [
     { id: "sackHouse", label: "Чувал битов отпадък", m3: 0.1, kg: 15, kind: "sack" },
@@ -331,13 +334,27 @@ const wrapMetersFor = (qty, wrap, selfPack) =>
 const totalWeight = (qty) =>
   Object.entries(qty).reduce((s, [id, cnt]) => s + (ITEM_INDEX[id]?.kg || 0) * cnt, 0);
 const countKind = (qty, kind) => Object.entries(qty).reduce((s, [id, cnt]) => s + (ITEM_INDEX[id]?.kind === kind ? cnt : 0), 0);
-// вещи без изрична категория (кашон/уред/едрогабаритно) — "обикновена мебел":
-// гардероби, легла, маси, столове и пр. Носят се по стълби също като уредите.
-const FLOOR_FEE_KINDS = new Set(["box", "sack", "appliance", "appliance_heavy", "oversized"]);
+// вещи без изрична категория (кашон/уред/едрогабаритно/дребно) — "обикновена мебел":
+// гардероби, легла, маси и пр. Носят се по стълби също като уредите.
+const FLOOR_FEE_KINDS = new Set(["box", "sack", "appliance", "appliance_heavy", "oversized", "small"]);
 const countFurniture = (qty) => Object.entries(qty).reduce((s, [id, cnt]) => {
   const it = ITEM_INDEX[id];
   return s + (it && cnt > 0 && !FLOOR_FEE_KINDS.has(it.kind) ? cnt : 0);
 }, 0);
+// таксата "Стълби без асансьор" се смята НА БРОЙ (не на м³/кг) — тук е само за показване в
+// каталога кой ред/€ на етаж важи за дадена вещ, за да е ясно защо напр. картина излиза
+// евтина, а гардероб скъпо (виж бъга с калк №98 — 11 картини на цената на 11 гардероба)
+const FLOOR_FEE_LABEL = { box: "кашон", sack: "кашон", appliance: "уред", appliance_heavy: "спец. уред", oversized: "едрогаб.", small: "дребна вещ" };
+const floorFeeRateFor = (it, p) => {
+  if (!it) return 0;
+  switch (it.kind) {
+    case "box": case "sack": return n(p.boxPerFloor);
+    case "appliance": return n(p.appliancePerFloor);
+    case "appliance_heavy": case "oversized": return n(p.heavyAppliancePerFloor);
+    case "small": return n(p.smallItemPerFloor);
+    default: return n(p.furniturePerFloor);
+  }
+};
 
 /* -------- Квартали с приблизителни координати (за оценка на км) -------- */
 const NEIGHBORHOODS = {
@@ -1335,12 +1352,13 @@ function computePrice(s, p) {
   const appNormal = countKind(s.qty, "appliance");
   const appHeavy = countKind(s.qty, "appliance_heavy");
   const oversized = countKind(s.qty, "oversized");
+  const small = countKind(s.qty, "small"); // дребни/леки вещи без монтаж (картина, килим, лампа, стол...)
   const furniture = countFurniture(s.qty); // обикновени мебели (гардероб, легло, маса...) — без категория
   // стандартни вещи: стълби само при липса на асансьор
   const floorsStd = (a) => (a.floor >= 1 && !a.elevator ? a.floor : 0);
   // едрогабаритни (диван 3-ка и под.): не влизат в пътнически асансьор → стълби, освен при товарен
   const floorsOvr = (a) => (a.floor >= 1 && !(a.elevator && a.elevatorType === "cargo") ? a.floor : 0);
-  const perFloorStd = n(p.floorFeeNoElevator) + boxes * n(p.boxPerFloor) + appNormal * n(p.appliancePerFloor) + appHeavy * n(p.heavyAppliancePerFloor) + furniture * n(p.furniturePerFloor);
+  const perFloorStd = n(p.floorFeeNoElevator) + boxes * n(p.boxPerFloor) + appNormal * n(p.appliancePerFloor) + appHeavy * n(p.heavyAppliancePerFloor) + small * n(p.smallItemPerFloor) + furniture * n(p.furniturePerFloor);
   const perFloorOvr = oversized * n(p.heavyAppliancePerFloor);
   // при изхвърляне няма адрес на доставка (само сметище); при самостоятелно разтоварване стълбите там са за сметка на клиента
   const skipDropoffFloors = isDisposal || selfUnloadMode || usesFieldCrew;
@@ -1352,6 +1370,7 @@ function computePrice(s, p) {
     if (floorsStdTot && boxes) parts.push(`${boxes} каш.`);
     if (floorsStdTot && appNormal) parts.push(`${appNormal} уред`);
     if (floorsStdTot && appHeavy) parts.push(`${appHeavy} спец.`);
+    if (floorsStdTot && small) parts.push(`${small} дребни`);
     if (floorsStdTot && furniture) parts.push(`${furniture} мебел`);
     if (floorsOvrTot && oversized) parts.push(`${oversized} едрогаб.`);
     const floorParts = [];
@@ -1374,7 +1393,10 @@ function computePrice(s, p) {
       extraCostTotal += trips * fee;
     }
   } else if (!isCourse) {
-    const h = roundHalf(handlingClock);
+    // камионът стои на обекта през цялото пренасяне — включително разглобяване/сглобяване
+    // и опаковане, не само товарене-движение-разтоварване — затова часовете са clockHours,
+    // не само handlingClock
+    const h = roundHalf(clockHours);
     add(`Транспорт — ${h.toFixed(1)} ч × ${n(p.truckRate)} ${p.currency}/ч`, h * n(p.truckRate));
   } else {
     const rate = chosen ? chosen.kmRate : n(p.kmRate);
@@ -1419,7 +1441,7 @@ function computePrice(s, p) {
   // costCity/workerCostRate вече са изчислени най-отгоре (общи и за цената към клиента).
   const laborCost = manHours * workerCostRate;
   const truckCostRate = usesFieldCrew ? 0 : n(isCourse || isDisposal ? p.truckCostPerKm : p.truckCostPerHour);
-  const truckCostBasis = isCourse || isDisposal ? totalKm : handlingClock;
+  const truckCostBasis = isCourse || isDisposal ? totalKm : clockHours;
   const truckCost = usesFieldCrew ? 0 : truckCostBasis * truckCostRate;
   // материали + кола + такса сметище (реален разход, минус за да не изглежда маржа завишен)
   const totalCost = laborCost + truckCost + extraCostTotal;
@@ -2243,6 +2265,7 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify }) {
           <Num label="Хора на сглобяване" value={p.asmCrew} step={1} onChange={(v) => upd({ asmCrew: v })} suffix="души" />
           <Num label="Ставка монтаж/демонтаж" value={p.disAsmRate} step={1} onChange={(v) => upd({ disAsmRate: v })} suffix="€/ч" />
           <Num label="Кашон/етаж" value={p.boxPerFloor} step={0.05} onChange={(v) => upd({ boxPerFloor: v })} suffix="€" />
+          <Num label="Дребна вещ/етаж" value={p.smallItemPerFloor} step={0.5} onChange={(v) => upd({ smallItemPerFloor: v })} suffix="€" />
           <Num label="Уред/етаж" value={p.appliancePerFloor} step={0.5} onChange={(v) => upd({ appliancePerFloor: v })} suffix="€" />
           <Num label="Мебел/етаж" value={p.furniturePerFloor} step={0.5} onChange={(v) => upd({ furniturePerFloor: v })} suffix="€" />
           <Num label="Спец. уред/етаж" value={p.heavyAppliancePerFloor} step={0.5} onChange={(v) => upd({ heavyAppliancePerFloor: v })} suffix="€" />
@@ -3728,7 +3751,7 @@ export default function KorektCalculator() {
                                   <div className="min-w-0 pr-3">
                                     <div className="text-sm text-slate-700 truncate">{it.label}</div>
                                     <div className="text-xs text-slate-400">
-                                      {it.group} · {it.m3} м³ · {it.kg} кг/бр{cnt > 0 ? ` · избрани ${cnt}` : ""}
+                                      {it.group} · {it.m3} м³ · {it.kg} кг/бр · 🪜 {floorFeeRateFor(it, p)}{p.currency}/ет. на бр. ({FLOOR_FEE_LABEL[it.kind] || "мебел"}){cnt > 0 ? ` · избрани ${cnt}` : ""}
                                     </div>
                                   </div>
                                   <Stepper value={cnt} onChange={(v) => setQty(it.id, v)} />
@@ -3786,7 +3809,7 @@ export default function KorektCalculator() {
                                       <div className="min-w-0 pr-3">
                                         <div className="text-sm text-slate-700 truncate">{it.label}</div>
                                         <div className="text-xs text-slate-400">
-                                          {it.m3} м³ · {it.kg} кг/бр{it.surcharge ? ` · спец. +${it.surcharge}${p.currency}` : ""}
+                                          {it.m3} м³ · {it.kg} кг/бр · 🪜 {floorFeeRateFor(it, p)}{p.currency}/ет. на бр. ({FLOOR_FEE_LABEL[it.kind] || "мебел"}){it.surcharge ? ` · спец. +${it.surcharge}${p.currency}` : ""}
                                           {cnt > 0 ? ` · = ${(cnt * it.m3).toFixed(2)} м³ / ${cnt * it.kg} кг` : ""}
                                         </div>
                                       </div>

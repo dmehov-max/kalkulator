@@ -134,16 +134,16 @@ test("градско: пренасянето = часове × бригада ×
   const labor = r.lines.find((l) => l.label.startsWith("Пренасяне"));
   eq(labor.amount, Math.round(2 * r.crew * P.workerRate));
 });
-test("градско: транспортът се таксува само за пренасянето и пътя", () => {
+test("градско: транспортът се таксува за целия престой на обекта (clockHours), не само пренасянето", () => {
   const r = calc({ qty: { sofa3: 1, boxM: 20 } });
   const tr = r.lines.find((l) => l.label.startsWith("Транспорт"));
-  eq(tr.amount, Math.round(r.handlingClock * P.truckRate));
+  eq(tr.amount, Math.round(E.roundHalf(r.clockHours) * P.truckRate));
 });
-test("транспортът НЕ се таксува през часовете за разглобяване", () => {
+test("транспортът СЕ таксува и през часовете за разглобяване — камионът стои на обекта", () => {
   const без = calc({ qty: { wardrobe3: 1 } });
   const с = calc({ qty: { wardrobe3: 1 }, dis: { wardrobe3: true }, asm: { wardrobe3: true } });
   const tr = (r) => r.lines.find((l) => l.label.startsWith("Транспорт")).amount;
-  eq(tr(с), tr(без), "транспортът трябва да е еднакъв:");
+  ok(tr(с) > tr(без), "по-дългият престой с разглобяване/сглобяване трябва да оскъпи и транспорта:");
   ok(с.clockHours > без.clockHours, "престоят все пак е по-дълъг");
 });
 test("градско: пренасянето е поне 2 часа дори при една мебел", () => {
@@ -1107,14 +1107,16 @@ test("разглобяване: часовете са реално време, �
   eq(r.disCrew, 2, "души по демонтажа:");
   near(r.disManHours, очаквани * 2, 0.01, "човекочаса за таксуване:");
 });
-test("разглобяване: часовете се плащат на брой работници", () => {
+test("разглобяване: часовете се плащат на брой работници (и на камиона, който стои по-дълго на обекта)", () => {
   const base = { boxM: 100, wardrobe3: 1 };
   const без = calc({ qty: base });
   const с = calc({ qty: base, dis: { wardrobe3: true }, asm: { wardrobe3: true } });
   const чч = (E.ITEM_INDEX.wardrobe3.dis * P.disCrew) + (E.ITEM_INDEX.wardrobe3.asm * P.asmCrew);
   ok(без.handlingClock > P.minLocalHours, "тестът трябва да е над минимума");
   near(с.manHours - без.manHours, чч, 0.01, "разлика в човекочасовете:");
-  near(с.total - без.total, чч * P.disAsmRate * P.deviationFactor, 1, "разликата е само труд, без транспорт (плюс отклонението):");
+  const трудРазлика = чч * P.disAsmRate;
+  const транспортРазлика = (E.roundHalf(с.clockHours) - E.roundHalf(без.clockHours)) * P.truckRate;
+  near(с.total - без.total, (трудРазлика + транспортРазлика) * P.deviationFactor, 1, "разликата е труд + удължен престой на камиона (плюс отклонението):");
 });
 test("разглобяване: броят хора се управлява поотделно за двата екипа", () => {
   const W = E.ITEM_INDEX.wardrobe3;
