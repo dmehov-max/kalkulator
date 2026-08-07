@@ -3207,8 +3207,8 @@ export default function KorektCalculator() {
               <div className="space-y-3">
                 <h2 className="text-xl font-bold" style={{ color: ink }}>Какъв тип услуга Ви трябва?</h2>
                 {[
-                  { id: "local", t: "Градско преместване", d: "В рамките на Вашия град", m: p.minPrice.local },
-                  { id: "intercity", t: "Междуградско", d: "От всяка точка на страната", m: 0, tag: "цена по километри" },
+                  { id: "local", t: "Градско преместване", d: `В рамките на града и близките села (до ${p.intercityThresholdKm} км)`, m: p.minPrice.local },
+                  { id: "intercity", t: "Междуградско", d: `Между градове, или над ${p.intercityThresholdKm} км в една посока`, m: 0, tag: "цена по километри" },
                   { id: "international", t: "Международно", d: "Транспорт от и за ЕС", m: p.minPrice.international },
                   { id: "disposal", t: "Изхвърляне на отпадък", d: "Изнасяне и извозване до сметище", m: 0, tag: "цена по обем" },
                   { id: "labour", t: "Само хамали (без камион)", d: "Опаковане, разглобяване и товарене във Ваш транспорт", m: 0, tag: "цена на час" },
