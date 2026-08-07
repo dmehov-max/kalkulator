@@ -1345,20 +1345,12 @@ function computePrice(s, p) {
         h * crew * workerRate);
   }
 
-  const manHours = handlingManHours + disManHours + wrapManHours + protectManHours + fillManHours + carryManHours;
-  const clockHours = handlingClock + fillClockElapsed + disHours + carryHoursTot + (crew ? (wrapManHours + protectManHours) / crew : wrapManHours + protectManHours); // общ престой на обекта
-  // над 10 часа на ден не се работи — толкова дни реално са нужни за изпълнение
-  const workDays = Math.max(1, Math.ceil(clockHours / n(p.dayHours || 10)));
-
-  // спец. обработка
-  Object.entries(s.qty).forEach(([id, cnt]) => {
-    const it = ITEM_INDEX[id];
-    if (it?.surcharge && cnt > 0) add(`${it.label} — спец. обработка ×${cnt}`, it.surcharge * cnt);
-  });
-
   // СТЪЛБИ — парична такса на етаж, на адрес (товарене + разтоварване). За всяка вещ служителят
   // може да отбележи с s.floorFeeOff (и за колко бройки), че НЕ се качва по стълби (напр. остава
   // на партера, качва се с кран/асансьор през прозорец) — тези бройки се изваждат от таксата.
+  // Изчислено ТУК (преди manHours/clockHours), защото носенето по стълби е реална извънредна
+  // работа, не само такса — времето за изпълнение трябва да я отразява (виж stairsManHours по-долу),
+  // иначе 5 етажа без асансьор излизат само по-скъпи, но не и по-бавни от партер.
   const boxes = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "box" || it.kind === "sack"); // чувалите се носят като кашони
   const appNormal = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "appliance");
   const appHeavy = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "appliance_heavy");
@@ -1376,6 +1368,21 @@ function computePrice(s, p) {
   const floorsStdTot = floorsStd(s.pickup) + (skipDropoffFloors ? 0 : floorsStd(s.dropoff));
   const floorsOvrTot = floorsOvr(s.pickup) + (skipDropoffFloors ? 0 : floorsOvr(s.dropoff));
   const stairs = floorsStdTot * perFloorStd + floorsOvrTot * perFloorOvr;
+  // превръща таксата за стълби в реални човекочасове по стандартната работническа ставка —
+  // екипът реално отделя толкова допълнително време, не само плаща толкова допълнително
+  const stairsManHours = workerRate > 0 ? stairs / workerRate : 0;
+
+  const manHours = handlingManHours + disManHours + wrapManHours + protectManHours + fillManHours + carryManHours + stairsManHours;
+  const clockHours = handlingClock + fillClockElapsed + disHours + carryHoursTot + (crew ? (wrapManHours + protectManHours + stairsManHours) / crew : wrapManHours + protectManHours + stairsManHours); // общ престой на обекта
+  // над 10 часа на ден не се работи — толкова дни реално са нужни за изпълнение
+  const workDays = Math.max(1, Math.ceil(clockHours / n(p.dayHours || 10)));
+
+  // спец. обработка
+  Object.entries(s.qty).forEach(([id, cnt]) => {
+    const it = ITEM_INDEX[id];
+    if (it?.surcharge && cnt > 0) add(`${it.label} — спец. обработка ×${cnt}`, it.surcharge * cnt);
+  });
+
   if (stairs) {
     const parts = [];
     if (floorsStdTot && boxes) parts.push(`${boxes} каш.`);
