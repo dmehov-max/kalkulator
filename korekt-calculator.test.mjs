@@ -28,7 +28,8 @@ const engineSrc =
   haversineKm, normHood, findHood, cityCenter, estimateKm, crewFor, ownTruck,
   fleetFor, tripsFor, bestTruck, computePrice, totalWeight, findCity, protectMetersFor, BASES, nearestBase, baseOnRoute, mergeParams, buildRecord, toCSV, disHoursFor, wrapMetersFor, CITIES, estimateKmAny, pointFor,
   saveCalc, loadCalcs, saveParams, loadParams, CALC_PREFIX, PARAMS_KEY, fetchParamsFromSupabase, pushParamsToSupabase, pushCalcToSupabase, fetchCalcsFromSupabase, fetchCatalogItemsFromSupabase, pushCatalogItemToSupabase, applyExtraCatalogItems, nextCalcNumber, CALC_COUNTER_KEY, fetchRealDistanceKm, routesCache, ROUTES_CACHE_KEY, roundHalf, sanitizeNumericParams,
-  storageSet, storageGet, storageList, getStorageMode, hasStorage, isValidEmail, isValidPhone, isAllowedSignupEmail };\n`;
+  storageSet, storageGet, storageList, getStorageMode, hasStorage, isValidEmail, isValidPhone, isAllowedSignupEmail,
+  parseItemList, parseItemListLine, matchCatalogItem };\n`;
 
 const tmp = path.join(os.tmpdir(), `korekt-engine-${Date.now()}.mjs`);
 fs.writeFileSync(tmp, engineSrc);
@@ -787,6 +788,48 @@ test("регистрация: позволена само за @korekt-bg.com (�
   ok(E.isAllowedSignupEmail("Some.One@KOREKT-BG.COM"));
   ok(!E.isAllowedSignupEmail("someone@gmail.com"));
   ok(!E.isAllowedSignupEmail("someone@korekt-bg.com.evil.com"));
+});
+
+/* --- Разпознаване на поставен списък с вещи --- */
+test("списък: бройка отпред, не изяжда 'х' от началото на думата", () => {
+  const r = E.parseItemListLine("1 хладилник");
+  eq(r.qty, 1);
+  eq(r.text, "хладилник");
+});
+test("списък: бройка отпред с 'x' разделител", () => {
+  eq(E.parseItemListLine("2x диван").qty, 2);
+  eq(E.parseItemListLine("2x диван").text, "диван");
+});
+test("списък: бройка отзад ('стол х3', 'диван - 2 бр')", () => {
+  eq(E.parseItemListLine("стол x3").qty, 3);
+  eq(E.parseItemListLine("диван - 2 бр").qty, 2);
+});
+test("списък: без бройка → по подразбиране 1", () => {
+  const r = E.parseItemListLine("хладилник");
+  eq(r.qty, 1);
+  eq(r.text, "хладилник");
+});
+test("списък: точно съвпадение с каталога излиза първо", () => {
+  const hits = E.matchCatalogItem("хладилник");
+  ok(hits.length > 0, "трябва да намери поне един кандидат");
+  eq(hits[0].id, "fridge");
+});
+test("списък: разпознава и на латиница (транслитерация)", () => {
+  const hits = E.matchCatalogItem("hladilnik");
+  ok(hits.some((h) => h.id === "fridge"), "трябва да намери 'Хладилник' от латиница:");
+});
+test("списък: кратки думи не съвпадат тривиално навсякъде", () => {
+  // регресия: "с" от "Кашон с книги" преди съвпадаше с почти всяка дума
+  const hits = E.matchCatalogItem("маса за хранене");
+  ok(!hits.some((h) => h.id === "boxS"), "не бива да съвпадне с кашон само заради къса дума:");
+});
+test("списък: неразпозната вещ връща 0 кандидата, не грешен избор", () => {
+  const hits = E.matchCatalogItem("абсолютно неразпознаваем текст xyz123");
+  eq(hits.length, 0);
+});
+test("списък: parseItemList разделя на редове и запетаи", () => {
+  const rows = E.parseItemList("2 дивана\nхладилник, 3 стола");
+  eq(rows.length, 3);
 });
 
 /* --- Демонтаж/монтаж по вещ --- */

@@ -198,6 +198,58 @@ function translitBG(str) {
   return String(str || "").toLowerCase().split("").map((ch) => BG_TRANSLIT[ch] ?? ch).join("");
 }
 
+/* -------- Разпознаване на поставен списък с вещи (копирано от клиент) -------- *
+ * Не е AI извикване (нужен би бил платен API извън браузъра) — работи изцяло
+ * локално чрез съвпадение с каталога, толерантно към бройка отпред/отзад,
+ * латиница и кирилица. Разпознава повечето директно копирани списъци; неясните
+ * редове се показват на потребителя за ръчен избор, вместо да се гадае тихо. */
+function parseItemListLine(line) {
+  const raw = String(line || "").trim();
+  if (!raw) return null;
+  // бройка отпред: "2x диван", "2 х диван", "2 дивана", "2. диван"
+  // разделителят се приема САМО ако е самостоятелен (следван от интервал/край) —
+  // иначе "1 хладилник" би изял буквата "х" от началото на "хладилник"
+  let m = raw.match(/^(\d+)\s*(?:[xх×.](?=\s|$))?\s*(.+)$/i);
+  if (m) return { raw, qty: Math.max(1, parseInt(m[1], 10)), text: m[2].trim() };
+  // бройка отзад: "диван - 2 бр", "диван х2", "диван (2)"
+  m = raw.match(/^(.+?)[\s\-–—x×хX]*\(?\s*(\d+)\s*(бр\.?|броя|х|x)?\)?\s*$/i);
+  if (m && m[2]) return { raw, qty: Math.max(1, parseInt(m[2], 10)), text: m[1].trim() };
+  return { raw, qty: 1, text: raw };
+}
+function matchCatalogItem(text) {
+  const q = translitBG(String(text || "").toLowerCase().trim());
+  if (!q) return [];
+  const all = CATALOG.flatMap((g) => g.items.map((it) => ({ ...it, group: g.group })));
+  const scored = all.map((it) => {
+    const label = translitBG(it.label.toLowerCase());
+    let score = 0;
+    if (label === q) score = 100;
+    else if (label.startsWith(q) || q.startsWith(label)) score = 80;
+    else if (label.includes(q) || q.includes(label)) score = 60;
+    else {
+      // припокриване на думи — хваща разместен ред ("местен диван" vs "диван местен").
+      // минимална дължина 3, инак къси думи ("с", "на") съвпадат тривиално навсякъде
+      const qWords = q.split(/\s+/).filter((w) => w.length >= 3);
+      const lWords = label.split(/\s+/).filter((w) => w.length >= 3);
+      const common = qWords.filter((w) => lWords.some((lw) => lw.includes(w) || w.includes(lw)));
+      if (qWords.length && common.length === qWords.length) score = 40;
+    }
+    return { item: it, score };
+  }).filter((s) => s.score > 0).sort((a, b) => b.score - a.score);
+  return scored.map((s) => s.item);
+}
+// разпознава цял поставен списък (текст, ред на ред) — връща за всеки ред бройка,
+// оригиналния текст и кандидати от каталога (0 = неразпознато, 1 = сигурно, >1 = неясно)
+function parseItemList(text) {
+  const lines = String(text || "").split(/[\n,;]+/).map((l) => l.trim()).filter(Boolean);
+  return lines.map((line) => {
+    const parsed = parseItemListLine(line);
+    if (!parsed) return null;
+    const candidates = matchCatalogItem(parsed.text);
+    return { ...parsed, candidates, chosenId: candidates[0]?.id || null };
+  }).filter(Boolean);
+}
+
 // проста, но достатъчна валидация за контактната форма — не претендира за пълна RFC точност,
 // само хваща очевидно грешно въведени данни (напр. "not-an-email")
 const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v || "").trim());
@@ -2898,6 +2950,25 @@ export default function KorektCalculator() {
   }, [authSession, p.supabaseUrl, p.supabaseKey]);
   const [openGroups, setOpenGroups] = useState({ "Хол и трапезария": true });
   const [itemSearch, setItemSearch] = useState("");
+  // поставен списък с вещи (копиран от клиент) — разпознаване по каталога, не AI извикване
+  const [showPasteList, setShowPasteList] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [pasteResults, setPasteResults] = useState(null); // null = още не е разпознато
+  const runPasteParse = () => setPasteResults(parseItemList(pasteText));
+  const setPasteChoice = (i, id) => setPasteResults((rows) => rows.map((r, j) => (j === i ? { ...r, chosenId: id } : r)));
+  const setPasteQty = (i, qty) => setPasteResults((rows) => rows.map((r, j) => (j === i ? { ...r, qty: Math.max(0, qty) } : r)));
+  const applyPasteResults = () => {
+    let added = 0, skipped = 0;
+    for (const r of pasteResults || []) {
+      if (r.chosenId && r.qty > 0) { setQty(r.chosenId, (s.qty[r.chosenId] || 0) + r.qty); added++; }
+      else skipped++;
+    }
+    setShowPasteList(false);
+    setPasteText("");
+    setPasteResults(null);
+    notify(skipped ? `Добавени ${added} вещи · ${skipped} реда не бяха разпознати.` : `Добавени ${added} вещи от списъка.`,
+      skipped && !added ? "error" : "success");
+  };
   const [s, setS] = useState(() =>
     initialDraft?.s ? { ...INITIAL_S, ...initialDraft.s } : structuredClone(INITIAL_S)
   );
@@ -3561,6 +3632,10 @@ export default function KorektCalculator() {
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">×</button>
                     )}
                   </div>
+                  <button onClick={() => setShowPasteList(true)}
+                    className="text-xs font-medium mb-3 underline" style={{ color: accent }}>
+                    📋 Постави списък с вещи от клиента
+                  </button>
 
                   {itemSearch.trim() && (
                     <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden mb-3">
@@ -4177,6 +4252,65 @@ export default function KorektCalculator() {
             </div>
           </form>
           )}
+        </div>
+      )}
+      {showPasteList && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/40 p-4"
+          onClick={() => { setShowPasteList(false); setPasteResults(null); }}>
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg my-8 rounded-2xl bg-white p-6 shadow-xl">
+            <div className="text-sm font-semibold mb-1" style={{ color: ink }}>📋 Постави списък с вещи</div>
+            <p className="text-xs text-slate-500 mb-3">
+              Постави текст от клиента (по ред, или разделен със запетая) — напр. „2 дивана, хладилник, 3 стола".
+              Разпознава се по каталога тук, без да се праща никъде — не е AI услуга.
+            </p>
+            {!pasteResults ? (
+              <>
+                <textarea autoFocus value={pasteText} onChange={(e) => setPasteText(e.target.value)}
+                  placeholder={"2 дивана\nхладилник\n3 стола\n..."}
+                  rows={8} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mb-3" />
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setShowPasteList(false)} className="text-sm px-3 py-2 text-slate-500">Отказ</button>
+                  <button onClick={runPasteParse} disabled={!pasteText.trim()}
+                    className="text-sm font-semibold px-4 py-2 rounded-full text-white disabled:opacity-50" style={{ background: accent }}>
+                    Разпознай
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2 mb-3 max-h-96 overflow-auto -mx-1 px-1">
+                  {pasteResults.length === 0 && <div className="text-sm text-slate-400">Няма разпознати редове.</div>}
+                  {pasteResults.map((r, i) => (
+                    <div key={i} className="rounded-xl border border-slate-200 p-3">
+                      <div className="text-xs text-slate-400 mb-1.5 truncate" title={r.raw}>„{r.raw}"</div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-16">
+                          <Num value={r.qty} step={1} onChange={(v) => setPasteQty(i, Number(v) || 0)} />
+                        </div>
+                        {r.candidates.length > 0 ? (
+                          <select value={r.chosenId || ""} onChange={(e) => setPasteChoice(i, e.target.value || null)}
+                            className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm">
+                            {r.candidates.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                            <option value="">— пропусни —</option>
+                          </select>
+                        ) : (
+                          <span className="flex-1 text-sm" style={{ color: "#b45309" }}>⚠ не е разпозната — добави ръчно</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setPasteResults(null)} className="text-sm px-3 py-2 text-slate-500">← Назад</button>
+                  <button onClick={() => { setShowPasteList(false); setPasteResults(null); }} className="text-sm px-3 py-2 text-slate-500">Отказ</button>
+                  <button onClick={applyPasteResults}
+                    className="text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: accent }}>
+                    Добави към калкулацията
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
