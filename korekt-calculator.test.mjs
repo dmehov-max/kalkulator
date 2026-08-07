@@ -1760,6 +1760,13 @@ test("buildRecord: съдържа ключовите полета", () => {
   ok(rec.paramsSnapshot, "липсва снимка на ставките");
   eq(rec.contact, null, "без контакт по подразбиране:");
 });
+test("buildRecord: пази пълното formState за по-късна редакция", () => {
+  const o = order({ qty: { boxM: 10, sofa3: 1 } });
+  const rec = E.buildRecord(o, P, E.computePrice(o, P), "calc:test");
+  ok(rec.formState, "липсва formState — редакцията на стар запис няма да работи");
+  eq(rec.formState.qty.boxM, 10, "formState трябва да пази точните количества:");
+  eq(rec.formState.qty.sofa3, 1);
+});
 test("toCSV: заглавен ред + по ред на запис", () => {
   const o = order({ qty: { boxM: 10 } });
   const rec = E.buildRecord(o, P, E.computePrice(o, P));

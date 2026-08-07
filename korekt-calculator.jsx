@@ -1653,6 +1653,10 @@ function buildRecord(s, p, r, id, calcNumber, createdBy) {
     // с анонимния ключ от всеки, отворил "Записи", затова supabaseKey/mapsApiKey/supabaseUrl
     // НЕ бива да се копират тук (иначе течат обратно към браузъра на всеки, който гледа записа)
     paramsSnapshot: stripSecrets(p),
+    // пълното входно състояние на съветника (qty, dis/asm/wrap/protect, pickup/dropoff...) —
+    // единствения начин "Редактирай" по-късно да презареди точно същата калкулация в
+    // съветника, вместо да гади от резюмето (items/breakdown), което губи детайли
+    formState: s,
     contact: null,
     status: "калкулация",
   };
@@ -2375,7 +2379,7 @@ function recordRouteLabel(r) {
 }
 
 // показва запазена калкулация в същия вид, в който е показана при генерирането ѝ
-function RecordDetail({ record: r, p, onClose }) {
+function RecordDetail({ record: r, p, onClose, onEdit }) {
   const serviceLabel = SERVICE_LABELS[r.service] || r.service;
   const lift = (a) => (!a ? "" : a.elevator ? (a.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор") : "без асансьор");
   const disSet = new Set(r.disassembly || []);
@@ -2396,7 +2400,20 @@ function RecordDetail({ record: r, p, onClose }) {
                 Калкулация №{r.calcNumber}
               </div>
             ) : <span />}
-            <button onClick={onClose} className="text-white/70 hover:text-white text-sm">✕ Затвори</button>
+            <div className="flex items-center gap-3">
+              {onEdit && (
+                r.formState ? (
+                  <button onClick={() => onEdit(r)} className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: accent, color: ink }}>
+                    ✏️ Редактирай
+                  </button>
+                ) : (
+                  <span className="text-[11px] text-white/50" title="Стар запис отпреди тази функция — няма запазено пълно състояние за редакция">
+                    (стар запис — без редакция)
+                  </span>
+                )
+              )}
+              <button onClick={onClose} className="text-white/70 hover:text-white text-sm">✕ Затвори</button>
+            </div>
           </div>
           <div className="flex justify-between items-start">
             <div>
@@ -2536,7 +2553,7 @@ function RecordDetail({ record: r, p, onClose }) {
   );
 }
 
-function LogPanel({ onClose, p, session }) {
+function LogPanel({ onClose, p, session, onEdit }) {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState(false);
   const [confirming, setConfirming] = useState(null);
@@ -2772,7 +2789,7 @@ function LogPanel({ onClose, p, session }) {
           ? "Записите се пазят локално за това устройство и този браузър."
           : "Тази среда не пази записи трайно."}
       </p>
-      {selected && <RecordDetail record={selected} p={p} onClose={() => setSelected(null)} />}
+      {selected && <RecordDetail record={selected} p={p} onClose={() => setSelected(null)} onEdit={onEdit} />}
     </div>
   );
 }
@@ -2978,6 +2995,21 @@ export default function KorektCalculator() {
   const pushedRef = useRef(!!initialDraft?.pushed); // дали вече е създаден ред в Supabase — след това само PATCH (update), не upsert
   const [calcNumberState, setCalcNumberState] = useState(initialDraft?.recordNumber || null); // за показване в резултата
 
+  // зарежда стар запис обратно в съветника за редакция — НЕ презаписва оригинала,
+  // а тръгва като чисто нова калкулация (нов ключ/номер), за да остане историята непокътната
+  const loadRecordForEditing = (rec) => {
+    if (!rec?.formState) { notify("Този запис е отпреди тази функция — няма запазено пълно състояние.", "error"); return; }
+    setS({ ...INITIAL_S, ...rec.formState });
+    recordKey.current = null;
+    recordNumber.current = null;
+    pushedRef.current = false;
+    setCalcNumberState(null);
+    clearDraftLS(); // старата чернова (ако имаше) вече не важи — тръгваме от редактираните данни
+    setShowLog(false);
+    setStep(3);
+    notify(`Калкулация №${rec.calcNumber ?? ""} е заредена за редакция — промените ще се запазят като нов запис.`, "info");
+  };
+
   // --- чернова на текущата калкулация (за да наистина не се губи при презареждане) ---
   // пазим и ключа/номера на записа, за да не се трупат дубликати (№2, №3...) при презареждане
   useEffect(() => {
@@ -3162,7 +3194,7 @@ export default function KorektCalculator() {
           </div>
         </div>
 
-        {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} session={authSession} />}
+        {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} session={authSession} onEdit={loadRecordForEditing} />}
         {showMargin && step === 3 && (
           <div className="rounded-2xl p-5 mb-4" style={{ background: "#fff8ef", border: "1px solid #f3ddbd" }}>
             <div className="text-sm font-semibold mb-3" style={{ color: ink }}>💰 Себестойност и марж (вътрешно, не се вижда от клиента)</div>
