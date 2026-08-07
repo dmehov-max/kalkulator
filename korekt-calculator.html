@@ -5004,6 +5004,13 @@ function LogPanel({
   const [confirmingWhich, setConfirmingWhich] = useState(null); // ред, чакащ второ потвърждение (inline, не native confirm)
   const [confirmError, setConfirmError] = useState(null); // ключ на ред, чието потвърждение не мина в базата
   const [selected, setSelected] = useState(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all"); // all | калкулация | заявка | потвърдена
+  const [periodFilter, setPeriodFilter] = useState("all"); // all | today | week | month
+  const [sortKey, setSortKey] = useState("createdAt");
+  const [sortDir, setSortDir] = useState("desc");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
   const refresh = async () => {
     setRows(null);
     const d = await loadCalcs(p);
@@ -5013,6 +5020,9 @@ function LogPanel({
   useEffect(() => {
     refresh();
   }, []);
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, periodFilter]);
   const confirmRow = async row => {
     setConfirmingWhich(null);
     setConfirming(row.key);
@@ -5031,7 +5041,7 @@ function LogPanel({
     if (p?.supabaseUrl && p?.supabaseKey && !res?.ok) setConfirmError(key);
   };
   const download = () => {
-    const blob = new Blob(["\uFEFF" + toCSV(rows || [])], {
+    const blob = new Blob(["\uFEFF" + toCSV(sortedRows || [])], {
       type: "text/csv;charset=utf-8"
     });
     const a = document.createElement("a");
@@ -5051,6 +5061,41 @@ function LogPanel({
   const conversionBase = requests.length + confirmed.length;
   const conversionPct = conversionBase ? Math.round(confirmed.length / conversionBase * 100) : null;
   const displayNum = r => r.calcNumber ? `№${r.calcNumber}` : r.key.slice(-5);
+
+  // --- търсене / филтри / сортиране / страниране (само за таблицата — статистиките горе
+  // остават върху ВСИЧКИ записи, за да отразяват реалната обща картина) ---
+  const PERIOD_MS = {
+    today: 24 * 3600 * 1000,
+    week: 7 * 24 * 3600 * 1000,
+    month: 30 * 24 * 3600 * 1000
+  };
+  const filteredRows = (rows || []).filter(r => {
+    if (statusFilter !== "all" && (r.status || "калкулация") !== statusFilter) return false;
+    if (periodFilter !== "all" && Date.now() - new Date(r.createdAt).getTime() > PERIOD_MS[periodFilter]) return false;
+    const q = search.trim().toLowerCase();
+    if (q) {
+      const hay = [r.contact?.name, r.contact?.phone, r.contact?.email, r.city, r.from, r.to, r.destination, recordRouteLabel(r), displayNum(r)].filter(Boolean).join(" ").toLowerCase();
+      if (!hay.includes(q) && !translitBG(hay).includes(translitBG(q))) return false;
+    }
+    return true;
+  });
+  const sortedRows = [...filteredRows].sort((a, b) => {
+    const pick = r => sortKey === "total" ? r.total || 0 : sortKey === "volumeM3" ? r.volumeM3 || 0 : sortKey === "calcNumber" ? r.calcNumber || 0 : r.createdAt;
+    const av = pick(a),
+      bv = pick(b);
+    if (av === bv) return 0;
+    return (av < bv ? -1 : 1) * (sortDir === "asc" ? 1 : -1);
+  });
+  const toggleSort = key => {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");else {
+      setSortKey(key);
+      setSortDir(key === "createdAt" ? "desc" : "desc");
+    }
+  };
+  const sortArrow = key => sortKey === key ? sortDir === "asc" ? " ↑" : " ↓" : "";
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages);
+  const pagedRows = sortedRows.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
   return /*#__PURE__*/React.createElement("div", {
     className: "rounded-2xl border-2 bg-white p-5 mb-4",
     style: {
@@ -5068,10 +5113,10 @@ function LogPanel({
   }, /*#__PURE__*/React.createElement("button", {
     onClick: refresh,
     className: "text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600"
-  }, "Обнови"), rows?.length > 0 && /*#__PURE__*/React.createElement("button", {
+  }, "Обнови"), sortedRows.length > 0 && /*#__PURE__*/React.createElement("button", {
     onClick: download,
     className: "text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600"
-  }, "⬇ Изтегли CSV"), /*#__PURE__*/React.createElement("button", {
+  }, "⬇ Изтегли CSV (", sortedRows.length, ")"), /*#__PURE__*/React.createElement("button", {
     onClick: onClose,
     className: "text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600"
   }, "Затвори"))), rows === null && /*#__PURE__*/React.createElement("div", {
@@ -5094,28 +5139,72 @@ function LogPanel({
       color: ink
     }
   }, v)))), /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap items-center gap-2 mb-2"
+  }, /*#__PURE__*/React.createElement("input", {
+    value: search,
+    onChange: e => setSearch(e.target.value),
+    placeholder: "🔍 Име, телефон, имейл, маршрут, №…",
+    className: "flex-1 min-w-[180px] rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+  }), /*#__PURE__*/React.createElement("select", {
+    value: statusFilter,
+    onChange: e => setStatusFilter(e.target.value),
+    className: "rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "all"
+  }, "Всички статуси"), /*#__PURE__*/React.createElement("option", {
+    value: "калкулация"
+  }, "Калкулация"), /*#__PURE__*/React.createElement("option", {
+    value: "заявка"
+  }, "Заявка"), /*#__PURE__*/React.createElement("option", {
+    value: "потвърдена"
+  }, "Потвърдена")), /*#__PURE__*/React.createElement("select", {
+    value: periodFilter,
+    onChange: e => setPeriodFilter(e.target.value),
+    className: "rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "all"
+  }, "Целият период"), /*#__PURE__*/React.createElement("option", {
+    value: "today"
+  }, "Днес"), /*#__PURE__*/React.createElement("option", {
+    value: "week"
+  }, "Последната седмица"), /*#__PURE__*/React.createElement("option", {
+    value: "month"
+  }, "Последният месец")), (search || statusFilter !== "all" || periodFilter !== "all") && /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setSearch("");
+      setStatusFilter("all");
+      setPeriodFilter("all");
+    },
+    className: "text-[11px] text-slate-500 underline"
+  }, "изчисти филтрите")), sortedRows.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "text-sm text-slate-400 py-4 text-center"
+  }, "Няма записи, отговарящи на филтъра.") : /*#__PURE__*/React.createElement("div", {
     className: "max-h-80 overflow-auto -mx-1"
   }, /*#__PURE__*/React.createElement("table", {
     className: "w-full text-xs"
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
     className: "text-slate-400 text-left"
   }, /*#__PURE__*/React.createElement("th", {
-    className: "py-1.5 px-1 font-medium"
-  }, "№"), /*#__PURE__*/React.createElement("th", {
-    className: "py-1.5 px-1 font-medium"
-  }, "Дата"), /*#__PURE__*/React.createElement("th", {
+    className: "py-1.5 px-1 font-medium cursor-pointer select-none",
+    onClick: () => toggleSort("calcNumber")
+  }, "№", sortArrow("calcNumber")), /*#__PURE__*/React.createElement("th", {
+    className: "py-1.5 px-1 font-medium cursor-pointer select-none",
+    onClick: () => toggleSort("createdAt")
+  }, "Дата", sortArrow("createdAt")), /*#__PURE__*/React.createElement("th", {
     className: "py-1.5 px-1 font-medium"
   }, "Кой"), /*#__PURE__*/React.createElement("th", {
     className: "py-1.5 px-1 font-medium"
   }, "Маршрут"), /*#__PURE__*/React.createElement("th", {
-    className: "py-1.5 px-1 font-medium text-right"
-  }, "м³"), /*#__PURE__*/React.createElement("th", {
-    className: "py-1.5 px-1 font-medium text-right"
-  }, "Цена"), /*#__PURE__*/React.createElement("th", {
+    className: "py-1.5 px-1 font-medium text-right cursor-pointer select-none",
+    onClick: () => toggleSort("volumeM3")
+  }, "м³", sortArrow("volumeM3")), /*#__PURE__*/React.createElement("th", {
+    className: "py-1.5 px-1 font-medium text-right cursor-pointer select-none",
+    onClick: () => toggleSort("total")
+  }, "Цена", sortArrow("total")), /*#__PURE__*/React.createElement("th", {
     className: "py-1.5 px-1 font-medium"
   }, "Статус"), /*#__PURE__*/React.createElement("th", {
     className: "py-1.5 px-1 font-medium"
-  }))), /*#__PURE__*/React.createElement("tbody", null, rows.map(r => /*#__PURE__*/React.createElement("tr", {
+  }))), /*#__PURE__*/React.createElement("tbody", null, pagedRows.map(r => /*#__PURE__*/React.createElement("tr", {
     key: r.key,
     className: "border-t border-slate-100"
   }, /*#__PURE__*/React.createElement("td", {
@@ -5180,7 +5269,19 @@ function LogPanel({
   }, "Отвори"), r.status !== "потвърдена" && /*#__PURE__*/React.createElement("button", {
     onClick: () => setConfirmingWhich(r.key),
     className: "text-[11px] font-medium px-2 py-1 rounded-full border border-slate-200 text-slate-600"
-  }, "Потвърди"))))))))), /*#__PURE__*/React.createElement("p", {
+  }, "Потвърди")))))))), sortedRows.length > PAGE_SIZE && /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mt-2 text-xs text-slate-500"
+  }, /*#__PURE__*/React.createElement("span", null, sortedRows.length, " записа · страница ", pageSafe, " от ", totalPages), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-1"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setPage(x => Math.max(1, x - 1)),
+    disabled: pageSafe <= 1,
+    className: "px-2 py-1 rounded-lg border border-slate-200 disabled:opacity-40"
+  }, "← Предишна"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setPage(x => Math.min(totalPages, x + 1)),
+    disabled: pageSafe >= totalPages,
+    className: "px-2 py-1 rounded-lg border border-slate-200 disabled:opacity-40"
+  }, "Следваща →")))), /*#__PURE__*/React.createElement("p", {
     className: "text-[11px] text-slate-400 mt-3"
   }, p?.supabaseUrl && p?.supabaseKey ? "Записите се пазят в споделената база и се виждат от всички устройства." : getStorageMode() === "shared" ? "Записите се пазят в браузъра на този сайт и се виждат от всеки, който го отвори на това устройство." : getStorageMode() === "personal" ? "Записите се пазят локално за това устройство и този браузър." : "Тази среда не пази записи трайно."), selected && /*#__PURE__*/React.createElement(RecordDetail, {
     record: selected,

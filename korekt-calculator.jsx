@@ -2446,8 +2446,16 @@ function LogPanel({ onClose, p }) {
   const [confirmingWhich, setConfirmingWhich] = useState(null); // ред, чакащ второ потвърждение (inline, не native confirm)
   const [confirmError, setConfirmError] = useState(null); // ключ на ред, чието потвърждение не мина в базата
   const [selected, setSelected] = useState(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all"); // all | калкулация | заявка | потвърдена
+  const [periodFilter, setPeriodFilter] = useState("all"); // all | today | week | month
+  const [sortKey, setSortKey] = useState("createdAt");
+  const [sortDir, setSortDir] = useState("desc");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
   const refresh = async () => { setRows(null); const d = await loadCalcs(p); setRows(d); setErr(d.length === 0); };
   useEffect(() => { refresh(); }, []);
+  useEffect(() => { setPage(1); }, [search, statusFilter, periodFilter]);
 
   const confirmRow = async (row) => {
     setConfirmingWhich(null);
@@ -2465,7 +2473,7 @@ function LogPanel({ onClose, p }) {
   };
 
   const download = () => {
-    const blob = new Blob(["\uFEFF" + toCSV(rows || [])], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob(["\uFEFF" + toCSV(sortedRows || [])], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `korekt-kalkulacii-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -2484,13 +2492,45 @@ function LogPanel({ onClose, p }) {
   const conversionPct = conversionBase ? Math.round((confirmed.length / conversionBase) * 100) : null;
   const displayNum = (r) => (r.calcNumber ? `№${r.calcNumber}` : r.key.slice(-5));
 
+  // --- търсене / филтри / сортиране / страниране (само за таблицата — статистиките горе
+  // остават върху ВСИЧКИ записи, за да отразяват реалната обща картина) ---
+  const PERIOD_MS = { today: 24 * 3600 * 1000, week: 7 * 24 * 3600 * 1000, month: 30 * 24 * 3600 * 1000 };
+  const filteredRows = (rows || []).filter((r) => {
+    if (statusFilter !== "all" && (r.status || "калкулация") !== statusFilter) return false;
+    if (periodFilter !== "all" && Date.now() - new Date(r.createdAt).getTime() > PERIOD_MS[periodFilter]) return false;
+    const q = search.trim().toLowerCase();
+    if (q) {
+      const hay = [r.contact?.name, r.contact?.phone, r.contact?.email, r.city, r.from, r.to, r.destination, recordRouteLabel(r), displayNum(r)]
+        .filter(Boolean).join(" ").toLowerCase();
+      if (!hay.includes(q) && !translitBG(hay).includes(translitBG(q))) return false;
+    }
+    return true;
+  });
+  const sortedRows = [...filteredRows].sort((a, b) => {
+    const pick = (r) => sortKey === "total" ? (r.total || 0)
+      : sortKey === "volumeM3" ? (r.volumeM3 || 0)
+      : sortKey === "calcNumber" ? (r.calcNumber || 0)
+      : r.createdAt;
+    const av = pick(a), bv = pick(b);
+    if (av === bv) return 0;
+    return (av < bv ? -1 : 1) * (sortDir === "asc" ? 1 : -1);
+  });
+  const toggleSort = (key) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir(key === "createdAt" ? "desc" : "desc"); }
+  };
+  const sortArrow = (key) => (sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : "");
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages);
+  const pagedRows = sortedRows.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+
   return (
     <div className="rounded-2xl border-2 bg-white p-5 mb-4" style={{ borderColor: ink }}>
       <div className="flex items-center justify-between mb-3">
         <div className="font-bold" style={{ color: ink }}>📋 Записани калкулации</div>
         <div className="flex gap-2">
           <button onClick={refresh} className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600">Обнови</button>
-          {rows?.length > 0 && <button onClick={download} className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600">⬇ Изтегли CSV</button>}
+          {sortedRows.length > 0 && <button onClick={download} className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600">⬇ Изтегли CSV ({sortedRows.length})</button>}
           <button onClick={onClose} className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600">Затвори</button>
         </div>
       </div>
@@ -2520,22 +2560,48 @@ function LogPanel({ onClose, p }) {
               </div>
             ))}
           </div>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="🔍 Име, телефон, имейл, маршрут, №…"
+              className="flex-1 min-w-[180px] rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
+              <option value="all">Всички статуси</option>
+              <option value="калкулация">Калкулация</option>
+              <option value="заявка">Заявка</option>
+              <option value="потвърдена">Потвърдена</option>
+            </select>
+            <select value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value)}
+              className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
+              <option value="all">Целият период</option>
+              <option value="today">Днес</option>
+              <option value="week">Последната седмица</option>
+              <option value="month">Последният месец</option>
+            </select>
+            {(search || statusFilter !== "all" || periodFilter !== "all") && (
+              <button onClick={() => { setSearch(""); setStatusFilter("all"); setPeriodFilter("all"); }}
+                className="text-[11px] text-slate-500 underline">изчисти филтрите</button>
+            )}
+          </div>
+          {sortedRows.length === 0 ? (
+            <div className="text-sm text-slate-400 py-4 text-center">Няма записи, отговарящи на филтъра.</div>
+          ) : (
           <div className="max-h-80 overflow-auto -mx-1">
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-slate-400 text-left">
-                  <th className="py-1.5 px-1 font-medium">№</th>
-                  <th className="py-1.5 px-1 font-medium">Дата</th>
+                  <th className="py-1.5 px-1 font-medium cursor-pointer select-none" onClick={() => toggleSort("calcNumber")}>№{sortArrow("calcNumber")}</th>
+                  <th className="py-1.5 px-1 font-medium cursor-pointer select-none" onClick={() => toggleSort("createdAt")}>Дата{sortArrow("createdAt")}</th>
                   <th className="py-1.5 px-1 font-medium">Кой</th>
                   <th className="py-1.5 px-1 font-medium">Маршрут</th>
-                  <th className="py-1.5 px-1 font-medium text-right">м³</th>
-                  <th className="py-1.5 px-1 font-medium text-right">Цена</th>
+                  <th className="py-1.5 px-1 font-medium text-right cursor-pointer select-none" onClick={() => toggleSort("volumeM3")}>м³{sortArrow("volumeM3")}</th>
+                  <th className="py-1.5 px-1 font-medium text-right cursor-pointer select-none" onClick={() => toggleSort("total")}>Цена{sortArrow("total")}</th>
                   <th className="py-1.5 px-1 font-medium">Статус</th>
                   <th className="py-1.5 px-1 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {pagedRows.map((r) => (
                   <tr key={r.key} className="border-t border-slate-100">
                     <td className="py-1.5 px-1 font-semibold whitespace-nowrap" style={{ color: ink }}>{displayNum(r)}</td>
                     <td className="py-1.5 px-1 text-slate-500 whitespace-nowrap">{new Date(r.createdAt).toLocaleDateString("bg-BG")} {new Date(r.createdAt).toLocaleTimeString("bg-BG", { hour: "2-digit", minute: "2-digit" })}</td>
@@ -2586,6 +2652,18 @@ function LogPanel({ onClose, p }) {
               </tbody>
             </table>
           </div>
+          )}
+          {sortedRows.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
+              <span>{sortedRows.length} записа · страница {pageSafe} от {totalPages}</span>
+              <div className="flex gap-1">
+                <button onClick={() => setPage((x) => Math.max(1, x - 1))} disabled={pageSafe <= 1}
+                  className="px-2 py-1 rounded-lg border border-slate-200 disabled:opacity-40">← Предишна</button>
+                <button onClick={() => setPage((x) => Math.min(totalPages, x + 1))} disabled={pageSafe >= totalPages}
+                  className="px-2 py-1 rounded-lg border border-slate-200 disabled:opacity-40">Следваща →</button>
+              </div>
+            </div>
+          )}
         </>
       )}
       <p className="text-[11px] text-slate-400 mt-3">
