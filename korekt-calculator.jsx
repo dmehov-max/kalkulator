@@ -122,9 +122,15 @@ const DEFAULTS = {
   phoneHref: "tel:+359882944098",
 };
 
-/* -------- Каталог с вещи -------- */
+/* -------- Каталог с вещи --------
+ * "for" на всяка група показва къде се показва по подразбиране в стъпка 2:
+ *   "home"   — само при жилищен адрес (Апартамент/Къща)
+ *   "office" — само при Офис/Склад
+ *   "all"    — винаги (кашони, отпадък, специални — общи за всички)
+ * Изборът идва от "Вид сграда" на адреса за товарене (избира се в самото начало,
+ * стъпка 1) — виж isOfficeMove по-долу. Търсенето по вещ остава без ограничение. */
 const CATALOG = [
-  { group: "Хол и трапезария", items: [
+  { group: "Хол и трапезария", for: "home", items: [
     { id: "sofa2", label: "Диван 2-местен", m3: 1.4, kg: 45, wrap: 10, wrapReq: true, protect: 8 },
     { id: "sofa3", label: "Диван 3-местен", m3: 2.0, kg: 60, dis: 0.3, asm: 0.5, wrap: 12, wrapReq: true, kind: "oversized", protect: 10 },
     { id: "sofaL", label: "Ъглов диван", m3: 3.0, kg: 90, dis: 0.5, asm: 0.9, wrap: 16, wrapReq: true, kind: "oversized", protect: 14 },
@@ -141,7 +147,7 @@ const CATALOG = [
     { id: "rug", label: "Килим", m3: 0.2, kg: 12, wrap: 4, protect: 3 },
     { id: "lamp", label: "Лампа (подова/трапезна)", m3: 0.08, kg: 4, wrap: 4, protect: 3 },
   ]},
-  { group: "Спалня", items: [
+  { group: "Спалня", for: "home", items: [
     { id: "bedSingle", label: "Единично легло", m3: 1.0, kg: 40, dis: 0.4, asm: 0.9, wrap: 8, protect: 6 },
     { id: "bedDouble", label: "Двойно легло (рамка + матрак)", m3: 2.0, kg: 70, dis: 0.5, asm: 1.2, wrap: 12, wrapReq: true, protect: 10 },
     { id: "mattress", label: "Матрак", m3: 0.6, kg: 25, wrap: 12, wrapReq: true, protect: 6 },
@@ -151,7 +157,19 @@ const CATALOG = [
     { id: "nightstand", label: "Нощно шкафче", m3: 0.2, kg: 12, wrap: 4, protect: 3 },
     { id: "desk", label: "Бюро", m3: 0.6, kg: 30, dis: 0.3, asm: 0.9, wrap: 8, protect: 5 },
   ]},
-  { group: "Уреди", items: [
+  { group: "Офис", for: "office", items: [
+    { id: "officeDesk", label: "Офис бюро", m3: 0.5, kg: 25, dis: 0.2, asm: 0.5, wrap: 6, protect: 4 },
+    { id: "officeChair", label: "Офис стол (на колела)", m3: 0.3, kg: 12, wrap: 3, protect: 2 },
+    { id: "filingCabinet", label: "Шкаф с папки (картотека)", m3: 0.6, kg: 45, wrap: 6, protect: 4 },
+    { id: "officeCloset", label: "Офис шкаф / рафтове", m3: 0.8, kg: 50, dis: 0.3, asm: 0.8, wrap: 8, protect: 5 },
+    { id: "conferenceTable", label: "Конферентна маса", m3: 1.2, kg: 55, dis: 0.4, asm: 0.9, wrap: 10, protect: 6 },
+    { id: "reception", label: "Рецепционно бюро", m3: 1.0, kg: 60, dis: 0.4, asm: 1.0, wrap: 10, protect: 6 },
+    { id: "partition", label: "Преграда / параван", m3: 0.4, kg: 20, wrap: 5, protect: 3 },
+    { id: "whiteboard", label: "Бяла дъска / флипчарт", m3: 0.2, kg: 10, wrap: 3, protect: 3 },
+    { id: "printer", label: "Принтер / копирна машина", m3: 0.3, kg: 25, wrap: 5, wrapReq: true, protect: 3 },
+    { id: "serverRack", label: "Сървърна стойка (rack)", m3: 0.6, kg: 60, wrap: 8, wrapReq: true, kind: "appliance_heavy", protect: 6 },
+  ]},
+  { group: "Уреди", for: "all", items: [
     { id: "fridge", label: "Хладилник", m3: 0.6, kg: 60, wrap: 10, wrapReq: true, kind: "appliance", protect: 8 },
     { id: "fridgeXL", label: "Хладилник голям (American)", m3: 1.0, kg: 90, wrap: 14, wrapReq: true, kind: "appliance", protect: 12 },
     { id: "freezer", label: "Фризер", m3: 0.5, kg: 50, wrap: 9, wrapReq: true, kind: "appliance", protect: 7 },
@@ -164,7 +182,7 @@ const CATALOG = [
     { id: "ac", label: "Климатик (двете тела)", m3: 0.3, kg: 35, wrap: 4, wrapReq: true, protect: 4 },
     { id: "boiler", label: "Бойлер", m3: 0.3, kg: 30, wrap: 4, wrapReq: true, protect: 4 },
   ]},
-  { group: "Кашони и дребни", items: [
+  { group: "Кашони и дребни", for: "all", items: [
     { id: "boxS", label: "Кашон малък", m3: 0.06, kg: 8, kind: "box" },
     { id: "boxM", label: "Кашон среден", m3: 0.1, kg: 12, kind: "box" },
     { id: "boxL", label: "Кашон голям", m3: 0.15, kg: 18, kind: "box" },
@@ -173,7 +191,7 @@ const CATALOG = [
     { id: "bike", label: "Велосипед", m3: 0.4, kg: 12, wrap: 6, protect: 4 },
     { id: "art", label: "Огледало / картина", m3: 0.15, kg: 5, wrap: 3, wrapReq: true, protect: 4, protectReq: true },
   ]},
-  { group: "Отпадък за изхвърляне", items: [
+  { group: "Отпадък за изхвърляне", for: "all", items: [
     { id: "sackHouse", label: "Чувал битов отпадък", m3: 0.1, kg: 15, kind: "sack" },
     { id: "sackConstr", label: "Чувал строителен отпадък", m3: 0.06, kg: 40, kind: "sack" },
     { id: "sackGarden", label: "Чувал градински отпадък", m3: 0.12, kg: 12, kind: "sack" },
@@ -181,7 +199,7 @@ const CATALOG = [
     { id: "junkMattress", label: "Стар матрак", m3: 0.6, kg: 25, protect: 5 },
     { id: "junkAppliance", label: "Стар уред", m3: 0.5, kg: 50, kind: "appliance", protect: 5 },
   ]},
-  { group: "Специални (спец. обработка)", items: [
+  { group: "Специални (спец. обработка)", for: "all", items: [
     { id: "piano", label: "Пиано (пианино)", m3: 1.5, kg: 250, wrap: 16, surcharge: 150, protect: 16 },
     { id: "grand", label: "Роял", m3: 2.5, kg: 400, wrap: 20, surcharge: 250, protect: 22 },
     { id: "safe", label: "Каса / банкомат", m3: 0.5, kg: 300, wrap: 8, surcharge: 200, protect: 8 },
@@ -286,21 +304,26 @@ const disHoursFor = (qty, dis, asm, factor) => {
 };
 
 // метри твърда защита (велпапе / автопласт) — за чупливи повърхности
-const protectMetersFor = (qty, protect) =>
+// selfPack: бройки, за които клиентът вече е опаковал вещта сам — приспадат се
+// дори от задължителните (protectReq), не само от избираемите
+const protectMetersFor = (qty, protect, selfPack) =>
   Object.entries(qty).reduce((s, [id, cnt]) => {
     const it = ITEM_INDEX[id];
     if (!it?.protect || !cnt) return s;
-    const n = it.protectReq ? cnt : pickCount(protect?.[id], cnt);
+    const packed = pickCount(selfPack?.[id], cnt);
+    const n = it.protectReq ? Math.max(0, cnt - packed) : pickCount(protect?.[id], cnt);
     return s + it.protect * n;
   }, 0);
 
 // метри стреч фолио: задължителните вещи винаги, останалите — по избор
-const wrapMetersFor = (qty, wrap) =>
+const wrapMetersFor = (qty, wrap, selfPack) =>
   Object.entries(qty).reduce((s, [id, cnt]) => {
     const it = ITEM_INDEX[id];
     if (!it?.wrap || !cnt) return s;
-    // задължителните се опаковат всички; за останалите важи избраният брой
-    const n = it.wrapReq ? cnt : pickCount(wrap?.[id], cnt);
+    // задължителните се опаковат всички, освен приспаднатите като "опаковано от клиента";
+    // за останалите важи избраният брой
+    const packed = pickCount(selfPack?.[id], cnt);
+    const n = it.wrapReq ? Math.max(0, cnt - packed) : pickCount(wrap?.[id], cnt);
     return s + it.wrap * n;
   }, 0);
 const totalWeight = (qty) =>
@@ -1009,13 +1032,13 @@ function computePrice(s, p) {
   const disManHours = disOnlyManHours + asmOnlyManHours;
 
   // опаковане със стреч: метри → часове труд + ролки материал
-  const wrapMeters = wrapMetersFor(s.qty, s.wrap);
+  const wrapMeters = wrapMetersFor(s.qty, s.wrap, s.selfPack);
   const wrapManHours = wrapMeters / n(p.wrapMPerManHour || 40);
   const wrapHours = wrapManHours; // човекочаса за опаковане
   const rolls = wrapMeters > 0 ? wrapMeters / n(p.stretchRollM || 20) : 0; // дробна част се таксува пропорционално
 
   // велпапе / автопласт за огледала, картини, стъкла
-  const protectMeters = protectMetersFor(s.qty, s.protect);
+  const protectMeters = protectMetersFor(s.qty, s.protect, s.selfPack);
   const protectManHours = protectMeters / n(p.protectMPerManHour || 25);
 
   // ИЗХВЪРЛЯНЕ: разстояние до сметището, пълнене на чували, тонаж
@@ -2852,7 +2875,7 @@ function LogPanel({ onClose, p, session, onEdit }) {
 // начално състояние на калкулацията (стъпка 1) — извадено извън компонента, за да служи и като
 // база при сливане с възстановена чернова (schema-safe, ако по-късно добавим ново поле)
 const INITIAL_S = {
-  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {},
+  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {},
   pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   extras: { packing: false, materials: false, disassembly: false },
@@ -2987,6 +3010,10 @@ export default function KorektCalculator() {
   const localEst = s.service === "local" ? estimateKm(s.city, s.pickupHood, s.dropoffHood, Number(p.cityRoadFactor) || 1.3) : null;
   const isAssembly = s.service === "assembly";
   const isTRD = s.service === "trd";
+  // избрано в самото начало (стъпка 1, адрес на товарене → "Вид сграда") — по това
+  // делим списъка с вещи на стъпка 2 между офис и жилищен набор от групи
+  const isOfficeMove = s.pickup.building === "Офис" || s.pickup.building === "Склад";
+  const visibleCatalog = CATALOG.filter((g) => g.for === "all" || (g.for === "office") === isOfficeMove);
 
   // --- зареждане и автоматичен запис на ПАРАМЕТРИТЕ ---
   const [paramsLoaded, setParamsLoaded] = useState(false);
@@ -3618,10 +3645,13 @@ export default function KorektCalculator() {
             {step === 2 && !isManualHoursService && (
               <div className="space-y-5">
                 <div>
-                  <div className="flex items-baseline justify-between mb-3">
+                  <div className="flex items-baseline justify-between mb-1">
                     <h2 className="text-xl font-bold" style={{ color: ink }}>Списък с вещи</h2>
                     <div className="text-sm text-slate-500">Общо: <span className="font-bold" style={{ color: accent }}>{vol.toFixed(1)} м³</span></div>
                   </div>
+                  <p className="text-xs text-slate-400 mb-3">
+                    {isOfficeMove ? "📁 Офис списък" : "🏠 Жилищен списък"} — по избора „Вид сграда" на адреса на товарене (стъпка 1{s.pickup.building ? "" : ", по подразбиране жилищен, докато не е избран"}). Търсенето по-долу вижда всички вещи.
+                  </p>
 
                   <div className="relative mb-3">
                     <input
@@ -3676,7 +3706,7 @@ export default function KorektCalculator() {
                     <div className="rounded-2xl border-2 bg-white p-4 mb-3" style={{ borderColor: accent }}>
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-semibold" style={{ color: ink }}>Избрани вещи</span>
-                        <button onClick={() => setS((prev) => ({ ...prev, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {} }))}
+                        <button onClick={() => setS((prev) => ({ ...prev, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {} }))}
                           className="text-xs text-slate-500 underline">изчисти всички</button>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
@@ -3695,7 +3725,7 @@ export default function KorektCalculator() {
                   )}
 
                   <div className="space-y-2">
-                    {CATALOG.map((grp) => {
+                    {visibleCatalog.map((grp) => {
                       const open = openGroups[grp.group];
                       const grpVol = grp.items.reduce((a, i) => a + (s.qty[i.id] || 0) * i.m3, 0);
                       return (
@@ -3724,7 +3754,9 @@ export default function KorektCalculator() {
                                       </div>
                                       <Stepper value={cnt} onChange={(v) => setQty(it.id, v)} />
                                     </div>
-                                    {cnt > 0 && (it.dis || it.asm || it.wrap || it.protect) && (
+                                    {cnt > 0 && (it.dis || it.asm || it.wrap || it.protect) && (() => {
+                                      const packedCnt = pickCount(s.selfPack[it.id], cnt);
+                                      return (
                                       <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-1.5">
                                         {it.dis && (
                                           <OptionToggle label="🔧 разглоби" cnt={cnt} value={s.dis[it.id]}
@@ -3736,20 +3768,26 @@ export default function KorektCalculator() {
                                             onChange={(v) => setField("asm", it.id, v)}
                                             detail={(n) => `+${(it.asm * n).toFixed(1)} чч`} />
                                         )}
-                                        {it.protect && (
+                                        {(it.wrapReq || it.protectReq) && (
+                                          <OptionToggle label="✅ опаковано от клиента" cnt={cnt} value={s.selfPack[it.id]}
+                                            onChange={(v) => setField("selfPack", it.id, v)}
+                                            detail={(n) => `−${(((it.wrapReq ? it.wrap : 0) + (it.protectReq ? it.protect : 0)) * n).toFixed(1)} м материал`} />
+                                        )}
+                                        {it.protect && (!it.protectReq || packedCnt < cnt) && (
                                           <OptionToggle label="🛡 велпапе" cnt={cnt} value={it.protectReq ? true : s.protect[it.id]}
                                             locked={it.protectReq}
                                             onChange={(v) => setField("protect", it.id, v)}
-                                            detail={(n) => `${it.protect * n} м${it.protectReq ? " (задълж.)" : ""}`} />
+                                            detail={(n) => `${it.protect * (it.protectReq ? Math.max(0, cnt - packedCnt) : n)} м${it.protectReq ? " (задълж.)" : ""}`} />
                                         )}
-                                        {it.wrap && (
+                                        {it.wrap && (!it.wrapReq || packedCnt < cnt) && (
                                           <OptionToggle label="📦 стреч" cnt={cnt} value={it.wrapReq ? true : s.wrap[it.id]}
                                             locked={it.wrapReq}
                                             onChange={(v) => setField("wrap", it.id, v)}
-                                            detail={(n) => `${it.wrap * n} м${it.wrapReq ? " (задълж.)" : ""}`} />
+                                            detail={(n) => `${it.wrap * (it.wrapReq ? Math.max(0, cnt - packedCnt) : n)} м${it.wrapReq ? " (задълж.)" : ""}`} />
                                         )}
                                       </div>
-                                    )}
+                                      );
+                                    })()}
                                   </div>
                                 );
                               })}
@@ -4122,11 +4160,13 @@ export default function KorektCalculator() {
                       const it = ITEM_INDEX[id];
                       if (!it) return null;
                       const tags = [];
+                      const packedCnt = pickCount(s.selfPack[id], cnt);
                       if (s.dis[id] && it.dis) tags.push("разглобяване");
                       if (s.asm[id] && it.asm) tags.push("сглобяване");
-                      if (it.wrapReq) tags.push("стреч (задълж.)");
+                      if (packedCnt > 0) tags.push(packedCnt >= cnt ? "опаковано от клиента" : `опаковано от клиента (${packedCnt} от ${cnt})`);
+                      if (it.wrapReq) { if (packedCnt < cnt) tags.push("стреч (задълж.)"); }
                       else if (s.wrap[id] && it.wrap) tags.push("стреч");
-                      if (it.protectReq) tags.push("велпапе (задълж.)");
+                      if (it.protectReq) { if (packedCnt < cnt) tags.push("велпапе (задълж.)"); }
                       else if (s.protect[id] && it.protect) tags.push("велпапе");
                       return (
                         <div key={id} className="flex justify-between gap-3 text-sm">
