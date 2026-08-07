@@ -137,6 +137,8 @@ const CATALOG = [
     { id: "tableSmallGlass", label: "Малка масичка със стъкло", m3: 0.3, kg: 18, dis: 0.15, asm: 0.35, wrap: 6, wrapReq: true, protect: 5, protectReq: true },
     { id: "chair", label: "Стол", m3: 0.15, kg: 5, wrap: 3, protect: 2 },
     { id: "shelf", label: "Библиотека / етажерка", m3: 0.8, kg: 35, dis: 0.3, asm: 0.9, wrap: 8, protect: 6 },
+    { id: "rug", label: "Килим", m3: 0.2, kg: 12, wrap: 4, protect: 3 },
+    { id: "lamp", label: "Лампа (подова/трапезна)", m3: 0.08, kg: 4, wrap: 4, protect: 3 },
   ]},
   { group: "Спалня", items: [
     { id: "bedSingle", label: "Единично легло", m3: 1.0, kg: 40, dis: 0.4, asm: 0.9, wrap: 8, protect: 6 },
