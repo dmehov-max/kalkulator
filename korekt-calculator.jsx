@@ -19,7 +19,9 @@ const DEFAULTS = {
   truckCostPerHour: 8,    // €/час реален разход за камион при градски (почасови) курсове
   truckCostPerKm: 0.3,    // €/км реален разход за камион при курсове по километри
 
-  workerRate: 18,        // €/час на работник
+  workerRate: 18,        // €/час на работник (цена към клиента), ако градът не е зададен по-долу
+  workerRateByCity: [],  // [{ city:"София", rate:20 }, ...] — различна цена по градове КЪМ КЛИЕНТА
+                          // (отделно от workerCostByCity, което е вътрешната себестойност)
   truckRate: 20,         // €/час транспорт (за градско)
   kmRate: 0.7,           // €/км за извънградско (собствен камион)
   roundTripFactor: 2,    // курсът е двупосочен (отиване + връщане)
@@ -958,6 +960,16 @@ function computePrice(s, p) {
   const weight = totalWeight(s.qty);
   const wasteType = s.wasteType || "household";
 
+  // Град, по който се определя ставката на бригадата — общ ориентир и за себестойността
+  // (workerCostByCity), и за цената към клиента (workerRateByCity). При курс над 50 км се
+  // взима градът на товарене, иначе градът на самата услуга (местна/хамали/монтаж/ТРД).
+  const costCity = s.service === "intercity" ? s.pickupCity : (s.city || null);
+  const cityCostEntry = (p.workerCostByCity || []).find((c) => normHood(c.city) === normHood(costCity));
+  const workerCostRate = n(cityCostEntry ? cityCostEntry.rate : p.workerCostDefault);
+  // цената към клиента по градове — по избор; ако градът няма зададена ставка, важи общата p.workerRate
+  const cityRateEntry = (p.workerRateByCity || []).find((c) => normHood(c.city) === normHood(costCity));
+  const workerRate = n(cityRateEntry ? cityRateEntry.rate : p.workerRate);
+
   // избор на камион
   const fleet = fleetFor(s.service, p, s.wasteType);
   const picked = s.truckId ? fleet.find((t) => t.id === s.truckId) : null;
@@ -1023,7 +1035,7 @@ function computePrice(s, p) {
   // разглобяването и сглобяването се правят от РАЗЛИЧНИ екипи — броят се поотделно
   const disCrew = n(p.disCrew || 2);
   const asmCrew = n(p.asmCrew || 2);
-  const disAsmRate = n(p.disAsmRate || p.workerRate); // квалифициран труд — отделна ставка
+  const disAsmRate = n(p.disAsmRate || workerRate); // квалифициран труд — отделна ставка
   const disOnlyHours = work.dis;                     // реални часове разглобяване
   const asmOnlyHours = work.asm;                     // реални часове сглобяване
   const disOnlyManHours = disOnlyHours * disCrew;
@@ -1119,20 +1131,20 @@ function computePrice(s, p) {
   if (dayCrewMode) {
     handlingManHours = 0; // трудът се плаща на ден, не на час
     const people = n(p.travelCrew || 1);
-    add(`Придружаващ работник — ${dayTotalH.toFixed(1)} ч × ${people} ${people === 1 ? "човек" : "души"} × ${n(p.workerRate)} ${p.currency}/ч`,
-        dayTotalH * people * n(p.workerRate));
+    add(`Придружаващ работник — ${dayTotalH.toFixed(1)} ч × ${people} ${people === 1 ? "човек" : "души"} × ${workerRate} ${p.currency}/ч`,
+        dayTotalH * people * workerRate);
   } else if (localCrewMode) {
     // товаренето при клиента + местна бригада, която пътува до адреса и разтоварва
     handlingManHours = loadClock * crew;
-    add(`Товарене (${s.pickupCity}) — ${loadClock.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-        handlingManHours * n(p.workerRate));
+    add(`Товарене (${s.pickupCity}) — ${loadClock.toFixed(1)} ч × ${crew} души × ${workerRate} ${p.currency}/ч`,
+        handlingManHours * workerRate);
 
     const crewDriveH = baseKm ? (2 * baseKm) / n(p.roadSpeed || 65) : 0;   // отиване и връщане
     const crewWorkH = Math.max(n(p.unloadHours) * trips, n(p.localCrewMinHours || 2)); // мин. 2 ч работа
     const crewHours = crewDriveH + crewWorkH;
     const people = n(p.localCrewSize || 2);
-    add(`Местна бригада ${baseCity ? `(${baseCity})` : ""} — ${crewWorkH.toFixed(1)} ч работа + ${crewDriveH.toFixed(1)} ч път × ${people} души × ${n(p.workerRate)} ${p.currency}/ч`,
-        crewHours * people * n(p.workerRate));
+    add(`Местна бригада ${baseCity ? `(${baseCity})` : ""} — ${crewWorkH.toFixed(1)} ч работа + ${crewDriveH.toFixed(1)} ч път × ${people} души × ${workerRate} ${p.currency}/ч`,
+        crewHours * people * workerRate);
     handlingManHours += crewHours * people;
 
     if (baseCity && needCar) {
@@ -1146,7 +1158,7 @@ function computePrice(s, p) {
     // но календарното време се дели на броя камиони/екипи.
     // Общият брой хора е ограничен (напр. Варна — макс. 8 души на разположение).
     const trucksN = disposalTrucksN;
-    const disposalRate = n(p.disposalWorkerRate || p.workerRate);
+    const disposalRate = n(p.disposalWorkerRate || workerRate);
     const maxWorkers = n(p.disposalMaxWorkers || 8);
     const totalCrew = Math.min(crew * trucksN, maxWorkers);
     disposalTotalCrew = totalCrew;
@@ -1189,13 +1201,13 @@ function computePrice(s, p) {
     handlingManHours = handlingClock * crew;
     {
       const h = roundHalf(jobClock);
-      add(`Товарене и пренасяне — ${h.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-          h * crew * n(p.workerRate));
+      add(`Товарене и пренасяне — ${h.toFixed(1)} ч × ${crew} души × ${workerRate} ${p.currency}/ч`,
+          h * crew * workerRate);
     }
     if (travelH > 0) {
       const h = roundHalf(travelH);
-      add(`Път на бригадата (${labourBaseCity} → ${s.city}) — ${h.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-          h * crew * n(p.workerRate));
+      add(`Път на бригадата (${labourBaseCity} → ${s.city}) — ${h.toFixed(1)} ч × ${crew} души × ${workerRate} ${p.currency}/ч`,
+          h * crew * workerRate);
     }
     // кола за бригадата — винаги, с минимална такса дори в рамките на града
     const carKmFee = labourKm ? 2 * labourKm * n(p.carRatePerKm) : 0;
@@ -1216,7 +1228,7 @@ function computePrice(s, p) {
 
     handlingClock = jobClock + travelH;
     handlingManHours = handlingClock * crew;
-    const jobRate = isAssembly ? disAsmRate : n(p.workerRate); // монтажът е квалифициран труд
+    const jobRate = isAssembly ? disAsmRate : workerRate; // монтажът е квалифициран труд
     {
       const h = roundHalf(jobClock);
       add(`${isAssembly ? "Монтаж на мебели" : "Товарене/разтоварване"} — ${h.toFixed(1)} ч × ${crew} души × ${jobRate} ${p.currency}/ч`,
@@ -1224,8 +1236,8 @@ function computePrice(s, p) {
     }
     if (travelH > 0) {
       const h = roundHalf(travelH);
-      add(`Път на бригадата (${labourBaseCity} → ${s.city}) — ${h.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-          h * crew * n(p.workerRate));
+      add(`Път на бригадата (${labourBaseCity} → ${s.city}) — ${h.toFixed(1)} ч × ${crew} души × ${workerRate} ${p.currency}/ч`,
+          h * crew * workerRate);
     }
     const carKmFee = labourKm ? 2 * labourKm * n(p.carRatePerKm) : 0;
     const carFee = Math.max(carKmFee, n(p.labourMinCarFee || 0));
@@ -1242,24 +1254,24 @@ function computePrice(s, p) {
     handlingClock = loadClock;
     {
       const h = roundHalf(loadClock);
-      add(`Товарене (${s.pickupCity}) — ${h.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-          h * crew * n(p.workerRate));
+      add(`Товарене (${s.pickupCity}) — ${h.toFixed(1)} ч × ${crew} души × ${workerRate} ${p.currency}/ч`,
+          h * crew * workerRate);
     }
   } else {
     handlingManHours = handlingClock * crew;
     if (hoursManual) {
       // ръчно зададени часове — един общ ред вместо автоматичното разделяне на товарене/разтоварване
       const h = roundHalf(handlingClock);
-      add(`Товарене и разтоварване (ръчно) — ${h.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-          h * crew * n(p.workerRate));
+      add(`Товарене и разтоварване (ръчно) — ${h.toFixed(1)} ч × ${crew} души × ${workerRate} ${p.currency}/ч`,
+          h * crew * workerRate);
     } else if (isCourse) {
       const hL = roundHalf(loadClock), hU = roundHalf(unloadClock);
-      add(`Товарене — ${hL.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`, hL * crew * n(p.workerRate));
-      add(`Разтоварване — ${hU.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`, hU * crew * n(p.workerRate));
+      add(`Товарене — ${hL.toFixed(1)} ч × ${crew} души × ${workerRate} ${p.currency}/ч`, hL * crew * workerRate);
+      add(`Разтоварване — ${hU.toFixed(1)} ч × ${crew} души × ${workerRate} ${p.currency}/ч`, hU * crew * workerRate);
     } else {
       const h = roundHalf(handlingClock);
-      add(`Пренасяне и път — ${h.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-          h * crew * n(p.workerRate));
+      add(`Пренасяне и път — ${h.toFixed(1)} ч × ${crew} души × ${workerRate} ${p.currency}/ч`,
+          h * crew * workerRate);
     }
   }
 
@@ -1289,7 +1301,7 @@ function computePrice(s, p) {
   // 3) ОПАКОВАНЕ — човекочаса
   if (wrapManHours + protectManHours) {
     const h = roundHalf(wrapManHours + protectManHours);
-    add(`Опаковане — ${h.toFixed(1)} чч × ${n(p.workerRate)} ${p.currency}/ч`, h * n(p.workerRate));
+    add(`Опаковане — ${h.toFixed(1)} чч × ${workerRate} ${p.currency}/ч`, h * workerRate);
   }
 
   // 3.5) НОСЕНЕ НА ДЪЛГО РАЗСТОЯНИЕ до/от камиона — реално добавено време, не само такса
@@ -1303,8 +1315,8 @@ function computePrice(s, p) {
   const carryManHours = carryHoursTot * crew;
   if (carryHoursTot) {
     const h = roundHalf(carryHoursTot);
-    add(`Носене на дълго разстояние до камиона — ${h.toFixed(1)} ч × ${crew} души × ${n(p.workerRate)} ${p.currency}/ч`,
-        h * crew * n(p.workerRate));
+    add(`Носене на дълго разстояние до камиона — ${h.toFixed(1)} ч × ${crew} души × ${workerRate} ${p.currency}/ч`,
+        h * crew * workerRate);
   }
 
   const manHours = handlingManHours + disManHours + wrapManHours + protectManHours + fillManHours + carryManHours;
@@ -1383,7 +1395,10 @@ function computePrice(s, p) {
 
   // отклонение (буфер) — прилага се ПРЕДИ прага за минимум, за да е минималната цена,
   // която въвеждаш в Параметри, наистина минимумът, който клиентът вижда (а не мин×буфер)
-  const deviationFactor = n(p.deviationFactor || 1) || 1;
+  // може да се коригира и ръчно за конкретната калкулация (s.deviationOverride), напр. при
+  // нетипична поръчка — 0 означава "ползвай стойността от ⚙ Параметри"
+  const deviationManual = Number(s.deviationOverride) > 0;
+  const deviationFactor = deviationManual ? n(s.deviationOverride) : (n(p.deviationFactor || 1) || 1);
   if (deviationFactor !== 1) {
     const percent = Math.round((deviationFactor - 1) * 100);
     add(`Отклонение (${percent >= 0 ? "+" : ""}${percent}%)`, total * (deviationFactor - 1));
@@ -1401,10 +1416,7 @@ function computePrice(s, p) {
   total = Math.max(0, total);
 
   // СЕБЕСТОЙНОСТ И МАРЖ — вътрешни данни (реален разход), не влияят на цената на клиента.
-  // Ставката за работник е по градове — тръгва от базата/града, в който реално се работи.
-  const costCity = s.service === "intercity" ? s.pickupCity : (s.city || null);
-  const cityCostEntry = (p.workerCostByCity || []).find((c) => normHood(c.city) === normHood(costCity));
-  const workerCostRate = n(cityCostEntry ? cityCostEntry.rate : p.workerCostDefault);
+  // costCity/workerCostRate вече са изчислени най-отгоре (общи и за цената към клиента).
   const laborCost = manHours * workerCostRate;
   const truckCostRate = usesFieldCrew ? 0 : n(isCourse || isDisposal ? p.truckCostPerKm : p.truckCostPerHour);
   const truckCostBasis = isCourse || isDisposal ? totalKm : handlingClock;
@@ -1415,7 +1427,7 @@ function computePrice(s, p) {
   const marginPercent = total > 0 ? (margin / total) * 100 : 0;
 
   return { total: Math.round(total), lines,
-    costCity, workerCostRate, laborCost: Math.round(laborCost), truckCost: Math.round(truckCost),
+    costCity, workerCostRate, workerRate, deviationFactor, deviationManual, laborCost: Math.round(laborCost), truckCost: Math.round(truckCost),
     totalCost: Math.round(totalCost), margin: Math.round(margin), marginPercent, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, autoHandlingClock, hoursManual, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours };
 }
 
@@ -1726,7 +1738,7 @@ function buildRecord(s, p, r, id, calcNumber, createdBy) {
     items,
     breakdown: r.lines,
     total: r.total,
-    rates: { worker: p.workerRate, truck: p.truckRate, km: p.kmRate },
+    rates: { worker: r.workerRate, truck: p.truckRate, km: p.kmRate },
     // ставките, с които е направена калкулацията — БЕЗ credentials. Записите се четат
     // с анонимния ключ от всеки, отворил "Записи", затова supabaseKey/mapsApiKey/supabaseUrl
     // НЕ бива да се копират тук (иначе течат обратно към браузъра на всеки, който гледа записа)
@@ -2101,6 +2113,10 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify }) {
     const arr = (p.workerCostByCity || []).map((c, j) => (j === i ? { ...c, ...patch } : c));
     upd({ workerCostByCity: arr });
   };
+  const setCityRate = (i, patch) => {
+    const arr = (p.workerRateByCity || []).map((c, j) => (j === i ? { ...c, ...patch } : c));
+    upd({ workerRateByCity: arr });
+  };
   return (
     <div className="rounded-2xl border-2 bg-white p-5 mb-4" style={{ borderColor: accent }}>
       <div className="flex items-center justify-between mb-3">
@@ -2153,12 +2169,34 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify }) {
 
       <Section title="Ставки и скорости">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Num label="Работник" value={p.workerRate} onChange={(v) => upd({ workerRate: v })} suffix="€/ч" />
+          <Num label="Работник (по подразбиране)" value={p.workerRate} onChange={(v) => upd({ workerRate: v })} suffix="€/ч" />
           <Num label="Транспорт (градско)" value={p.truckRate} onChange={(v) => upd({ truckRate: v })} suffix="€/ч" />
           <Num label="Извънградско" value={p.kmRate} step={0.05} onChange={(v) => upd({ kmRate: v })} suffix="€/км" />
           <Num label="Двупосочен курс" value={p.roundTripFactor} step={0.5} onChange={(v) => upd({ roundTripFactor: v })} suffix="×" />
           <Num label="Скорост в града" value={p.citySpeed} step={5} onChange={(v) => upd({ citySpeed: v })} suffix="км/ч" />
           <Num label="Скорост извън града" value={p.roadSpeed} step={5} onChange={(v) => upd({ roadSpeed: v })} suffix="км/ч" />
+        </div>
+        <div className="mt-3">
+          <div className="text-xs font-medium text-slate-500 mb-2">
+            Ставка на работник по градове (цена към клиента) — ако градът на услугата не е в списъка, важи „Работник (по подразбиране)" отгоре
+          </div>
+          <div className="space-y-2">
+            {(p.workerRateByCity || []).map((c, i) => (
+              <div key={i} className="grid grid-cols-[1fr_90px_28px] gap-2 items-end">
+                <label className="block">
+                  <span className="text-[11px] text-slate-500">Град</span>
+                  <input value={c.city} onChange={(e) => setCityRate(i, { city: e.target.value })} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
+                </label>
+                <Num label="Работник" value={c.rate} onChange={(v) => setCityRate(i, { rate: v })} suffix="€/ч" />
+                <button onClick={() => upd({ workerRateByCity: p.workerRateByCity.filter((_, j) => j !== i) })}
+                  className="h-9 rounded-lg border border-slate-200 text-slate-400">×</button>
+              </div>
+            ))}
+            <button onClick={() => upd({ workerRateByCity: [...(p.workerRateByCity || []), { city: "", rate: p.workerRate }] })}
+              className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600">
+              + Ставка за град
+            </button>
+          </div>
         </div>
       </Section>
 
@@ -2875,7 +2913,7 @@ function LogPanel({ onClose, p, session, onEdit }) {
 // начално състояние на калкулацията (стъпка 1) — извадено извън компонента, за да служи и като
 // база при сливане с възстановена чернова (schema-safe, ако по-късно добавим ново поле)
 const INITIAL_S = {
-  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {},
+  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, deviationOverride: 0, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {},
   pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   extras: { packing: false, materials: false, disassembly: false },
@@ -3006,7 +3044,7 @@ export default function KorektCalculator() {
     setS((prev) => ({ ...prev, [field]: { ...prev[field], [id]: value } }));
 
   const r = useMemo(() => computePrice(s, p), [s, p]);
-  const { total, lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto, crewByProtocol, autoCrew, crewManual, reqCrew, isCourse, autoHandlingClock, hoursManual, disHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, wrapMeters, wrapHours, rolls, protectMeters, protectManHours, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, costCity, workerCostRate, laborCost, truckCost, totalCost, margin, marginPercent } = r;
+  const { total, lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto, crewByProtocol, autoCrew, crewManual, reqCrew, isCourse, autoHandlingClock, hoursManual, disHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, wrapMeters, wrapHours, rolls, protectMeters, protectManHours, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, costCity, workerCostRate, workerRate, deviationFactor, deviationManual, laborCost, truckCost, totalCost, margin, marginPercent } = r;
   const localEst = s.service === "local" ? estimateKm(s.city, s.pickupHood, s.dropoffHood, Number(p.cityRoadFactor) || 1.3) : null;
   const isAssembly = s.service === "assembly";
   const isTRD = s.service === "trd";
@@ -4196,6 +4234,28 @@ export default function KorektCalculator() {
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">
                   <div className="text-sm font-semibold mb-3" style={{ color: ink }}>Как се формира</div>
+
+                  <div className="flex items-center justify-between gap-3 mb-3 pb-3 border-b border-slate-100">
+                    <div>
+                      <div className="text-sm font-medium" style={{ color: ink }}>
+                        Коеф. отклонение{deviationManual && <span style={{ color: accent }}> · променено ръчно</span>}
+                      </div>
+                      <div className="text-xs text-slate-400">По подразбиране {p.deviationFactor}× (⚙ Параметри) — за тази калкулация може да се коригира</div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <input type="number" step="0.01" min="0"
+                        value={deviationManual ? s.deviationOverride : deviationFactor}
+                        onChange={(e) => set({ deviationOverride: Number(e.target.value) || 0 })}
+                        className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-right" />
+                      <span className="text-xs text-slate-400">×</span>
+                      {deviationManual && (
+                        <button onClick={() => set({ deviationOverride: 0 })} className="text-xs text-slate-500 underline whitespace-nowrap">
+                          върни
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="space-y-1.5">
                     {lines.map((l, i) => (
                       <div key={i} className="flex justify-between text-sm">
