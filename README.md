@@ -83,6 +83,29 @@ node korekt-calculator.test.mjs
 
 3. Готово — след push-а колегите влизат през 🔒 бутоните с имейл+парола.
 
+**Регистрация от самите колеги (добавено 2026-08-07):** формата за вход вече
+има и „Нямам акаунт — регистрация", ограничена клиентски до `@korekt-bg.com`
+имейли. Реалната граница е, че Supabase изисква потвърждение на имейла, а
+никой отвън няма достъп до пощата на домейна. За допълнителна защита на ниво
+база (отхвърля регистрация с друг домейн директно в Postgres, дори ако някой
+заобиколи клиентската проверка) — по желание, изпълни в SQL Editor:
+
+```sql
+create or replace function reject_foreign_domain_signup()
+returns trigger as $$
+begin
+  if new.email !~* '@korekt-bg\.com$' then
+    raise exception 'Регистрация само с @korekt-bg.com имейл';
+  end if;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+create trigger enforce_signup_domain
+  before insert on auth.users
+  for each row execute function reject_foreign_domain_signup();
+```
+
 **Известно ограничение:** таблицата `calc_params` (ценовите параметри,
 включително вътрешните себестойност/марж полета) остава четима с анонимния
 ключ, защото самият калкулатор я тегли при всяко зареждане, за да покаже

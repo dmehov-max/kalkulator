@@ -3115,6 +3115,58 @@ function saveAuthSession(session) {
     if (session) localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));else localStorage.removeItem(AUTH_SESSION_KEY);
   } catch (e) {/* без значение */}
 }
+// Само служебни имейли могат да се регистрират сами през формата в приложението.
+// Това е проверка откъм клиента (удобство, не сигурност) — истинската граница е,
+// че Supabase Auth изисква потвърждение на имейла, а никой външен няма достъп до
+// пощенска кутия на korekt-bg.com, за да потвърди регистрация с такъв домейн.
+// За допълнителна защита на ниво база виж README ("Вход за екипа") — trigger, който
+// отхвърля регистрации с друг домейн директно в Postgres.
+const SIGNUP_ALLOWED_DOMAIN = "korekt-bg.com";
+function isAllowedSignupEmail(email) {
+  return String(email || "").trim().toLowerCase().endsWith("@" + SIGNUP_ALLOWED_DOMAIN);
+}
+async function supabaseSignUp(email, password, url, key) {
+  if (!url || !key) return {
+    ok: false,
+    error: "Няма връзка към Supabase (виж ⚙ Параметри)."
+  };
+  if (!isAllowedSignupEmail(email)) {
+    return {
+      ok: false,
+      error: `Регистрация само с @${SIGNUP_ALLOWED_DOMAIN} имейл.`
+    };
+  }
+  try {
+    const res = await fetch(`${url}/auth/v1/signup`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        email: email.trim(),
+        password
+      })
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) return {
+      ok: false,
+      error: data?.error_description || data?.msg || "Грешка при регистрация."
+    };
+    // ако проектът изисква потвърждение на имейла, тук няма да има access_token —
+    // акаунтът съществува, но не може да влезе, докато не кликне линка от писмото
+    const needsConfirm = !data?.access_token;
+    return {
+      ok: true,
+      needsConfirm
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: "Мрежова грешка при регистрация."
+    };
+  }
+}
 async function supabaseSignIn(email, password, url, key) {
   if (!url || !key) return {
     ok: false,
@@ -5476,6 +5528,8 @@ function KorektCalculator() {
   const [loginPw, setLoginPw] = useState("");
   const [loginError, setLoginError] = useState(null);
   const [loginBusy, setLoginBusy] = useState(false);
+  const [loginMode, setLoginMode] = useState("signin"); // signin | signup
+  const [signupDone, setSignupDone] = useState(false); // регистрацията мина, чака потвърждение на имейла
   const adminUnlocked = !!authSession;
   const guardAdmin = action => {
     if (authSession) {
@@ -5502,6 +5556,23 @@ function KorektCalculator() {
     setPendingAdminAction(null);
     setLoginPw("");
     if (action) action();
+  };
+  const doSignup = async e => {
+    e.preventDefault();
+    setLoginBusy(true);
+    setLoginError(null);
+    const res = await supabaseSignUp(loginEmail.trim(), loginPw, p.supabaseUrl, p.supabaseKey);
+    setLoginBusy(false);
+    if (!res.ok) {
+      setLoginError(res.error);
+      return;
+    }
+    if (res.needsConfirm) {
+      setSignupDone(true); // покажи "провери си пощата", не опитвай директен вход
+    } else {
+      // проектът не изисква потвърждение — може веднага да влезе
+      await doLogin(e);
+    }
   };
   const logout = () => {
     setAuthSession(null);
@@ -7230,19 +7301,42 @@ function KorektCalculator() {
     className: "opacity-70 hover:opacity-100 leading-none"
   }, "✕")), pendingAdminAction && /*#__PURE__*/React.createElement("div", {
     className: "fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4",
-    onClick: () => setPendingAdminAction(null)
-  }, /*#__PURE__*/React.createElement("form", {
+    onClick: () => {
+      setPendingAdminAction(null);
+      setSignupDone(false);
+      setLoginMode("signin");
+    }
+  }, signupDone ? /*#__PURE__*/React.createElement("div", {
     onClick: e => e.stopPropagation(),
-    onSubmit: doLogin,
     className: "w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-sm font-semibold mb-1",
     style: {
       color: ink
     }
-  }, "🔒 Вход за екипа"), /*#__PURE__*/React.createElement("p", {
+  }, "📧 Проверете пощата си"), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-slate-500 mb-3"
-  }, "Записите, параметрите и маржът съдържат вътрешни данни и данни на клиенти — само за логнати колеги."), /*#__PURE__*/React.createElement("input", {
+  }, "Изпратихме линк за потвърждение на ", /*#__PURE__*/React.createElement("b", null, loginEmail), ". Кликнете го, после влезте от тук с паролата, която зададохте."), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setSignupDone(false);
+      setLoginMode("signin");
+    },
+    className: "text-sm font-semibold px-4 py-2 rounded-full text-white",
+    style: {
+      background: accent
+    }
+  }, "Разбрах")) : /*#__PURE__*/React.createElement("form", {
+    onClick: e => e.stopPropagation(),
+    onSubmit: loginMode === "signup" ? doSignup : doLogin,
+    className: "w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-sm font-semibold mb-1",
+    style: {
+      color: ink
+    }
+  }, loginMode === "signup" ? "📝 Регистрация за екипа" : "🔒 Вход за екипа"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-slate-500 mb-3"
+  }, loginMode === "signup" ? `Само с @${SIGNUP_ALLOWED_DOMAIN} имейл. Записите, параметрите и маржът са вътрешни данни.` : "Записите, параметрите и маржът съдържат вътрешни данни и данни на клиенти — само за логнати колеги."), /*#__PURE__*/React.createElement("input", {
     autoFocus: true,
     type: "email",
     autoComplete: "username",
@@ -7252,7 +7346,7 @@ function KorektCalculator() {
     className: "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mb-2"
   }), /*#__PURE__*/React.createElement("input", {
     type: "password",
-    autoComplete: "current-password",
+    autoComplete: loginMode === "signup" ? "new-password" : "current-password",
     value: loginPw,
     onChange: e => setLoginPw(e.target.value),
     placeholder: "Парола",
@@ -7263,7 +7357,16 @@ function KorektCalculator() {
       color: "#dc2626"
     }
   }, loginError), /*#__PURE__*/React.createElement("div", {
-    className: "flex gap-2 justify-end"
+    className: "flex items-center justify-between"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => {
+      setLoginMode(m => m === "signup" ? "signin" : "signup");
+      setLoginError(null);
+    },
+    className: "text-xs text-slate-500 underline"
+  }, loginMode === "signup" ? "Вече имам акаунт" : "Нямам акаунт — регистрация"), /*#__PURE__*/React.createElement("div", {
+    className: "flex gap-2"
   }, /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: () => setPendingAdminAction(null),
@@ -7275,7 +7378,7 @@ function KorektCalculator() {
     style: {
       background: accent
     }
-  }, loginBusy ? "…" : "Вход")))));
+  }, loginBusy ? "…" : loginMode === "signup" ? "Регистрация" : "Вход"))))));
 }
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(KorektCalculator));
 </script>

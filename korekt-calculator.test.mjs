@@ -28,7 +28,7 @@ const engineSrc =
   haversineKm, normHood, findHood, cityCenter, estimateKm, crewFor, ownTruck,
   fleetFor, tripsFor, bestTruck, computePrice, totalWeight, findCity, protectMetersFor, BASES, nearestBase, baseOnRoute, mergeParams, buildRecord, toCSV, disHoursFor, wrapMetersFor, CITIES, estimateKmAny, pointFor,
   saveCalc, loadCalcs, saveParams, loadParams, CALC_PREFIX, PARAMS_KEY, fetchParamsFromSupabase, pushParamsToSupabase, pushCalcToSupabase, fetchCalcsFromSupabase, fetchCatalogItemsFromSupabase, pushCatalogItemToSupabase, applyExtraCatalogItems, nextCalcNumber, CALC_COUNTER_KEY, fetchRealDistanceKm, routesCache, ROUTES_CACHE_KEY, roundHalf, sanitizeNumericParams,
-  storageSet, storageGet, storageList, getStorageMode, hasStorage, isValidEmail, isValidPhone };\n`;
+  storageSet, storageGet, storageList, getStorageMode, hasStorage, isValidEmail, isValidPhone, isAllowedSignupEmail };\n`;
 
 const tmp = path.join(os.tmpdir(), `korekt-engine-${Date.now()}.mjs`);
 fs.writeFileSync(tmp, engineSrc);
@@ -781,6 +781,12 @@ test("телефон: приема български номер с интерв
 test("телефон: отхвърля твърде кратко/нечислово", () => {
   ok(!E.isValidPhone("abc"));
   ok(!E.isValidPhone("123"));
+});
+test("регистрация: позволена само за @korekt-bg.com (без значение от регистър)", () => {
+  ok(E.isAllowedSignupEmail("d.mehov@korekt-bg.com"));
+  ok(E.isAllowedSignupEmail("Some.One@KOREKT-BG.COM"));
+  ok(!E.isAllowedSignupEmail("someone@gmail.com"));
+  ok(!E.isAllowedSignupEmail("someone@korekt-bg.com.evil.com"));
 });
 
 /* --- Демонтаж/монтаж по вещ --- */

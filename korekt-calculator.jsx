@@ -1438,6 +1438,37 @@ function saveAuthSession(session) {
     else localStorage.removeItem(AUTH_SESSION_KEY);
   } catch (e) { /* без значение */ }
 }
+// Само служебни имейли могат да се регистрират сами през формата в приложението.
+// Това е проверка откъм клиента (удобство, не сигурност) — истинската граница е,
+// че Supabase Auth изисква потвърждение на имейла, а никой външен няма достъп до
+// пощенска кутия на korekt-bg.com, за да потвърди регистрация с такъв домейн.
+// За допълнителна защита на ниво база виж README ("Вход за екипа") — trigger, който
+// отхвърля регистрации с друг домейн директно в Postgres.
+const SIGNUP_ALLOWED_DOMAIN = "korekt-bg.com";
+function isAllowedSignupEmail(email) {
+  return String(email || "").trim().toLowerCase().endsWith("@" + SIGNUP_ALLOWED_DOMAIN);
+}
+async function supabaseSignUp(email, password, url, key) {
+  if (!url || !key) return { ok: false, error: "Няма връзка към Supabase (виж ⚙ Параметри)." };
+  if (!isAllowedSignupEmail(email)) {
+    return { ok: false, error: `Регистрация само с @${SIGNUP_ALLOWED_DOMAIN} имейл.` };
+  }
+  try {
+    const res = await fetch(`${url}/auth/v1/signup`, {
+      method: "POST",
+      headers: { apikey: key, "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim(), password }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, error: data?.error_description || data?.msg || "Грешка при регистрация." };
+    // ако проектът изисква потвърждение на имейла, тук няма да има access_token —
+    // акаунтът съществува, но не може да влезе, докато не кликне линка от писмото
+    const needsConfirm = !data?.access_token;
+    return { ok: true, needsConfirm };
+  } catch (e) {
+    return { ok: false, error: "Мрежова грешка при регистрация." };
+  }
+}
 async function supabaseSignIn(email, password, url, key) {
   if (!url || !key) return { ok: false, error: "Няма връзка към Supabase (виж ⚙ Параметри)." };
   try {
@@ -2787,6 +2818,8 @@ export default function KorektCalculator() {
   const [loginPw, setLoginPw] = useState("");
   const [loginError, setLoginError] = useState(null);
   const [loginBusy, setLoginBusy] = useState(false);
+  const [loginMode, setLoginMode] = useState("signin"); // signin | signup
+  const [signupDone, setSignupDone] = useState(false); // регистрацията мина, чака потвърждение на имейла
   const adminUnlocked = !!authSession;
   const guardAdmin = (action) => {
     if (authSession) { action(); return; }
@@ -2807,6 +2840,20 @@ export default function KorektCalculator() {
     setPendingAdminAction(null);
     setLoginPw("");
     if (action) action();
+  };
+  const doSignup = async (e) => {
+    e.preventDefault();
+    setLoginBusy(true);
+    setLoginError(null);
+    const res = await supabaseSignUp(loginEmail.trim(), loginPw, p.supabaseUrl, p.supabaseKey);
+    setLoginBusy(false);
+    if (!res.ok) { setLoginError(res.error); return; }
+    if (res.needsConfirm) {
+      setSignupDone(true); // покажи "провери си пощата", не опитвай директен вход
+    } else {
+      // проектът не изисква потвърждение — може веднага да влезе
+      await doLogin(e);
+    }
   };
   const logout = () => {
     setAuthSession(null);
@@ -4055,23 +4102,47 @@ export default function KorektCalculator() {
         </div>
       )}
       {pendingAdminAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setPendingAdminAction(null)}>
-          <form onClick={(e) => e.stopPropagation()} onSubmit={doLogin}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => { setPendingAdminAction(null); setSignupDone(false); setLoginMode("signin"); }}>
+          {signupDone ? (
+            <div onClick={(e) => e.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+              <div className="text-sm font-semibold mb-1" style={{ color: ink }}>📧 Проверете пощата си</div>
+              <p className="text-xs text-slate-500 mb-3">
+                Изпратихме линк за потвърждение на <b>{loginEmail}</b>. Кликнете го, после влезте от тук с паролата, която зададохте.
+              </p>
+              <button onClick={() => { setSignupDone(false); setLoginMode("signin"); }}
+                className="text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: accent }}>Разбрах</button>
+            </div>
+          ) : (
+          <form onClick={(e) => e.stopPropagation()} onSubmit={loginMode === "signup" ? doSignup : doLogin}
             className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-            <div className="text-sm font-semibold mb-1" style={{ color: ink }}>🔒 Вход за екипа</div>
-            <p className="text-xs text-slate-500 mb-3">Записите, параметрите и маржът съдържат вътрешни данни и данни на клиенти — само за логнати колеги.</p>
+            <div className="text-sm font-semibold mb-1" style={{ color: ink }}>
+              {loginMode === "signup" ? "📝 Регистрация за екипа" : "🔒 Вход за екипа"}
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              {loginMode === "signup"
+                ? `Само с @${SIGNUP_ALLOWED_DOMAIN} имейл. Записите, параметрите и маржът са вътрешни данни.`
+                : "Записите, параметрите и маржът съдържат вътрешни данни и данни на клиенти — само за логнати колеги."}
+            </p>
             <input autoFocus type="email" autoComplete="username" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)}
               placeholder="Имейл" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mb-2" />
-            <input type="password" autoComplete="current-password" value={loginPw} onChange={(e) => setLoginPw(e.target.value)}
+            <input type="password" autoComplete={loginMode === "signup" ? "new-password" : "current-password"} value={loginPw} onChange={(e) => setLoginPw(e.target.value)}
               placeholder="Парола" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mb-2" />
             {loginError && <p className="text-xs mb-2" style={{ color: "#dc2626" }}>{loginError}</p>}
-            <div className="flex gap-2 justify-end">
-              <button type="button" onClick={() => setPendingAdminAction(null)} className="text-sm px-3 py-2 text-slate-500">Отказ</button>
-              <button type="submit" disabled={loginBusy} className="text-sm font-semibold px-4 py-2 rounded-full text-white disabled:opacity-50" style={{ background: accent }}>
-                {loginBusy ? "…" : "Вход"}
+            <div className="flex items-center justify-between">
+              <button type="button" onClick={() => { setLoginMode((m) => (m === "signup" ? "signin" : "signup")); setLoginError(null); }}
+                className="text-xs text-slate-500 underline">
+                {loginMode === "signup" ? "Вече имам акаунт" : "Нямам акаунт — регистрация"}
               </button>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setPendingAdminAction(null)} className="text-sm px-3 py-2 text-slate-500">Отказ</button>
+                <button type="submit" disabled={loginBusy} className="text-sm font-semibold px-4 py-2 rounded-full text-white disabled:opacity-50" style={{ background: accent }}>
+                  {loginBusy ? "…" : loginMode === "signup" ? "Регистрация" : "Вход"}
+                </button>
+              </div>
             </div>
           </form>
+          )}
         </div>
       )}
     </div>
