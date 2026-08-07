@@ -355,6 +355,15 @@ const floorFeeRateFor = (it, p) => {
     default: return n(p.furniturePerFloor);
   }
 };
+// бройки за таксата "Стълби", след като се извадят маркираните от служителя като
+// "без такса качване" (s.floorFeeOff) — напр. вещи, оставени на партера, качени с кран
+// през прозорец и пр. predicate избира кой "kind" (или "без категория" = мебел) да преброи
+const netFloorQty = (qty, floorFeeOff, predicate) => Object.entries(qty).reduce((s, [id, cnt]) => {
+  const it = ITEM_INDEX[id];
+  if (!it || !cnt || !predicate(it)) return s;
+  const off = pickCount(floorFeeOff?.[id], cnt);
+  return s + Math.max(0, cnt - off);
+}, 0);
 
 /* -------- Квартали с приблизителни координати (за оценка на км) -------- */
 const NEIGHBORHOODS = {
@@ -1347,13 +1356,15 @@ function computePrice(s, p) {
     if (it?.surcharge && cnt > 0) add(`${it.label} — спец. обработка ×${cnt}`, it.surcharge * cnt);
   });
 
-  // СТЪЛБИ — парична такса на етаж, на адрес (товарене + разтоварване)
-  const boxes = countKind(s.qty, "box") + countKind(s.qty, "sack"); // чувалите се носят като кашони
-  const appNormal = countKind(s.qty, "appliance");
-  const appHeavy = countKind(s.qty, "appliance_heavy");
-  const oversized = countKind(s.qty, "oversized");
-  const small = countKind(s.qty, "small"); // дребни/леки вещи без монтаж (картина, килим, лампа, стол...)
-  const furniture = countFurniture(s.qty); // обикновени мебели (гардероб, легло, маса...) — без категория
+  // СТЪЛБИ — парична такса на етаж, на адрес (товарене + разтоварване). За всяка вещ служителят
+  // може да отбележи с s.floorFeeOff (и за колко бройки), че НЕ се качва по стълби (напр. остава
+  // на партера, качва се с кран/асансьор през прозорец) — тези бройки се изваждат от таксата.
+  const boxes = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "box" || it.kind === "sack"); // чувалите се носят като кашони
+  const appNormal = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "appliance");
+  const appHeavy = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "appliance_heavy");
+  const oversized = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "oversized");
+  const small = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "small"); // дребни/леки вещи (картина, килим, лампа, стол...)
+  const furniture = netFloorQty(s.qty, s.floorFeeOff, (it) => !FLOOR_FEE_KINDS.has(it.kind)); // обикновени мебели — без категория
   // стандартни вещи: стълби само при липса на асансьор
   const floorsStd = (a) => (a.floor >= 1 && !a.elevator ? a.floor : 0);
   // едрогабаритни (диван 3-ка и под.): не влизат в пътнически асансьор → стълби, освен при товарен
@@ -1422,6 +1433,9 @@ function computePrice(s, p) {
   const deviationManual = Number(s.deviationOverride) > 0;
   const deviationFactor = deviationManual ? n(s.deviationOverride) : (n(p.deviationFactor || 1) || 1);
   if (deviationFactor !== 1) {
+    // информативен ред — реалната (изчислената) цена преди буфера, само за показване,
+    // не пипа total; веднага след него идва самото отклонение, а общата сума е накрая
+    lines.push({ label: "Реална цена (преди отклонение)", amount: Math.round(total) });
     const percent = Math.round((deviationFactor - 1) * 100);
     add(`Отклонение (${percent >= 0 ? "+" : ""}${percent}%)`, total * (deviationFactor - 1));
   }
@@ -1449,7 +1463,7 @@ function computePrice(s, p) {
   const marginPercent = total > 0 ? (margin / total) * 100 : 0;
 
   return { total: Math.round(total), lines,
-    costCity, workerCostRate, workerRate, deviationFactor, deviationManual, laborCost: Math.round(laborCost), truckCost: Math.round(truckCost),
+    costCity, workerCostRate, workerRate, deviationFactor, deviationManual, floorsStdTot, floorsOvrTot, laborCost: Math.round(laborCost), truckCost: Math.round(truckCost),
     totalCost: Math.round(totalCost), margin: Math.round(margin), marginPercent, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, autoHandlingClock, hoursManual, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours };
 }
 
@@ -2936,7 +2950,7 @@ function LogPanel({ onClose, p, session, onEdit }) {
 // начално състояние на калкулацията (стъпка 1) — извадено извън компонента, за да служи и като
 // база при сливане с възстановена чернова (schema-safe, ако по-късно добавим ново поле)
 const INITIAL_S = {
-  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, deviationOverride: 0, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {},
+  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, deviationOverride: 0, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {}, floorFeeOff: {},
   pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   extras: { packing: false, materials: false, disassembly: false },
@@ -3067,7 +3081,7 @@ export default function KorektCalculator() {
     setS((prev) => ({ ...prev, [field]: { ...prev[field], [id]: value } }));
 
   const r = useMemo(() => computePrice(s, p), [s, p]);
-  const { total, lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto, crewByProtocol, autoCrew, crewManual, reqCrew, isCourse, autoHandlingClock, hoursManual, disHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, wrapMeters, wrapHours, rolls, protectMeters, protectManHours, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, costCity, workerCostRate, workerRate, deviationFactor, deviationManual, laborCost, truckCost, totalCost, margin, marginPercent } = r;
+  const { total, lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto, crewByProtocol, autoCrew, crewManual, reqCrew, isCourse, autoHandlingClock, hoursManual, disHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, wrapMeters, wrapHours, rolls, protectMeters, protectManHours, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, costCity, workerCostRate, workerRate, deviationFactor, deviationManual, floorsStdTot, floorsOvrTot, laborCost, truckCost, totalCost, margin, marginPercent } = r;
   const localEst = s.service === "local" ? estimateKm(s.city, s.pickupHood, s.dropoffHood, Number(p.cityRoadFactor) || 1.3) : null;
   const isAssembly = s.service === "assembly";
   const isTRD = s.service === "trd";
@@ -3767,7 +3781,7 @@ export default function KorektCalculator() {
                     <div className="rounded-2xl border-2 bg-white p-4 mb-3" style={{ borderColor: accent }}>
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-semibold" style={{ color: ink }}>Избрани вещи</span>
-                        <button onClick={() => setS((prev) => ({ ...prev, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {} }))}
+                        <button onClick={() => setS((prev) => ({ ...prev, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {}, floorFeeOff: {} }))}
                           className="text-xs text-slate-500 underline">изчисти всички</button>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
@@ -3815,10 +3829,15 @@ export default function KorektCalculator() {
                                       </div>
                                       <Stepper value={cnt} onChange={(v) => setQty(it.id, v)} />
                                     </div>
-                                    {cnt > 0 && (it.dis || it.asm || it.wrap || it.protect) && (() => {
+                                    {cnt > 0 && (it.dis || it.asm || it.wrap || it.protect || floorsStdTot > 0 || floorsOvrTot > 0) && (() => {
                                       const packedCnt = pickCount(s.selfPack[it.id], cnt);
                                       return (
                                       <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-1.5">
+                                        {(floorsStdTot > 0 || floorsOvrTot > 0) && (
+                                          <OptionToggle label="🪜 без такса стълби" cnt={cnt} value={s.floorFeeOff[it.id]}
+                                            onChange={(v) => setField("floorFeeOff", it.id, v)}
+                                            detail={(n) => `−${n} бр. × ${floorFeeRateFor(it, p)}${p.currency}/ет.`} />
+                                        )}
                                         {it.dis && (
                                           <OptionToggle label="🔧 разглоби" cnt={cnt} value={s.dis[it.id]}
                                             onChange={(v) => setField("dis", it.id, v)}
@@ -4222,6 +4241,10 @@ export default function KorektCalculator() {
                       if (!it) return null;
                       const tags = [];
                       const packedCnt = pickCount(s.selfPack[id], cnt);
+                      const floorOffCnt = pickCount(s.floorFeeOff[id], cnt);
+                      if ((floorsStdTot > 0 || floorsOvrTot > 0) && floorOffCnt > 0) {
+                        tags.push(floorOffCnt >= cnt ? "без такса стълби" : `без такса стълби (${floorOffCnt} от ${cnt})`);
+                      }
                       if (s.dis[id] && it.dis) tags.push("разглобяване");
                       if (s.asm[id] && it.asm) tags.push("сглобяване");
                       if (packedCnt > 0) tags.push(packedCnt >= cnt ? "опаковано от клиента" : `опаковано от клиента (${packedCnt} от ${cnt})`);
