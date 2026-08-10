@@ -1653,6 +1653,50 @@ function authHeaders(session, anonKey, extra) {
   const token = session?.access_token || anonKey;
   return { apikey: anonKey, Authorization: `Bearer ${token}`, ...extra };
 }
+// "Забравена парола" — изпраща имейл с линк за възстановяване (работи с публичния anon
+// ключ, не изисква admin достъп — същият механизъм като supabaseSignUp). Линкът връща
+// потребителя тук с #access_token=...&type=recovery в адреса (виж parseRecoveryHash).
+async function supabaseRecover(email, url, key) {
+  if (!url || !key) return { ok: false, error: "Няма връзка към Supabase (виж ⚙ Параметри)." };
+  try {
+    const res = await fetch(`${url}/auth/v1/recover`, {
+      method: "POST",
+      headers: { apikey: key, "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim(), redirect_to: window.location.href.split("#")[0] }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      return { ok: false, error: data?.error_description || data?.msg || "Грешка при заявката." };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: "Мрежова грешка." };
+  }
+}
+// чете #access_token=...&type=recovery от адреса след клик върху линка от писмото
+function parseRecoveryHash() {
+  const hash = window.location.hash || "";
+  if (!hash.includes("type=recovery")) return null;
+  const params = new URLSearchParams(hash.replace(/^#/, ""));
+  const access_token = params.get("access_token");
+  return access_token ? { access_token } : null;
+}
+// задава нова парола с временния recovery токен (не е обичайната сесия)
+async function supabaseSetNewPassword(accessToken, newPassword, url, key) {
+  if (!url || !key) return { ok: false, error: "Няма връзка към Supabase (виж ⚙ Параметри)." };
+  try {
+    const res = await fetch(`${url}/auth/v1/user`, {
+      method: "PUT",
+      headers: { apikey: key, Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ password: newPassword }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, error: data?.error_description || data?.msg || "Грешка при смяна на паролата." };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: "Мрежова грешка." };
+  }
+}
 
 // "" (изпразнено поле по средата на писане) не бива да замести число трайно —
 // пази стойността по подразбиране, докато не дойде истинско ново число
@@ -3014,8 +3058,34 @@ export default function KorektCalculator() {
   const [loginPw, setLoginPw] = useState("");
   const [loginError, setLoginError] = useState(null);
   const [loginBusy, setLoginBusy] = useState(false);
-  const [loginMode, setLoginMode] = useState("signin"); // signin | signup
+  const [loginMode, setLoginMode] = useState("signin"); // signin | signup | forgot
   const [signupDone, setSignupDone] = useState(false); // регистрацията мина, чака потвърждение на имейла
+  const [recoverySent, setRecoverySent] = useState(false); // писмото за възстановяване е изпратено
+  const [recoveryToken, setRecoveryToken] = useState(() => parseRecoveryHash()?.access_token || null); // дошли сме от линк в писмо
+  const [newPw, setNewPw] = useState("");
+  const [newPwBusy, setNewPwBusy] = useState(false);
+  const [newPwError, setNewPwError] = useState(null);
+  const [newPwDone, setNewPwDone] = useState(false);
+  const doForgotPassword = async (e) => {
+    e.preventDefault();
+    setLoginBusy(true);
+    setLoginError(null);
+    const res = await supabaseRecover(loginEmail.trim(), p.supabaseUrl, p.supabaseKey);
+    setLoginBusy(false);
+    if (!res.ok) { setLoginError(res.error); return; }
+    setRecoverySent(true);
+  };
+  const doSetNewPassword = async (e) => {
+    e.preventDefault();
+    setNewPwBusy(true);
+    setNewPwError(null);
+    const res = await supabaseSetNewPassword(recoveryToken, newPw, p.supabaseUrl, p.supabaseKey);
+    setNewPwBusy(false);
+    if (!res.ok) { setNewPwError(res.error); return; }
+    setNewPwDone(true);
+    // изчиства #access_token=...&type=recovery от адреса, за да не се презарежда с него
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  };
   const adminUnlocked = !!authSession;
   const guardAdmin = (action) => {
     if (authSession) { action(); return; }
@@ -3351,10 +3421,42 @@ export default function KorektCalculator() {
 
   // Целият калкулатор е затворен зад вход — никой без юзър/парола не вижда съветника,
   // не само Записи/Параметри/Марж. Влизането ползва същия Supabase Auth като преди.
+  // дошли сме от линк "Забравена парола" в писмо — независимо дали в момента има активна
+  // сесия на това устройство, показваме екран за нова парола преди каквото и да е друго
+  if (recoveryToken) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center p-4" style={{ background: "#f6f7f9", fontFamily: "'Inter', system-ui, sans-serif" }}>
+        <form onSubmit={doSetNewPassword} className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-slate-200">
+          <div className="text-2xl font-extrabold tracking-tight mb-1" style={{ color: ink }}>КОРЕКТ<span style={{ color: accent }}>.</span></div>
+          {newPwDone ? (
+            <>
+              <div className="text-sm font-semibold mb-1 mt-4" style={{ color: ink }}>✅ Паролата е сменена</div>
+              <p className="text-xs text-slate-500 mb-3">Влез с новата парола.</p>
+              <button type="button" onClick={() => { setRecoveryToken(null); setNewPwDone(false); setLoginMode("signin"); }}
+                className="text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: accent }}>Към вход</button>
+            </>
+          ) : (
+            <>
+              <div className="text-sm font-semibold mb-1 mt-4" style={{ color: ink }}>🔑 Нова парола</div>
+              <p className="text-xs text-slate-500 mb-3">Задай нова парола за акаунта си.</p>
+              <input autoFocus type="password" autoComplete="new-password" value={newPw} onChange={(e) => setNewPw(e.target.value)}
+                placeholder="Нова парола" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mb-3" />
+              {newPwError && <p className="text-xs mb-3" style={{ color: "#dc2626" }}>{newPwError}</p>}
+              <button type="submit" disabled={newPwBusy || newPw.length < 6}
+                className="w-full text-sm font-semibold px-4 py-2.5 rounded-full text-white disabled:opacity-50" style={{ background: accent }}>
+                {newPwBusy ? "…" : "Запази паролата"}
+              </button>
+            </>
+          )}
+        </form>
+      </div>
+    );
+  }
+
   if (!authSession) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center p-4" style={{ background: "#f6f7f9", fontFamily: "'Inter', system-ui, sans-serif" }}>
-        <form onSubmit={loginMode === "signup" ? doSignup : doLogin}
+        <form onSubmit={loginMode === "signup" ? doSignup : loginMode === "forgot" ? doForgotPassword : doLogin}
           className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-slate-200">
           <div className="text-2xl font-extrabold tracking-tight mb-1" style={{ color: ink }}>КОРЕКТ<span style={{ color: accent }}>.</span></div>
           <div className="text-xs text-slate-500 mb-5">Калкулатор за приблизителна цена — само за екипа</div>
@@ -3367,29 +3469,50 @@ export default function KorektCalculator() {
               <button type="button" onClick={() => { setSignupDone(false); setLoginMode("signin"); }}
                 className="text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: accent }}>Разбрах</button>
             </>
+          ) : loginMode === "forgot" && recoverySent ? (
+            <>
+              <div className="text-sm font-semibold mb-1" style={{ color: ink }}>📧 Проверете пощата си</div>
+              <p className="text-xs text-slate-500 mb-3">
+                Изпратихме линк за нова парола на <b>{loginEmail}</b>. Кликнете го, после ще можете да зададете нова парола.
+              </p>
+              <button type="button" onClick={() => { setRecoverySent(false); setLoginMode("signin"); }}
+                className="text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: accent }}>Разбрах</button>
+            </>
           ) : (
             <>
               <div className="text-sm font-semibold mb-1" style={{ color: ink }}>
-                {loginMode === "signup" ? "📝 Регистрация за екипа" : "🔒 Вход за екипа"}
+                {loginMode === "signup" ? "📝 Регистрация за екипа" : loginMode === "forgot" ? "🔑 Забравена парола" : "🔒 Вход за екипа"}
               </div>
               <p className="text-xs text-slate-500 mb-3">
                 {loginMode === "signup"
                   ? `Само с @${SIGNUP_ALLOWED_DOMAIN} имейл.`
+                  : loginMode === "forgot"
+                  ? "Ще изпратим линк за нова парола на имейла ти."
                   : "Калкулаторът е достъпен само за логнати колеги."}
               </p>
               <input autoFocus type="email" autoComplete="username" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)}
                 placeholder="Имейл" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mb-2" />
-              <input type="password" autoComplete={loginMode === "signup" ? "new-password" : "current-password"} value={loginPw} onChange={(e) => setLoginPw(e.target.value)}
-                placeholder="Парола" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mb-3" />
+              {loginMode !== "forgot" && (
+                <input type="password" autoComplete={loginMode === "signup" ? "new-password" : "current-password"} value={loginPw} onChange={(e) => setLoginPw(e.target.value)}
+                  placeholder="Парола" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm mb-3" />
+              )}
               {loginError && <p className="text-xs mb-3" style={{ color: "#dc2626" }}>{loginError}</p>}
               <button type="submit" disabled={loginBusy}
                 className="w-full text-sm font-semibold px-4 py-2.5 rounded-full text-white disabled:opacity-50 mb-2" style={{ background: accent }}>
-                {loginBusy ? "…" : loginMode === "signup" ? "Регистрация" : "Вход"}
+                {loginBusy ? "…" : loginMode === "signup" ? "Регистрация" : loginMode === "forgot" ? "Изпрати линк" : "Вход"}
               </button>
-              <button type="button" onClick={() => { setLoginMode((m) => (m === "signup" ? "signin" : "signup")); setLoginError(null); }}
-                className="text-xs text-slate-500 underline">
-                {loginMode === "signup" ? "Вече имам акаунт" : "Нямам акаунт — регистрация"}
-              </button>
+              <div className="flex items-center justify-between">
+                <button type="button" onClick={() => { setLoginMode((m) => (m === "signup" ? "signin" : "signup")); setLoginError(null); }}
+                  className="text-xs text-slate-500 underline">
+                  {loginMode === "signup" ? "Вече имам акаунт" : "Нямам акаунт — регистрация"}
+                </button>
+                {loginMode !== "signup" && (
+                  <button type="button" onClick={() => { setLoginMode((m) => (m === "forgot" ? "signin" : "forgot")); setLoginError(null); }}
+                    className="text-xs text-slate-500 underline">
+                    {loginMode === "forgot" ? "Обратно към вход" : "Забравена парола?"}
+                  </button>
+                )}
+              </div>
             </>
           )}
         </form>
