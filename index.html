@@ -8180,7 +8180,56 @@ function KorektCalculator() {
     }
   }, /*#__PURE__*/React.createElement("span", null, "Общо"), /*#__PURE__*/React.createElement("span", null, total, " ", p.currency))), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-slate-500 mt-4 pt-3 border-t border-slate-100 leading-relaxed"
-  }, "Тази цена е ориентировъчна, изчислена по нашата ценова формула на база дългогодишния ни опит. Запазваме си правото за обоснована промяна на генерираната цена.")), /*#__PURE__*/React.createElement("div", {
+  }, "Тази цена е ориентировъчна, изчислена по нашата ценова формула на база дългогодишния ни опит. Запазваме си правото за обоснована промяна на генерираната цена.")), adminUnlocked && /*#__PURE__*/React.createElement("div", {
+    className: "rounded-2xl p-5",
+    style: {
+      background: "#fff8ef",
+      border: "1px solid #f3ddbd"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-sm font-semibold mb-3",
+    style: {
+      color: ink
+    }
+  }, "💰 Себестойност и марж (вътрешно, не се вижда от клиента)"), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-1.5 text-sm"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500"
+  }, "Труд", costCity ? ` (${costCity}, ${workerCostRate} ${p.currency}/ч)` : ""), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, laborCost, " ", p.currency)), /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500"
+  }, "Камион"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, truckCost, " ", p.currency)), /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3 font-semibold pt-1.5 mt-1 border-t border-[#f3ddbd]"
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, "Себестойност общо"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, totalCost, " ", p.currency)), /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3 font-bold"
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, "Марж"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: margin >= 0 ? "#166534" : "#dc2626"
+    }
+  }, margin, " ", p.currency, " (", marginPercent.toFixed(1), "%)")))), /*#__PURE__*/React.createElement("div", {
     className: "rounded-2xl border border-slate-200 bg-white p-5"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-sm font-semibold mb-1",
@@ -8233,56 +8282,7 @@ function KorektCalculator() {
     style: {
       background: accent
     }
-  }, "Изпрати заявка"))), adminUnlocked && /*#__PURE__*/React.createElement("div", {
-    className: "rounded-2xl p-5",
-    style: {
-      background: "#fff8ef",
-      border: "1px solid #f3ddbd"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "text-sm font-semibold mb-3",
-    style: {
-      color: ink
-    }
-  }, "💰 Себестойност и марж (вътрешно, не се вижда от клиента)"), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-1.5 text-sm"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "flex justify-between gap-3"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "text-slate-500"
-  }, "Труд", costCity ? ` (${costCity}, ${workerCostRate} ${p.currency}/ч)` : ""), /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: ink
-    }
-  }, laborCost, " ", p.currency)), /*#__PURE__*/React.createElement("div", {
-    className: "flex justify-between gap-3"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "text-slate-500"
-  }, "Камион"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: ink
-    }
-  }, truckCost, " ", p.currency)), /*#__PURE__*/React.createElement("div", {
-    className: "flex justify-between gap-3 font-semibold pt-1.5 mt-1 border-t border-[#f3ddbd]"
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: ink
-    }
-  }, "Себестойност общо"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: ink
-    }
-  }, totalCost, " ", p.currency)), /*#__PURE__*/React.createElement("div", {
-    className: "flex justify-between gap-3 font-bold"
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: ink
-    }
-  }, "Марж"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: margin >= 0 ? "#166534" : "#dc2626"
-    }
-  }, margin, " ", p.currency, " (", marginPercent.toFixed(1), "%)"))))), /*#__PURE__*/React.createElement("div", {
+  }, "Изпрати заявка")))), /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between pt-2"
   }, step > 0 ? /*#__PURE__*/React.createElement("button", {
     onClick: () => setStep(step - 1),

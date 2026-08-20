@@ -4640,23 +4640,6 @@ export default function KorektCalculator() {
                   </p>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="text-sm font-semibold mb-1" style={{ color: ink }}>Заявете потвърждение</div>
-                  <p className="text-xs text-slate-400 mb-3">
-                    Данните се записват автоматично, докато пишете — бутонът само потвърждава заявката.
-                    {saveState === "saving" && <span> · записва се…</span>}
-                    {saveState === "saved" && <span style={{ color: accent }}> · запазено ✓</span>}
-                  </p>
-                  <div className="grid gap-3">
-                    <input placeholder="Име" value={s.name} onChange={(e) => set({ name: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
-                    <input placeholder="Телефон" type="tel" inputMode="tel" value={s.phone} onChange={(e) => set({ phone: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
-                    <input placeholder="Имейл" type="email" inputMode="email" value={s.email} onChange={(e) => set({ email: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
-                    <input placeholder="Номер на заявка (по желание)" value={s.requestNumber} onChange={(e) => set({ requestNumber: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
-                    <button onClick={submitRequest}
-                      className="rounded-xl py-3 font-semibold text-white" style={{ background: accent }}>Изпрати заявка</button>
-                  </div>
-                </div>
-
                 {adminUnlocked && (
                   <div className="rounded-2xl p-5" style={{ background: "#fff8ef", border: "1px solid #f3ddbd" }}>
                     <div className="text-sm font-semibold mb-3" style={{ color: ink }}>💰 Себестойност и марж (вътрешно, не се вижда от клиента)</div>
@@ -4680,6 +4663,23 @@ export default function KorektCalculator() {
                     </div>
                   </div>
                 )}
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <div className="text-sm font-semibold mb-1" style={{ color: ink }}>Заявете потвърждение</div>
+                  <p className="text-xs text-slate-400 mb-3">
+                    Данните се записват автоматично, докато пишете — бутонът само потвърждава заявката.
+                    {saveState === "saving" && <span> · записва се…</span>}
+                    {saveState === "saved" && <span style={{ color: accent }}> · запазено ✓</span>}
+                  </p>
+                  <div className="grid gap-3">
+                    <input placeholder="Име" value={s.name} onChange={(e) => set({ name: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
+                    <input placeholder="Телефон" type="tel" inputMode="tel" value={s.phone} onChange={(e) => set({ phone: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
+                    <input placeholder="Имейл" type="email" inputMode="email" value={s.email} onChange={(e) => set({ email: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
+                    <input placeholder="Номер на заявка (по желание)" value={s.requestNumber} onChange={(e) => set({ requestNumber: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
+                    <button onClick={submitRequest}
+                      className="rounded-xl py-3 font-semibold text-white" style={{ background: accent }}>Изпрати заявка</button>
+                  </div>
+                </div>
               </div>
             )}
 
