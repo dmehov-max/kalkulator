@@ -2912,8 +2912,12 @@ function computePrice(s, p) {
   let extraCostTotal = 0;
   let handlingManHours;
   if (dayCrewMode) {
-    handlingManHours = 0; // трудът се плаща на ден, не на час
+    // цената към клиента е на ден/час × хора (не по-долу), но реалните човекочасове
+    // все пак трябва да влязат в manHours — иначе "Време труд" показва само опаковането,
+    // а себестойността (laborCost = manHours × workerCostRate) излиза почти нулева,
+    // въпреки че реално плащаме на екипа за целия ден
     const people = n(p.travelCrew || 1) + 1; // + шофьорът, който също товари/разтоварва на място
+    handlingManHours = dayTotalH * people;
     add(`Придружаващ работник — ${dayTotalH.toFixed(1)} ч × ${people} ${people === 1 ? "човек" : "души"} × ${workerRate} ${p.currency}/ч`, dayTotalH * people * workerRate);
   } else if (localCrewMode) {
     // товаренето при клиента + местна бригада, която пътува до адреса и разтоварва
