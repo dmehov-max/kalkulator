@@ -3691,17 +3691,17 @@ export default function KorektCalculator() {
             <button onClick={() => guardAdmin(() => setShowLog((v) => !v))}
               className="text-sm font-semibold px-3 py-2 rounded-full border transition"
               style={{ borderColor: showLog ? ink : "#e2e6ec", color: showLog ? ink : "#64748b" }}>{adminUnlocked ? "📋" : "🔒"} Записи</button>
-            {step === 3 && vol >= 0 && total > 0 && (
-              <button onClick={() => guardAdmin(() => setShowMargin((v) => !v))}
-                className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-                style={{ borderColor: showMargin ? "#b45309" : "#e2e6ec", color: showMargin ? "#b45309" : "#64748b" }}>{adminUnlocked ? "💰" : "🔒"} Марж</button>
-            )}
             <button onClick={() => guardAdmin(() => setShowSettings((v) => !v))}
               className="text-sm font-semibold px-3 py-2 rounded-full border transition"
               style={{ borderColor: showSettings ? accent : "#e2e6ec", color: showSettings ? accent : "#64748b" }}>{adminUnlocked ? "⚙" : "🔒"} Параметри</button>
             <button onClick={() => guardAdmin(() => setShowUsers((v) => !v))}
               className="text-sm font-semibold px-3 py-2 rounded-full border transition"
               style={{ borderColor: showUsers ? ink : "#e2e6ec", color: showUsers ? ink : "#64748b" }}>{adminUnlocked ? "👥" : "🔒"} Потребители</button>
+            {step === 3 && vol >= 0 && total > 0 && (
+              <button onClick={() => guardAdmin(() => setShowMargin((v) => !v))}
+                className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+                style={{ borderColor: showMargin ? "#b45309" : "#e2e6ec", color: showMargin ? "#b45309" : "#64748b" }}>{adminUnlocked ? "💰" : "🔒"} Марж</button>
+            )}
             {adminUnlocked && (
               <button onClick={logout} title={authSession?.email || ""}
                 className="text-xs font-medium px-2 py-2 rounded-full text-slate-400 hover:text-slate-600">

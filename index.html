@@ -6946,14 +6946,7 @@ function KorektCalculator() {
       borderColor: showLog ? ink : "#e2e6ec",
       color: showLog ? ink : "#64748b"
     }
-  }, adminUnlocked ? "📋" : "🔒", " Записи"), step === 3 && vol >= 0 && total > 0 && /*#__PURE__*/React.createElement("button", {
-    onClick: () => guardAdmin(() => setShowMargin(v => !v)),
-    className: "text-sm font-semibold px-3 py-2 rounded-full border transition",
-    style: {
-      borderColor: showMargin ? "#b45309" : "#e2e6ec",
-      color: showMargin ? "#b45309" : "#64748b"
-    }
-  }, adminUnlocked ? "💰" : "🔒", " Марж"), /*#__PURE__*/React.createElement("button", {
+  }, adminUnlocked ? "📋" : "🔒", " Записи"), /*#__PURE__*/React.createElement("button", {
     onClick: () => guardAdmin(() => setShowSettings(v => !v)),
     className: "text-sm font-semibold px-3 py-2 rounded-full border transition",
     style: {
@@ -6967,7 +6960,14 @@ function KorektCalculator() {
       borderColor: showUsers ? ink : "#e2e6ec",
       color: showUsers ? ink : "#64748b"
     }
-  }, adminUnlocked ? "👥" : "🔒", " Потребители"), adminUnlocked && /*#__PURE__*/React.createElement("button", {
+  }, adminUnlocked ? "👥" : "🔒", " Потребители"), step === 3 && vol >= 0 && total > 0 && /*#__PURE__*/React.createElement("button", {
+    onClick: () => guardAdmin(() => setShowMargin(v => !v)),
+    className: "text-sm font-semibold px-3 py-2 rounded-full border transition",
+    style: {
+      borderColor: showMargin ? "#b45309" : "#e2e6ec",
+      color: showMargin ? "#b45309" : "#64748b"
+    }
+  }, adminUnlocked ? "💰" : "🔒", " Марж"), adminUnlocked && /*#__PURE__*/React.createElement("button", {
     onClick: logout,
     title: authSession?.email || "",
     className: "text-xs font-medium px-2 py-2 rounded-full text-slate-400 hover:text-slate-600"
