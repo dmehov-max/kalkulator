@@ -776,6 +776,7 @@ function baseOnRoute(from, base, to, roadFactor, tolerance) {
    Посоката няма значение — записвай ги в какъвто ред е удобно. */
 const REAL_DISTANCES_RAW = {
   "София|Банско": 160,
+  "София|Пловдив": 150, // магистрала Тракия — правата линия×коефициент даваше 165, неточно
 };
 
 function realDistanceKey(a, b) {
