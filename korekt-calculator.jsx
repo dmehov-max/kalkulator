@@ -3016,6 +3016,112 @@ function LogPanel({ onClose, p, session, onEdit }) {
   );
 }
 
+// извиква новата Netlify Function (пази service_role ключа сървърно) — виж
+// netlify/functions/admin-users.mjs. Заявката носи access_token-а на текущата сесия,
+// функцията сама проверява сървърно дали викащият е PARAMS_EDITOR_EMAIL.
+// Абсолютен адрес (не /.netlify/...), защото сайтът се отваря и от GitHub Pages
+// (dmehov-max.github.io/kalkulator) — статичен хостинг, който не може да пуска функции;
+// функцията живее само на Netlify и приема заявки от двата адреса през CORS.
+const ADMIN_FUNCTION_URL = "https://korekt-kalkulator.netlify.app/.netlify/functions/admin-users";
+async function adminUsersCall(action, session, options) {
+  try {
+    const res = await fetch(`${ADMIN_FUNCTION_URL}?action=${action}`, {
+      method: options?.body ? "POST" : "GET",
+      headers: { Authorization: `Bearer ${session?.access_token || ""}`, "Content-Type": "application/json" },
+      body: options?.body ? JSON.stringify(options.body) : undefined,
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, error: data?.error || "Грешка при заявката." };
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, error: "Мрежова грешка." };
+  }
+}
+
+// панел "Потребители" — само за PARAMS_EDITOR_EMAIL (същият администратор, който
+// редактира ⚙ Параметри); останалите логнати колеги виждат заключен изглед
+function UsersPanel({ session, notify, p }) {
+  const isAdmin = (session?.email || "").trim().toLowerCase() === PARAMS_EDITOR_EMAIL;
+  const [users, setUsers] = useState(null); // null = още не е зареден
+  const [loading, setLoading] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+
+  const load = async () => {
+    setLoading(true);
+    const res = await adminUsersCall("list", session);
+    setLoading(false);
+    if (!res.ok) { notify?.(res.error, "error"); return; }
+    setUsers(res.data.users || []);
+  };
+
+  useEffect(() => { if (isAdmin) load(); }, [isAdmin]);
+
+  const toggleBan = async (u) => {
+    const willBan = !u.banned_until;
+    setBusyId(u.id);
+    const res = await adminUsersCall(willBan ? "ban" : "unban", session, { body: { id: u.id } });
+    setBusyId(null);
+    if (!res.ok) { notify?.(res.error, "error"); return; }
+    notify?.(willBan ? `${u.email} е спрян.` : `${u.email} е пуснат отново.`, "success");
+    load();
+  };
+
+  const sendReset = async (u) => {
+    setBusyId(u.id);
+    const res = await supabaseRecover(u.email, p.supabaseUrl, p.supabaseKey);
+    setBusyId(null);
+    notify?.(res.ok ? `Изпратен линк за нова парола на ${u.email}.` : res.error, res.ok ? "success" : "error");
+  };
+
+  if (!isAdmin) {
+    return <p className="text-xs text-slate-400 py-3">🔒 Само администраторът вижда списъка с потребители.</p>;
+  }
+
+  return (
+    <div className="rounded-2xl p-5 mb-4 bg-white border border-slate-200">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-sm font-semibold" style={{ color: ink }}>👥 Потребители</div>
+        <button onClick={load} disabled={loading} className="text-xs text-slate-500 underline disabled:opacity-50">
+          {loading ? "…" : "Обнови"}
+        </button>
+      </div>
+      {users === null ? (
+        <p className="text-xs text-slate-400">Зареждане…</p>
+      ) : users.length === 0 ? (
+        <p className="text-xs text-slate-400">Няма регистрирани потребители.</p>
+      ) : (
+        <div className="space-y-2">
+          {users.map((u) => {
+            const banned = !!u.banned_until;
+            return (
+              <div key={u.id} className="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-slate-100 last:border-b-0">
+                <div>
+                  <div className="text-sm" style={{ color: ink }}>{u.email}</div>
+                  <div className="text-[11px] text-slate-400">
+                    {banned ? "🚫 спрян" : u.confirmed_at ? "✅ активен" : "⏳ чака потвърждение на имейла"}
+                    {u.last_sign_in_at ? ` · последен вход ${new Date(u.last_sign_in_at).toLocaleDateString("bg-BG")}` : ""}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => sendReset(u)} disabled={busyId === u.id}
+                    className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 disabled:opacity-50">
+                    Изпрати нова парола
+                  </button>
+                  <button onClick={() => toggleBan(u)} disabled={busyId === u.id}
+                    className="text-xs font-medium px-3 py-1.5 rounded-full text-white disabled:opacity-50"
+                    style={{ background: banned ? "#166534" : "#dc2626" }}>
+                    {busyId === u.id ? "…" : banned ? "Пусни" : "Спри"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // начално състояние на калкулацията (стъпка 1) — извадено извън компонента, за да служи и като
 // база при сливане с възстановена чернова (schema-safe, ако по-късно добавим ново поле)
 const INITIAL_S = {
@@ -3124,7 +3230,7 @@ export default function KorektCalculator() {
   const logout = () => {
     setAuthSession(null);
     saveAuthSession(null);
-    setShowLog(false); setShowSettings(false); setShowMargin(false);
+    setShowLog(false); setShowSettings(false); setShowMargin(false); setShowUsers(false);
   };
   // опреснява сесията малко преди да изтече, вместо да чака 401 от базата
   useEffect(() => {
@@ -3297,6 +3403,7 @@ export default function KorektCalculator() {
   // --- автоматичен запис на калкулацията при показване на цената ---
   const [showLog, setShowLog] = useState(false);
   const [showMargin, setShowMargin] = useState(false);
+  const [showUsers, setShowUsers] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
 
   // Всяка калкулация се пази автоматично — без клиентът да прави нищо.
@@ -3556,6 +3663,9 @@ export default function KorektCalculator() {
             <button onClick={() => guardAdmin(() => setShowSettings((v) => !v))}
               className="text-sm font-semibold px-3 py-2 rounded-full border transition"
               style={{ borderColor: showSettings ? accent : "#e2e6ec", color: showSettings ? accent : "#64748b" }}>{adminUnlocked ? "⚙" : "🔒"} Параметри</button>
+            <button onClick={() => guardAdmin(() => setShowUsers((v) => !v))}
+              className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+              style={{ borderColor: showUsers ? ink : "#e2e6ec", color: showUsers ? ink : "#64748b" }}>{adminUnlocked ? "👥" : "🔒"} Потребители</button>
             {adminUnlocked && (
               <button onClick={logout} title={authSession?.email || ""}
                 className="text-xs font-medium px-2 py-2 rounded-full text-slate-400 hover:text-slate-600">
@@ -3594,6 +3704,7 @@ export default function KorektCalculator() {
         <div style={{ display: showSettings ? "block" : "none" }}>
           <SettingsPanel p={p} setP={setP} saveState={paramSave} syncedAt={paramSyncedAt} notify={notify} session={authSession} />
         </div>
+        {showUsers && <UsersPanel session={authSession} notify={notify} p={p} />}
 
         <div className="flex gap-2 mb-8">
           {STEPS.map((label, i) => (
