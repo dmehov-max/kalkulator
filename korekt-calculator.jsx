@@ -192,6 +192,7 @@ const CATALOG = [
     { id: "boxM", label: "Кашон среден", m3: 0.1, kg: 12, kind: "box" },
     { id: "boxL", label: "Кашон голям", m3: 0.15, kg: 18, kind: "box" },
     { id: "books", label: "Кашон с книги", m3: 0.06, kg: 25, kind: "box" },
+    { id: "clothesBag", label: "Чувал с дрехи", m3: 0.08, kg: 6, kind: "box" },
     { id: "suitcase", label: "Куфар", m3: 0.1, kg: 15, kind: "small" },
     { id: "bike", label: "Велосипед", m3: 0.4, kg: 12, wrap: 6, protect: 4, kind: "small" },
     { id: "art", label: "Огледало / картина", m3: 0.15, kg: 5, wrap: 3, wrapReq: true, protect: 4, protectReq: true, kind: "small" },
