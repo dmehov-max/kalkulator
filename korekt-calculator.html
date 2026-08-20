@@ -2602,8 +2602,10 @@ async function fetchRealDistanceKm(cityA, cityB, apiKey) {
     const data = await res.json();
     const routes = (data?.routes || []).filter(r => r.distanceMeters);
     if (!routes.length) return null;
-    // взимаме най-краткия вариант, не най-бързия
-    const best = routes.reduce((a, b) => a.distanceMeters <= b.distanceMeters ? a : b);
+    // взимаме препоръчания от Google маршрут (първия) — обикновено през магистрала/
+    // главен път, не непременно най-краткия по километри. Реалните камиони карат по
+    // магистралата (напр. София—Пловдив по Тракия), а не по най-късия път по вади.
+    const best = routes[0];
     const km = Math.round(best.distanceMeters / 1000);
     const info = {
       km,
