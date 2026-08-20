@@ -805,7 +805,10 @@ function lookupRealDistance(cityA, cityB) {
    Ако е зададен ключ в ⚙ Параметри, калкулаторът пита Google за реалния
    маршрут по път. Резултатите се кешират, за да не се хабят заявки. */
 const routesCache = new Map();
-const ROUTES_CACHE_KEY = "cache:routes";
+// v2 — сменено на 2026-08-21, когато логиката мина от "най-краткия маршрут" на
+// "препоръчания" (обикновено магистрала); старите v1 записи можеха да пазят
+// маршрут без магистралата, затова ключът е нов, за да не се наследят.
+const ROUTES_CACHE_KEY = "cache:routes:v2";
 let routesCacheLoaded = false;
 
 // зареждаме запомнените разстояния от хранилището (веднъж при стартиране)
@@ -3675,7 +3678,6 @@ export default function KorektCalculator() {
                 изход
               </button>
             )}
-            <a href={p.phoneHref} className="text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: ink }}>{p.phone}</a>
           </div>
         </div>
 
