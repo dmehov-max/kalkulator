@@ -665,8 +665,10 @@ test("велпапе: огледала и картини се защитават
   ok(E.ITEM_INDEX.art.protectReq, "огледалото трябва да е задължително");
   eq(E.protectMetersFor({ art: 1 }, {}), E.ITEM_INDEX.art.protect);
 });
-test("велпапе: телевизорът също е задължителен", () => {
-  ok(E.ITEM_INDEX.tvstand.protectReq);
+test("велпапе/стреч: телевизорът и принтерът са избираеми, не задължителни", () => {
+  ok(!E.ITEM_INDEX.tvstand.protectReq, "ТВ велпапе не бива да е задължително");
+  ok(!E.ITEM_INDEX.tvstand.wrapReq, "ТВ стреч не бива да е задължителен");
+  ok(!E.ITEM_INDEX.printer.wrapReq, "принтер стреч не бива да е задължителен");
 });
 test("велпапе: стъклените мебели се защитават задължително", () => {
   for (const id of ["vitrine", "tableGlass", "tableSmallGlass"]) {

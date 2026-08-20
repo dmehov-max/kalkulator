@@ -140,7 +140,7 @@ const CATALOG = [
     { id: "sofa3", label: "Диван 3-местен", m3: 2.0, kg: 60, dis: 0.3, asm: 0.5, wrap: 12, wrapReq: true, kind: "oversized", protect: 10 },
     { id: "sofaL", label: "Ъглов диван", m3: 3.0, kg: 90, dis: 0.5, asm: 0.9, wrap: 16, wrapReq: true, kind: "oversized", protect: 14 },
     { id: "armchair", label: "Фотьойл", m3: 0.8, kg: 25, wrap: 6, protect: 5 },
-    { id: "tvstand", label: "ТВ", m3: 0.15, kg: 8, dis: 0.15, asm: 0.3, wrap: 4, wrapReq: true, protect: 4, protectReq: true },
+    { id: "tvstand", label: "ТВ", m3: 0.15, kg: 8, dis: 0.15, asm: 0.3, wrap: 4, protect: 4 },
     { id: "tvcabinet", label: "ТВ шкаф", m3: 0.6, kg: 35, dis: 0.3, asm: 0.8, wrap: 7, protect: 4 },
     { id: "vitrine", label: "Витрина (със стъкла)", m3: 1.0, kg: 50, dis: 0.4, asm: 1.2, wrap: 10, wrapReq: true, protect: 6, protectReq: true },
     { id: "table", label: "Маса за хранене", m3: 0.7, kg: 30, dis: 0.2, asm: 0.5, wrap: 8, protect: 5 },
@@ -171,7 +171,7 @@ const CATALOG = [
     { id: "reception", label: "Рецепционно бюро", m3: 1.0, kg: 60, dis: 0.4, asm: 1.0, wrap: 10, protect: 6 },
     { id: "partition", label: "Преграда / параван", m3: 0.4, kg: 20, wrap: 5, protect: 3 },
     { id: "whiteboard", label: "Бяла дъска / флипчарт", m3: 0.2, kg: 10, wrap: 3, protect: 3, kind: "small" },
-    { id: "printer", label: "Принтер / копирна машина", m3: 0.3, kg: 25, wrap: 5, wrapReq: true, protect: 3, kind: "small" },
+    { id: "printer", label: "Принтер / копирна машина", m3: 0.3, kg: 25, wrap: 5, protect: 3, kind: "small" },
     { id: "serverRack", label: "Сървърна стойка (rack)", m3: 0.6, kg: 60, wrap: 8, wrapReq: true, kind: "appliance_heavy", protect: 6 },
   ]},
   { group: "Уреди", for: "all", items: [
