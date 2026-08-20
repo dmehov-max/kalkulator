@@ -257,22 +257,29 @@ test("пътуваща бригада: придружаващият се пла�
   const line = r.lines.find((l) => l.label.startsWith("Придружаващ"));
   ok(line, "липсва перо за придружаващия работник");
   const часове = r.handlingClock + r.driveHours;
-  eq(line.amount, Math.round(часове * P.travelCrew * P.workerRate), "часове × ставка, без таван:");
+  eq(line.amount, Math.round(часове * (P.travelCrew + 1) * P.workerRate), "часове × ставка, без таван:");
   ok(!r.lines.some((l) => l.label.startsWith("Товарене")), "не бива да има и почасови пера");
 });
-test("пътуваща бригада: 10 часа работа при 18 €/ч дават точно 180 €", () => {
-  // директна проверка на примера: 10ч × 18€/ч = 180€, без закръгляне до дни
+test("пътуваща бригада: шофьорът също се брои като работник (+1 към travelCrew)", () => {
+  // София → Пловдив: ~2ч път в посока, реален труд на място; плаща се за шофьора
+  // + придружаващия работник заедно — не само за travelCrew параметъра сам по себе си
+  const r = calc({ service: "intercity", pickupCity: "София", dropoffCity: "Пловдив", courseMode: "dayCrew", qty: { boxL: 10 } });
+  const line = r.lines.find((l) => l.label.startsWith("Придружаващ"));
+  ok(line.label.includes("2 души"), `очаквани 2 души (travelCrew=${P.travelCrew} + шофьор), получено: ${line.label}`);
+});
+test("пътуваща бригада: 10 часа работа при 18 €/ч и 2ма работници дават точно 360 €", () => {
+  // директна проверка на примера: 10ч × 2 души × 18€/ч = 360€, без закръгляне до дни
   const r = calc({ service: "intercity", pickupCity: "София", dropoffCity: "Пловдив", courseMode: "dayCrew", qty: { boxL: 10 } });
   const часове = r.handlingClock + r.driveHours;
   const line = r.lines.find((l) => l.label.startsWith("Придружаващ"));
-  near(line.amount, часове * P.travelCrew * P.workerRate, 1, "трябва да е точно часове × ставка:");
+  near(line.amount, часове * (P.travelCrew + 1) * P.workerRate, 1, "трябва да е точно часове × 2 души × ставка:");
 });
 test("пътуваща бригада: повече часове означава пропорционално повече пари", () => {
   const близо = calc({ service: "intercity", pickupCity: "София", dropoffCity: "Пловдив", courseMode: "dayCrew", qty: { boxL: 10 } });
   const далеч = дълъг({ courseMode: "dayCrew" }); // София → Созопол, много по-дълъг път
   const линияЗаЧас = (r) => r.lines.find((l) => l.label.startsWith("Придружаващ")).amount / (r.handlingClock + r.driveHours);
-  near(линияЗаЧас(близо), P.travelCrew * P.workerRate, 1, "цената на час трябва да е една и съща:");
-  near(линияЗаЧас(далеч), P.travelCrew * P.workerRate, 1, "дори при много по-дълъг път:");
+  near(линияЗаЧас(близо), (P.travelCrew + 1) * P.workerRate, 1, "цената на час трябва да е една и съща:");
+  near(линияЗаЧас(далеч), (P.travelCrew + 1) * P.workerRate, 1, "дори при много по-дълъг път:");
 });
 test("пътуваща бригада: дълъг път дава повече от един ден", () => {
   const r = дълъг({ courseMode: "dayCrew" });

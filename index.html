@@ -2907,7 +2907,7 @@ function computePrice(s, p) {
   let handlingManHours;
   if (dayCrewMode) {
     handlingManHours = 0; // трудът се плаща на ден, не на час
-    const people = n(p.travelCrew || 1);
+    const people = n(p.travelCrew || 1) + 1; // + шофьорът, който също товари/разтоварва на място
     add(`Придружаващ работник — ${dayTotalH.toFixed(1)} ч × ${people} ${people === 1 ? "човек" : "души"} × ${workerRate} ${p.currency}/ч`, dayTotalH * people * workerRate);
   } else if (localCrewMode) {
     // товаренето при клиента + местна бригада, която пътува до адреса и разтоварва
@@ -5910,13 +5910,12 @@ function LogPanel({
   }));
 }
 
-// извиква новата Netlify Function (пази service_role ключа сървърно) — виж
-// netlify/functions/admin-users.mjs. Заявката носи access_token-а на текущата сесия,
-// функцията сама проверява сървърно дали викащият е PARAMS_EDITOR_EMAIL.
-// Абсолютен адрес (не /.netlify/...), защото сайтът се отваря и от GitHub Pages
-// (dmehov-max.github.io/kalkulator) — статичен хостинг, който не може да пуска функции;
-// функцията живее само на Netlify и приема заявки от двата адреса през CORS.
-const ADMIN_FUNCTION_URL = "https://korekt-kalkulator.netlify.app/.netlify/functions/admin-users";
+// извиква Supabase Edge Function (пази service_role ключа сървърно) — виж
+// supabase/functions/admin-users/index.ts. Заявката носи access_token-а на текущата
+// сесия, функцията сама проверява сървърно дали викащият е PARAMS_EDITOR_EMAIL.
+// Живее в самия Supabase проект (не на Netlify) — работи еднакво от GitHub Pages
+// и от Netlify, без да зависи от хостинг на статичния сайт.
+const ADMIN_FUNCTION_URL = `${DEFAULTS.supabaseUrl}/functions/v1/admin-users`;
 async function adminUsersCall(action, session, options) {
   try {
     const res = await fetch(`${ADMIN_FUNCTION_URL}?action=${action}`, {
