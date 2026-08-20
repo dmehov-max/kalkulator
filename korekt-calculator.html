@@ -6490,8 +6490,9 @@ function KorektCalculator() {
   const pushedRef = useRef(!!initialDraft?.pushed); // дали вече е създаден ред в Supabase — след това само PATCH (update), не upsert
   const [calcNumberState, setCalcNumberState] = useState(initialDraft?.recordNumber || null); // за показване в резултата
 
-  // зарежда стар запис обратно в съветника за редакция — НЕ презаписва оригинала,
-  // а тръгва като чисто нова калкулация (нов ключ/номер), за да остане историята непокътната
+  // зарежда стар запис обратно в съветника за редакция — пази СЪЩИЯ ключ/номер, за да
+  // промените обновят оригинала (PATCH), вместо да трупат нов запис (№2, №3...) при всяка
+  // редакция на едно и също нещо
   const loadRecordForEditing = rec => {
     if (!rec?.formState) {
       notify("Този запис е отпреди тази функция — няма запазено пълно състояние.", "error");
@@ -6501,14 +6502,14 @@ function KorektCalculator() {
       ...INITIAL_S,
       ...rec.formState
     });
-    recordKey.current = null;
-    recordNumber.current = null;
-    pushedRef.current = false;
-    setCalcNumberState(null);
+    recordKey.current = rec.key || null;
+    recordNumber.current = rec.calcNumber ?? null;
+    pushedRef.current = !!rec.key; // вече съществува ред в Supabase — следващият autosave трябва да е PATCH, не нов POST
+    setCalcNumberState(rec.calcNumber ?? null);
     clearDraftLS(); // старата чернова (ако имаше) вече не важи — тръгваме от редактираните данни
     setShowLog(false);
     setStep(3);
-    notify(`Калкулация №${rec.calcNumber ?? ""} е заредена за редакция — промените ще се запазят като нов запис.`, "info");
+    notify(`Калкулация №${rec.calcNumber ?? ""} е заредена за редакция — промените ще обновят този запис.`, "info");
   };
 
   // --- чернова на текущата калкулация (за да наистина не се губи при презареждане) ---
