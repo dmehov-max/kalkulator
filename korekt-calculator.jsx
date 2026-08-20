@@ -3438,7 +3438,6 @@ export default function KorektCalculator() {
 
   // --- автоматичен запис на калкулацията при показване на цената ---
   const [showLog, setShowLog] = useState(false);
-  const [showMargin, setShowMargin] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
 
@@ -3666,7 +3665,7 @@ export default function KorektCalculator() {
   return (
     <div className="min-h-screen w-full" style={{ background: "#f6f7f9", fontFamily: "'Inter', system-ui, sans-serif" }}>
       <div className="max-w-3xl mx-auto px-4 py-8">
-        <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
           <div>
             <div className="text-2xl font-extrabold tracking-tight" style={{ color: ink }}>КОРЕКТ<span style={{ color: accent }}>.</span></div>
             <div className="text-xs text-slate-500 -mt-0.5">Калкулатор за приблизителна цена</div>
@@ -3688,20 +3687,6 @@ export default function KorektCalculator() {
                 className="text-sm font-semibold px-3 py-2 rounded-full border transition"
                 style={{ borderColor: userName ? ink : "#e2e6ec", color: userName ? ink : "#64748b" }}>👤 {userName || "Кой сте Вие?"}</button>
             )}
-            <button onClick={() => guardAdmin(() => setShowLog((v) => !v))}
-              className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-              style={{ borderColor: showLog ? ink : "#e2e6ec", color: showLog ? ink : "#64748b" }}>{adminUnlocked ? "📋" : "🔒"} Записи</button>
-            <button onClick={() => guardAdmin(() => setShowSettings((v) => !v))}
-              className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-              style={{ borderColor: showSettings ? accent : "#e2e6ec", color: showSettings ? accent : "#64748b" }}>{adminUnlocked ? "⚙" : "🔒"} Параметри</button>
-            <button onClick={() => guardAdmin(() => setShowUsers((v) => !v))}
-              className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-              style={{ borderColor: showUsers ? ink : "#e2e6ec", color: showUsers ? ink : "#64748b" }}>{adminUnlocked ? "👥" : "🔒"} Потребители</button>
-            {step === 3 && vol >= 0 && total > 0 && (
-              <button onClick={() => guardAdmin(() => setShowMargin((v) => !v))}
-                className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-                style={{ borderColor: showMargin ? "#b45309" : "#e2e6ec", color: showMargin ? "#b45309" : "#64748b" }}>{adminUnlocked ? "💰" : "🔒"} Марж</button>
-            )}
             {adminUnlocked && (
               <button onClick={logout} title={authSession?.email || ""}
                 className="text-xs font-medium px-2 py-2 rounded-full text-slate-400 hover:text-slate-600">
@@ -3710,31 +3695,19 @@ export default function KorektCalculator() {
             )}
           </div>
         </div>
+        <div className="flex flex-wrap items-center gap-2 mb-6">
+          <button onClick={() => guardAdmin(() => setShowLog((v) => !v))}
+            className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+            style={{ borderColor: showLog ? ink : "#e2e6ec", color: showLog ? ink : "#64748b" }}>{adminUnlocked ? "📋" : "🔒"} Записи</button>
+          <button onClick={() => guardAdmin(() => setShowSettings((v) => !v))}
+            className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+            style={{ borderColor: showSettings ? accent : "#e2e6ec", color: showSettings ? accent : "#64748b" }}>{adminUnlocked ? "⚙" : "🔒"} Параметри</button>
+          <button onClick={() => guardAdmin(() => setShowUsers((v) => !v))}
+            className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+            style={{ borderColor: showUsers ? ink : "#e2e6ec", color: showUsers ? ink : "#64748b" }}>{adminUnlocked ? "👥" : "🔒"} Потребители</button>
+        </div>
 
         {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} session={authSession} onEdit={loadRecordForEditing} />}
-        {showMargin && step === 3 && (
-          <div className="rounded-2xl p-5 mb-4" style={{ background: "#fff8ef", border: "1px solid #f3ddbd" }}>
-            <div className="text-sm font-semibold mb-3" style={{ color: ink }}>💰 Себестойност и марж (вътрешно, не се вижда от клиента)</div>
-            <div className="space-y-1.5 text-sm">
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Труд{costCity ? ` (${costCity}, ${workerCostRate} ${p.currency}/ч)` : ""}</span>
-                <span style={{ color: ink }}>{laborCost} {p.currency}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">Камион</span>
-                <span style={{ color: ink }}>{truckCost} {p.currency}</span>
-              </div>
-              <div className="flex justify-between gap-3 font-semibold pt-1.5 mt-1 border-t border-[#f3ddbd]">
-                <span style={{ color: ink }}>Себестойност общо</span>
-                <span style={{ color: ink }}>{totalCost} {p.currency}</span>
-              </div>
-              <div className="flex justify-between gap-3 font-bold">
-                <span style={{ color: ink }}>Марж</span>
-                <span style={{ color: margin >= 0 ? "#166534" : "#dc2626" }}>{margin} {p.currency} ({marginPercent.toFixed(1)}%)</span>
-              </div>
-            </div>
-          </div>
-        )}
         {/* остава монтиран, само скрит — за да не се затварят отворените секции при всяко отваряне на панела */}
         <div style={{ display: showSettings ? "block" : "none" }}>
           <SettingsPanel p={p} setP={setP} saveState={paramSave} syncedAt={paramSyncedAt} notify={notify} session={authSession} />
@@ -4683,6 +4656,30 @@ export default function KorektCalculator() {
                       className="rounded-xl py-3 font-semibold text-white" style={{ background: accent }}>Изпрати заявка</button>
                   </div>
                 </div>
+
+                {adminUnlocked && (
+                  <div className="rounded-2xl p-5" style={{ background: "#fff8ef", border: "1px solid #f3ddbd" }}>
+                    <div className="text-sm font-semibold mb-3" style={{ color: ink }}>💰 Себестойност и марж (вътрешно, не се вижда от клиента)</div>
+                    <div className="space-y-1.5 text-sm">
+                      <div className="flex justify-between gap-3">
+                        <span className="text-slate-500">Труд{costCity ? ` (${costCity}, ${workerCostRate} ${p.currency}/ч)` : ""}</span>
+                        <span style={{ color: ink }}>{laborCost} {p.currency}</span>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <span className="text-slate-500">Камион</span>
+                        <span style={{ color: ink }}>{truckCost} {p.currency}</span>
+                      </div>
+                      <div className="flex justify-between gap-3 font-semibold pt-1.5 mt-1 border-t border-[#f3ddbd]">
+                        <span style={{ color: ink }}>Себестойност общо</span>
+                        <span style={{ color: ink }}>{totalCost} {p.currency}</span>
+                      </div>
+                      <div className="flex justify-between gap-3 font-bold">
+                        <span style={{ color: ink }}>Марж</span>
+                        <span style={{ color: margin >= 0 ? "#166534" : "#dc2626" }}>{margin} {p.currency} ({marginPercent.toFixed(1)}%)</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
