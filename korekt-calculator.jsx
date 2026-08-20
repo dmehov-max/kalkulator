@@ -41,7 +41,8 @@ const DEFAULTS = {
   unloadHours: 1,        // включено разтоварване на курс
 
   citySpeed: 30,         // км/ч — средна скорост в града (за времето за път)
-  roadSpeed: 100,        // км/ч — средна скорост извън града (магистрала/главен път)
+  roadSpeed: 65,         // км/ч — средна скорост извън града (обикновен/първокласен път, без магистрала)
+  highwaySpeed: 100,     // км/ч — средна скорост по магистрала (виж REAL_DISTANCES_RAW.highwayKm)
 
   // Собствен камион (метри)
   truck: { l: 4, w: 2, h: 2, payloadKg: 1500 }, // бус до 1.5 т
@@ -774,9 +775,12 @@ function baseOnRoute(from, base, to, roadFactor, tolerance) {
 /* Реални пътни разстояния (км, еднопосочно) за маршрути, където изчислението
    по права линия се разминава — напр. планински обходи. Имат превес над формулата.
    Посоката няма значение — записвай ги в какъвто ред е удобно. */
+// highwayKm — колко от общите км (еднопосочно) са по магистрала (по-висока скорост,
+// виж p.highwaySpeed); остатъкът (km - highwayKm) е по обикновен/първокласен път извън
+// града (по-бавно, виж p.roadSpeed) — смесен маршрут, не всичко-или-нищо
 const REAL_DISTANCES_RAW = {
-  "София|Банско": 160,
-  "София|Пловдив": 150, // магистрала Тракия — правата линия×коефициент даваше 165, неточно
+  "София|Банско": { km: 160 }, // изцяло планински път, без магистрала
+  "София|Пловдив": { km: 150, highwayKm: 140 }, // магистрала Тракия почти до края, ~10 км градски участъци
 };
 
 function realDistanceKey(a, b) {
@@ -791,7 +795,7 @@ const REAL_DISTANCES = Object.fromEntries(
   })
 );
 
-function lookupRealDistance(cityA, cityB) {
+function lookupRealDistanceEntry(cityA, cityB) {
   if (!cityA || !cityB) return null;
   const direct = REAL_DISTANCES[realDistanceKey(cityA, cityB)];
   if (direct != null) return direct;
@@ -800,6 +804,23 @@ function lookupRealDistance(cityA, cityB) {
   if (!a || !b) return null;
   const viaMatch = REAL_DISTANCES[realDistanceKey(a, b)];
   return viaMatch != null ? viaMatch : null;
+}
+
+function lookupRealDistance(cityA, cityB) {
+  return lookupRealDistanceEntry(cityA, cityB)?.km ?? null;
+}
+
+// часове път в ЕДНАТА посока — смесен маршрут: частта по магистрала (highwayKm, ако е
+// зададена ръчно за тази двойка градове) на p.highwaySpeed, остатъкът на p.roadSpeed.
+// Без ръчни данни за маршрута — всичко на p.roadSpeed (старото поведение).
+function driveHoursOneWay(cityA, cityB, oneWayKmValue, p) {
+  const hwSpeed = n(p.highwaySpeed || 100);
+  const roadSp = n(p.roadSpeed || 65);
+  const entry = lookupRealDistanceEntry(cityA, cityB);
+  const km = n(oneWayKmValue || entry?.km || 0);
+  const hwKm = entry?.highwayKm ? Math.min(n(entry.highwayKm), km) : 0;
+  const restKm = Math.max(0, km - hwKm);
+  return (hwSpeed ? hwKm / hwSpeed : 0) + (roadSp ? restKm / roadSp : 0);
 }
 
 /* --- Реални разстояния през Google Routes API (по избор) ---------------
@@ -1098,8 +1119,11 @@ function computePrice(s, p) {
   // само истинското градско (в рамките на града) остава еднопосочно.
   const rtFactor = s.service === "local" ? 1 : n(p.roundTripFactor);
   const totalKm = trips * rtFactor * (isDisposal ? landfillKm : oneWayKm);
-  const speed = isCourse ? n(p.roadSpeed || 65) : n(p.citySpeed || 30);
-  const driveHours = speed ? totalKm / speed : 0;
+  // курс (междуградско/международно): смесен маршрут — магистрала + обикновен път, всяка
+  // част на своята скорост (виж driveHoursOneWay). Друго (градско/изхвърляне): скорост в града.
+  const driveHours = isCourse
+    ? trips * rtFactor * driveHoursOneWay(s.pickupCity, s.dropoffCity, oneWayKm, p)
+    : (n(p.citySpeed || 30) ? totalKm / n(p.citySpeed || 30) : 0);
 
   // 1) ПРЕНАСЯНЕ И ПЪТ — това е времето, в което камионът е ангажиран
   let handlingClock; // реални часове
@@ -1313,7 +1337,7 @@ function computePrice(s, p) {
   }
 
   // Нощувка: ако работа + път в ЕДНАТА посока надхвърли прага
-  const oneWayDriveH = isCourse && n(p.roadSpeed) ? oneWayKm / n(p.roadSpeed) : 0;
+  const oneWayDriveH = isCourse ? driveHoursOneWay(s.pickupCity, s.dropoffCity, oneWayKm, p) : 0;
   const nights = isCourse
     ? Math.max(0, Math.ceil((oneWayDriveH + handlingClock - n(p.overnightThresholdH || 8)) / n(p.dayHours || 10)))
     : 0;
@@ -2287,6 +2311,7 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify, sessi
           <Num label="Двупосочен курс" value={p.roundTripFactor} step={0.5} onChange={(v) => upd({ roundTripFactor: v })} suffix="×" />
           <Num label="Скорост в града" value={p.citySpeed} step={5} onChange={(v) => upd({ citySpeed: v })} suffix="км/ч" />
           <Num label="Скорост извън града" value={p.roadSpeed} step={5} onChange={(v) => upd({ roadSpeed: v })} suffix="км/ч" />
+          <Num label="Скорост по магистрала" value={p.highwaySpeed} step={5} onChange={(v) => upd({ highwaySpeed: v })} suffix="км/ч" />
         </div>
         <div className="mt-3">
           <div className="text-xs font-medium text-slate-500 mb-2">
