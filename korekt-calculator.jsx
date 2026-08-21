@@ -1689,6 +1689,7 @@ async function supabaseSignIn(email, password, url, key) {
         expires_at: Date.now() + (Number(data.expires_in) || 3600) * 1000,
         email: data.user?.email || email,
         displayName: data.user?.user_metadata?.display_name || "",
+        role: data.user?.app_metadata?.role || "employee",
       },
     };
   } catch (e) {
@@ -1712,6 +1713,7 @@ async function supabaseRefreshSession(session, url, key) {
       expires_at: Date.now() + (Number(data.expires_in) || 3600) * 1000,
       email: data.user?.email || session.email,
       displayName: data.user?.user_metadata?.display_name || session.displayName || "",
+      role: data.user?.app_metadata?.role || session.role || "employee",
     };
   } catch (e) { return null; }
 }
@@ -2256,14 +2258,20 @@ function Section({ title, children }) {
   );
 }
 
-// само този имейл може да редактира ценовите параметри — останалите логнати колеги
-// виждат панела само за справка (заключен), но си запазват достъп до Записи/редакция на калкулации
+// роля "администратор": bootstrap имейлът е администратор винаги (дори ако app_metadata.role
+// липсва/сгреши — за да няма как екипът да се заключи навън от Параметри/Потребители), а
+// останалите стават администратори само през app_metadata.role = "admin" (зададено от панела
+// "Потребители", виж setRole в supabase/functions/admin-users/index.ts). Всички останали са
+// "служител" — виждат калкулатора и своите записи, но не и Параметри/Потребители.
 const PARAMS_EDITOR_EMAIL = "d.mehov@korekt-bg.com";
+function isAdminSession(session) {
+  return !!session && ((session.email || "").trim().toLowerCase() === PARAMS_EDITOR_EMAIL || session.role === "admin");
+}
 function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify, session }) {
   const upd = (patch) => setP({ ...p, ...patch });
   const syncedAt = syncedAtMs ? new Date(syncedAtMs).toLocaleTimeString("bg-BG", { hour: "2-digit", minute: "2-digit" }) : null;
   const [confirmReset, setConfirmReset] = useState(false);
-  const isParamsEditor = (session?.email || "").trim().toLowerCase() === PARAMS_EDITOR_EMAIL;
+  const isParamsEditor = isAdminSession(session);
 
   const exportParams = () => {
     const blob = new Blob([JSON.stringify(p, null, 2)], { type: "application/json" });
@@ -2318,7 +2326,7 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify, sessi
 
       {!isParamsEditor && (
         <div className="mb-4 rounded-xl px-4 py-3 text-sm" style={{ background: "#fff4e5", color: "#92400e" }}>
-          🔒 Само {PARAMS_EDITOR_EMAIL} може да редактира параметрите — тук ги виждаш само за справка.
+          🔒 Само роля "администратор" може да редактира параметрите — тук ги виждаш само за справка.
         </div>
       )}
       <div className={isParamsEditor ? "" : "pointer-events-none opacity-60"} aria-disabled={!isParamsEditor}>
@@ -3123,10 +3131,10 @@ async function adminUsersCall(action, session, options) {
   }
 }
 
-// панел "Потребители" — само за PARAMS_EDITOR_EMAIL (същият администратор, който
-// редактира ⚙ Параметри); останалите логнати колеги виждат заключен изглед
+// панел "Потребители" — само за роля "администратор" (виж isAdminSession); останалите
+// логнати колеги (роля "служител") изобщо не виждат това табче (guarded по-горе в nav-а)
 function UsersPanel({ session, notify, p }) {
-  const isAdmin = (session?.email || "").trim().toLowerCase() === PARAMS_EDITOR_EMAIL;
+  const isAdmin = isAdminSession(session);
   const [users, setUsers] = useState(null); // null = още не е зареден
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -3148,6 +3156,16 @@ function UsersPanel({ session, notify, p }) {
     setBusyId(null);
     if (!res.ok) { notify?.(res.error, "error"); return; }
     notify?.(willBan ? `${u.email} е спрян.` : `${u.email} е пуснат отново.`, "success");
+    load();
+  };
+
+  const toggleRole = async (u) => {
+    const nextRole = u.role === "admin" ? "employee" : "admin";
+    setBusyId(u.id);
+    const res = await adminUsersCall("setRole", session, { body: { id: u.id, role: nextRole } });
+    setBusyId(null);
+    if (!res.ok) { notify?.(res.error, "error"); return; }
+    notify?.(nextRole === "admin" ? `${u.email} вече е администратор.` : `${u.email} вече е служител.`, "success");
     load();
   };
 
@@ -3178,16 +3196,29 @@ function UsersPanel({ session, notify, p }) {
         <div className="space-y-2">
           {users.map((u) => {
             const banned = !!u.banned_until;
+            const isBootstrap = u.email?.trim().toLowerCase() === PARAMS_EDITOR_EMAIL;
+            const uIsAdmin = u.role === "admin";
             return (
               <div key={u.id} className="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-slate-100 last:border-b-0">
                 <div>
-                  <div className="text-sm" style={{ color: ink }}>{u.email}</div>
+                  <div className="text-sm" style={{ color: ink }}>
+                    {u.email} <span className="text-[11px] font-medium" style={{ color: uIsAdmin ? accent : "#94a3b8" }}>
+                      · {uIsAdmin ? "администратор" : "служител"}
+                    </span>
+                  </div>
                   <div className="text-[11px] text-slate-400">
                     {banned ? "🚫 спрян" : u.confirmed_at ? "✅ активен" : "⏳ чака потвърждение на имейла"}
                     {u.last_sign_in_at ? ` · последен вход ${new Date(u.last_sign_in_at).toLocaleDateString("bg-BG")}` : ""}
                   </div>
                 </div>
                 <div className="flex gap-2">
+                  {!isBootstrap && (
+                    <button onClick={() => toggleRole(u)} disabled={busyId === u.id}
+                      className="text-xs font-medium px-3 py-1.5 rounded-full border disabled:opacity-50"
+                      style={{ borderColor: uIsAdmin ? accent : "#e2e6ec", color: uIsAdmin ? accent : "#64748b" }}>
+                      {busyId === u.id ? "…" : uIsAdmin ? "Свали от администратор" : "Направи администратор"}
+                    </button>
+                  )}
                   <button onClick={() => sendReset(u)} disabled={busyId === u.id}
                     className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 disabled:opacity-50">
                     Изпрати нова парола
@@ -3333,6 +3364,7 @@ export default function KorektCalculator() {
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
   };
   const adminUnlocked = !!authSession;
+  const isAdmin = isAdminSession(authSession); // роля "администратор" — вижда Параметри/Потребители; "служител" — не
   const guardAdmin = (action) => {
     if (authSession) { action(); return; }
     setLoginError(null);
@@ -3792,12 +3824,16 @@ export default function KorektCalculator() {
           <button onClick={() => guardAdmin(() => setShowLog((v) => !v))}
             className="text-sm font-semibold px-3 py-2 rounded-full border transition"
             style={{ borderColor: showLog ? ink : "#e2e6ec", color: showLog ? ink : "#64748b" }}>{adminUnlocked ? "📋" : "🔒"} Записи</button>
-          <button onClick={() => guardAdmin(() => setShowSettings((v) => !v))}
-            className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-            style={{ borderColor: showSettings ? accent : "#e2e6ec", color: showSettings ? accent : "#64748b" }}>{adminUnlocked ? "⚙" : "🔒"} Параметри</button>
-          <button onClick={() => guardAdmin(() => setShowUsers((v) => !v))}
-            className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-            style={{ borderColor: showUsers ? ink : "#e2e6ec", color: showUsers ? ink : "#64748b" }}>{adminUnlocked ? "👥" : "🔒"} Потребители</button>
+          {isAdmin && (
+            <button onClick={() => guardAdmin(() => setShowSettings((v) => !v))}
+              className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+              style={{ borderColor: showSettings ? accent : "#e2e6ec", color: showSettings ? accent : "#64748b" }}>⚙ Параметри</button>
+          )}
+          {isAdmin && (
+            <button onClick={() => guardAdmin(() => setShowUsers((v) => !v))}
+              className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+              style={{ borderColor: showUsers ? ink : "#e2e6ec", color: showUsers ? ink : "#64748b" }}>👥 Потребители</button>
+          )}
           <button onClick={() => setShowProfile((v) => !v)}
             className="text-sm font-semibold px-3 py-2 rounded-full border transition"
             style={{ borderColor: showProfile ? accent : "#e2e6ec", color: showProfile ? accent : "#64748b" }}>🙋 Профил</button>
@@ -3805,10 +3841,12 @@ export default function KorektCalculator() {
 
         {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} session={authSession} onEdit={loadRecordForEditing} />}
         {/* остава монтиран, само скрит — за да не се затварят отворените секции при всяко отваряне на панела */}
-        <div style={{ display: showSettings ? "block" : "none" }}>
-          <SettingsPanel p={p} setP={setP} saveState={paramSave} syncedAt={paramSyncedAt} notify={notify} session={authSession} />
-        </div>
-        {showUsers && <UsersPanel session={authSession} notify={notify} p={p} />}
+        {isAdmin && (
+          <div style={{ display: showSettings ? "block" : "none" }}>
+            <SettingsPanel p={p} setP={setP} saveState={paramSave} syncedAt={paramSyncedAt} notify={notify} session={authSession} />
+          </div>
+        )}
+        {isAdmin && showUsers && <UsersPanel session={authSession} notify={notify} p={p} />}
         {showProfile && <ProfilePanel session={authSession} userName={userName} onSaved={applyUserName} notify={notify} p={p} />}
 
         <div className="flex gap-2 mb-8">
