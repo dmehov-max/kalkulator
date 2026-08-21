@@ -1589,12 +1589,15 @@ function saveCachedUserName(email, name) {
 }
 
 // чернова на текущата (незавършена) калкулация — за да не се губи при презареждане/затворен таб,
-// въпреки надписа "данните се записват автоматично" под формата за заявка
-const DRAFT_KEY = "korekt:draft";
+// въпреки надписа "данните се записват автоматично" под формата за заявка. Ключувана по имейл
+// на логнатия колега (не общо на устройството) — иначе на споделена машина всеки следващ
+// влязъл вижда недовършената калкулация на предишния колега, вместо чист начален екран.
+const DRAFT_KEY_PREFIX = "korekt:draft:";
 const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000; // не възстановяваме чернова, по-стара от денонощие
-function loadDraft() {
+function loadDraft(email) {
+  if (!email) return null;
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const raw = localStorage.getItem(DRAFT_KEY_PREFIX + email.trim().toLowerCase());
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
@@ -1602,12 +1605,14 @@ function loadDraft() {
     return parsed;
   } catch (e) { return null; }
 }
-function saveDraftLS(step, s, recordKey, recordNumber, pushed) {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ step, s, recordKey, recordNumber, pushed, savedAt: Date.now() })); }
+function saveDraftLS(email, step, s, recordKey, recordNumber, pushed) {
+  if (!email) return;
+  try { localStorage.setItem(DRAFT_KEY_PREFIX + email.trim().toLowerCase(), JSON.stringify({ step, s, recordKey, recordNumber, pushed, savedAt: Date.now() })); }
   catch (e) { /* без значение — просто няма да се възстанови */ }
 }
-function clearDraftLS() {
-  try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* без значение */ }
+function clearDraftLS(email) {
+  if (!email) return;
+  try { localStorage.removeItem(DRAFT_KEY_PREFIX + email.trim().toLowerCase()); } catch (e) { /* без значение */ }
 }
 
 // --- Достъп до вътрешните панели (Записи / Параметри / Марж) ---------------
@@ -3254,7 +3259,7 @@ const INITIAL_S = {
 
 export default function KorektCalculator() {
   // възстановяваме недовършена калкулация (ако има) — веднъж, синхронно, преди първия рендер
-  const [initialDraft] = useState(() => loadDraft());
+  const [initialDraft] = useState(() => loadDraft(loadAuthSession()?.email));
   const [step, setStep] = useState(() => initialDraft?.step || 0);
   const [draftRestored] = useState(() => !!(initialDraft?.s?.service));
   const [userName, setUserNameState] = useState(() => {
@@ -3517,7 +3522,7 @@ export default function KorektCalculator() {
     recordNumber.current = rec.calcNumber ?? null;
     pushedRef.current = !!rec.key; // вече съществува ред в Supabase — следващият autosave трябва да е PATCH, не нов POST
     setCalcNumberState(rec.calcNumber ?? null);
-    clearDraftLS(); // старата чернова (ако имаше) вече не важи — тръгваме от редактираните данни
+    clearDraftLS(authSession?.email); // старата чернова (ако имаше) вече не важи — тръгваме от редактираните данни
     setShowLog(false);
     setStep(3);
     notify(`Калкулация №${rec.calcNumber ?? ""} е заредена за редакция — промените ще обновят този запис.`, "info");
@@ -3526,10 +3531,10 @@ export default function KorektCalculator() {
   // --- чернова на текущата калкулация (за да наистина не се губи при презареждане) ---
   // пазим и ключа/номера на записа, за да не се трупат дубликати (№2, №3...) при презареждане
   useEffect(() => {
-    if (!s.service) { clearDraftLS(); return; } // нищо избрано още — няма какво да пазим
-    const t = setTimeout(() => saveDraftLS(step, s, recordKey.current, recordNumber.current, pushedRef.current), 400);
+    if (!s.service) { clearDraftLS(authSession?.email); return; } // нищо избрано още — няма какво да пазим
+    const t = setTimeout(() => saveDraftLS(authSession?.email, step, s, recordKey.current, recordNumber.current, pushedRef.current), 400);
     return () => clearTimeout(t);
-  }, [step, s, calcNumberState]);
+  }, [step, s, calcNumberState, authSession?.email]);
 
   useEffect(() => {
     if (draftRestored) notify("Възстановихме предишната Ви незавършена калкулация.", "info");
@@ -3649,7 +3654,7 @@ export default function KorektCalculator() {
     pushedRef.current = true;
     const ok = await saveCalc(key, rec);
     setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
-    if (ok) clearDraftLS(); // заявката е потвърдена — чернова вече не е нужна
+    if (ok) clearDraftLS(authSession?.email); // заявката е потвърдена — чернова вече не е нужна
     notify(ok
       ? "Заявката е записана. Ще се свържем с Вас."
       : "Заявката не можа да се запише автоматично. Моля, обадете се на " + p.phone + ".",
