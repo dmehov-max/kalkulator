@@ -352,7 +352,11 @@ const floorFeeRateFor = (it, p) => {
   switch (it.kind) {
     case "box": case "sack": return n(p.boxPerFloor);
     case "appliance": return n(p.appliancePerFloor);
-    case "appliance_heavy": case "oversized": return n(p.heavyAppliancePerFloor);
+    case "appliance_heavy": return n(p.heavyAppliancePerFloor);
+    // едрогабаритни (диван 3-ка, ъглов диван...) са си МЕБЕЛИ — просто не влизат в пътнически
+    // асансьор. Не са "спец. уред" (хладилник side-by-side, Miele...) и не бива да носят
+    // неговата по-висока ставка — само мебелната.
+    case "oversized": return n(p.furniturePerFloor);
     case "small": return n(p.smallItemPerFloor);
     default: return n(p.furniturePerFloor);
   }
@@ -1397,7 +1401,10 @@ function computePrice(s, p) {
   // едрогабаритни (диван 3-ка и под.): не влизат в пътнически асансьор → стълби, освен при товарен
   const floorsOvr = (a) => (a.floor >= 1 && !(a.elevator && a.elevatorType === "cargo") ? a.floor : 0);
   const perFloorStd = n(p.floorFeeNoElevator) + boxes * n(p.boxPerFloor) + appNormal * n(p.appliancePerFloor) + appHeavy * n(p.heavyAppliancePerFloor) + small * n(p.smallItemPerFloor) + furniture * n(p.furniturePerFloor);
-  const perFloorOvr = oversized * n(p.heavyAppliancePerFloor);
+  // едрогабаритните (диван 3-ка, ъглов диван) са мебели, не "спец. уред" — носят мебелната
+  // ставка; отделната категория oversized съществува само заради асансьора (не влизат в
+  // пътнически), не заради по-скъпа такса
+  const perFloorOvr = oversized * n(p.furniturePerFloor);
   // при изхвърляне няма адрес на доставка (само сметище); при самостоятелно разтоварване стълбите там са за сметка на клиента
   const skipDropoffFloors = isDisposal || selfUnloadMode || usesFieldCrew;
   const floorsStdTot = floorsStd(s.pickup) + (skipDropoffFloors ? 0 : floorsStd(s.dropoff));
@@ -1408,7 +1415,12 @@ function computePrice(s, p) {
   const stairsManHours = workerRate > 0 ? stairs / workerRate : 0;
 
   const manHours = handlingManHours + disManHours + wrapManHours + protectManHours + fillManHours + carryManHours + stairsManHours;
-  const clockHours = handlingClock + fillClockElapsed + disHours + carryHoursTot + (crew ? (wrapManHours + protectManHours + stairsManHours) / crew : wrapManHours + protectManHours + stairsManHours); // общ престой на обекта
+  const clockHours = handlingClock + fillClockElapsed + disHours + carryHoursTot + (crew ? (wrapManHours + protectManHours + stairsManHours) / crew : wrapManHours + protectManHours + stairsManHours); // общ престой на обекта — информативно (Очаквано време, бригада)
+  // часовете, по които се таксува КАМИОНЪТ при градско (виж truckCostBasis) — БЕЗ стълбите:
+  // те вече се начисляват директно като перо "Стълби без асансьор" (парична такса на етаж
+  // на вещ); ако същото забавяне се качи и в часовете на транспорта, се получава двойно
+  // начисляване на едно и също нещо (веднъж като такса, втори път като по-скъп транспорт)
+  const truckClockHours = clockHours - (crew ? stairsManHours / crew : stairsManHours);
   // над 10 часа на ден не се работи — толкова дни реално са нужни за изпълнение
   const workDays = Math.max(1, Math.ceil(clockHours / n(p.dayHours || 10)));
 
@@ -1447,9 +1459,11 @@ function computePrice(s, p) {
     }
   } else if (!isCourse) {
     // камионът стои на обекта през цялото пренасяне — включително разглобяване/сглобяване
-    // и опаковане, не само товарене-движение-разтоварване — затова часовете са clockHours,
-    // не само handlingClock
-    const h = roundHalf(clockHours);
+    // и опаковане, не само товарене-движение-разтоварване — затова часовете са truckClockHours
+    // (= clockHours), не само handlingClock. Стълбите обаче са изключени тук — те вече се
+    // таксуват отделно (перото "Стълби без асансьор" по-горе); иначе едно и също забавяне
+    // би оскъпило и там, и тук.
+    const h = roundHalf(truckClockHours);
     add(`Транспорт — ${h.toFixed(1)} ч × ${n(p.truckRate)} ${p.currency}/ч`, h * n(p.truckRate));
   } else {
     const rate = chosen ? chosen.kmRate : n(p.kmRate);
@@ -1560,7 +1574,19 @@ async function storageList(prefix) {
   return [];
 }
 const PARAMS_KEY = "config:pricing";
-const USER_NAME_KEY = "korekt:userName"; // име на колегата на това устройство — само за отбелязване в записите, не е вход/парола
+// името вече се пази в профила на акаунта (user_metadata.display_name в Supabase) — важи
+// на всяко устройство. Локалният кеш по-долу е само за мигновено показване при зареждане,
+// преди да е дошъл отговорът от Supabase; ключуван по имейл, за да не се "просмуква" между
+// различни колеги на споделена машина.
+const USER_NAME_CACHE_PREFIX = "korekt:userName:";
+function loadCachedUserName(email) {
+  if (!email) return "";
+  try { return localStorage.getItem(USER_NAME_CACHE_PREFIX + email.trim().toLowerCase()) || ""; } catch (e) { return ""; }
+}
+function saveCachedUserName(email, name) {
+  if (!email) return;
+  try { localStorage.setItem(USER_NAME_CACHE_PREFIX + email.trim().toLowerCase(), name); } catch (e) { /* без значение */ }
+}
 
 // чернова на текущата (незавършена) калкулация — за да не се губи при презареждане/затворен таб,
 // въпреки надписа "данните се записват автоматично" под формата за заявка
@@ -1657,6 +1683,7 @@ async function supabaseSignIn(email, password, url, key) {
         refresh_token: data.refresh_token,
         expires_at: Date.now() + (Number(data.expires_in) || 3600) * 1000,
         email: data.user?.email || email,
+        displayName: data.user?.user_metadata?.display_name || "",
       },
     };
   } catch (e) {
@@ -1679,8 +1706,26 @@ async function supabaseRefreshSession(session, url, key) {
       refresh_token: data.refresh_token || session.refresh_token,
       expires_at: Date.now() + (Number(data.expires_in) || 3600) * 1000,
       email: data.user?.email || session.email,
+      displayName: data.user?.user_metadata?.display_name || session.displayName || "",
     };
   } catch (e) { return null; }
+}
+// записва показваното име в профила на акаунта (user_metadata.display_name) — вика се
+// от панела "Профил"; така важи навсякъде, където колегата влезе, не само на едно устройство
+async function supabaseUpdateDisplayName(session, displayName, url, key) {
+  if (!session?.access_token || !url || !key) return { ok: false, error: "Няма активна сесия." };
+  try {
+    const res = await fetch(`${url}/auth/v1/user`, {
+      method: "PUT",
+      headers: { apikey: key, Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ data: { display_name: displayName } }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, error: data?.error_description || data?.msg || "Грешка при запис на профила." };
+    return { ok: true, displayName: data?.user_metadata?.display_name ?? displayName };
+  } catch (e) {
+    return { ok: false, error: "Мрежова грешка при запис на профила." };
+  }
 }
 // хедъри за заявки, които трябва да минат като логнат потребител (не анонимно) —
 // ползва JWT-а от сесията вместо анонимния ключ, за да важи RLS "authenticated"
@@ -3157,6 +3202,46 @@ function UsersPanel({ session, notify, p }) {
   );
 }
 
+// панел "Профил" — всеки логнат колега си задава показваното име тук, еднократно; записва
+// се в user_metadata на неговия Supabase акаунт (не само в браузъра), затова важи и на друго
+// устройство/браузър, без да пита пак "Кой сте Вие?"
+function ProfilePanel({ session, userName, onSaved, notify, p }) {
+  const [draft, setDraft] = useState(userName || "");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => { setDraft(userName || ""); }, [userName]);
+
+  const save = async (e) => {
+    e.preventDefault();
+    const name = draft.trim();
+    if (!name) { notify?.("Въведи име.", "error"); return; }
+    setBusy(true);
+    const res = await supabaseUpdateDisplayName(session, name, p.supabaseUrl, p.supabaseKey);
+    setBusy(false);
+    if (!res.ok) { notify?.(res.error, "error"); return; }
+    onSaved?.(res.displayName ?? name);
+    notify?.("Записано.", "success");
+  };
+
+  return (
+    <div className="rounded-2xl p-5 mb-4 bg-white border border-slate-200">
+      <div className="text-sm font-semibold mb-1" style={{ color: ink }}>🙋 Профил</div>
+      <p className="text-xs text-slate-500 mb-3">
+        Това име се показва в записите като автор на калкулацията. Пази се към акаунта ти
+        ({session?.email}) — важи на всяко устройство, на което влезеш, без да го пишеш пак.
+      </p>
+      <form onSubmit={save} className="flex flex-wrap items-center gap-2">
+        <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)}
+          placeholder="Твоето име" className="rounded-lg border border-slate-200 px-3 py-2 text-sm flex-1 min-w-[160px]" />
+        <button type="submit" disabled={busy}
+          className="text-sm font-semibold px-4 py-2 rounded-full text-white disabled:opacity-50" style={{ background: accent }}>
+          {busy ? "…" : "Запази"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 // начално състояние на калкулацията (стъпка 1) — извадено извън компонента, за да служи и като
 // база при сливане с възстановена чернова (schema-safe, ако по-късно добавим ново поле)
 const INITIAL_S = {
@@ -3173,14 +3258,10 @@ export default function KorektCalculator() {
   const [step, setStep] = useState(() => initialDraft?.step || 0);
   const [draftRestored] = useState(() => !!(initialDraft?.s?.service));
   const [userName, setUserNameState] = useState(() => {
-    try { return localStorage.getItem(USER_NAME_KEY) || ""; } catch (e) { return ""; }
+    const initial = loadAuthSession();
+    return initial?.displayName || loadCachedUserName(initial?.email) || "";
   });
-  const setUserName = (name) => {
-    setUserNameState(name);
-    try { localStorage.setItem(USER_NAME_KEY, name); } catch (e) { /* без значение */ }
-  };
-  const [editingName, setEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState(userName);
+  const [showProfile, setShowProfile] = useState(false);
   // ненатрапчиво съобщение долу вдясно — заменя alert(), не блокира страницата
   const [toast, setToast] = useState(null); // { msg, kind: "info"|"success"|"error" }
   const toastTimer = useRef(null);
@@ -3194,6 +3275,25 @@ export default function KorektCalculator() {
 
   // --- вътрешни панели зад истински вход (Supabase Auth), не UI парола ---
   const [authSession, setAuthSession] = useState(() => loadAuthSession());
+  // името идва от профила на акаунта (authSession.displayName); при вход/освежаване на
+  // сесията се синхронизира тук автоматично — колегата не го пише повторно на ново устройство
+  useEffect(() => {
+    if (!authSession) { setUserNameState(""); return; }
+    const fromAccount = authSession.displayName || "";
+    if (fromAccount) { setUserNameState(fromAccount); saveCachedUserName(authSession.email, fromAccount); }
+    else setUserNameState(loadCachedUserName(authSession.email));
+  }, [authSession]);
+  // след успешен запис от панела "Профил" — обновява и локалния кеш, и authSession, за да
+  // не се "връща" старото име при следващо освежаване на токена
+  const applyUserName = (name) => {
+    setUserNameState(name);
+    saveCachedUserName(authSession?.email, name);
+    if (authSession) {
+      const next = { ...authSession, displayName: name };
+      setAuthSession(next);
+      saveAuthSession(next);
+    }
+  };
   const [pendingAdminAction, setPendingAdminAction] = useState(null); // функция, изчакваща логин
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPw, setLoginPw] = useState("");
@@ -3671,22 +3771,10 @@ export default function KorektCalculator() {
             <div className="text-xs text-slate-500 -mt-0.5">Калкулатор за приблизителна цена</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {editingName ? (
-              <form onSubmit={(e) => { e.preventDefault(); setUserName(nameDraft.trim()); setEditingName(false); }}>
-                <input autoFocus value={nameDraft} onChange={(e) => setNameDraft(e.target.value)}
-                  onBlur={() => { setUserName(nameDraft.trim()); setEditingName(false); }}
-                  onKeyDown={(e) => { if (e.key === "Escape") { setNameDraft(userName); setEditingName(false); } }}
-                  placeholder="Твоето име"
-                  title="Показва се в записите като автор на калкулацията"
-                  className="text-sm font-semibold px-3 py-2 rounded-full border outline-none w-36"
-                  style={{ borderColor: ink }} />
-              </form>
-            ) : (
-              <button onClick={() => { setNameDraft(userName); setEditingName(true); }}
-                title="Показва се в записите като автор на калкулацията"
-                className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-                style={{ borderColor: userName ? ink : "#e2e6ec", color: userName ? ink : "#64748b" }}>👤 {userName || "Кой сте Вие?"}</button>
-            )}
+            <button onClick={() => setShowProfile((v) => !v)}
+              title="Профил — показва се в записите като автор на калкулацията"
+              className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+              style={{ borderColor: userName ? ink : "#e2e6ec", color: userName ? ink : "#64748b" }}>👤 {userName || "Профил"}</button>
             {adminUnlocked && (
               <button onClick={logout} title={authSession?.email || ""}
                 className="text-xs font-medium px-2 py-2 rounded-full text-slate-400 hover:text-slate-600">
@@ -3705,6 +3793,9 @@ export default function KorektCalculator() {
           <button onClick={() => guardAdmin(() => setShowUsers((v) => !v))}
             className="text-sm font-semibold px-3 py-2 rounded-full border transition"
             style={{ borderColor: showUsers ? ink : "#e2e6ec", color: showUsers ? ink : "#64748b" }}>{adminUnlocked ? "👥" : "🔒"} Потребители</button>
+          <button onClick={() => setShowProfile((v) => !v)}
+            className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+            style={{ borderColor: showProfile ? accent : "#e2e6ec", color: showProfile ? accent : "#64748b" }}>🙋 Профил</button>
         </div>
 
         {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} session={authSession} onEdit={loadRecordForEditing} />}
@@ -3713,6 +3804,7 @@ export default function KorektCalculator() {
           <SettingsPanel p={p} setP={setP} saveState={paramSave} syncedAt={paramSyncedAt} notify={notify} session={authSession} />
         </div>
         {showUsers && <UsersPanel session={authSession} notify={notify} p={p} />}
+        {showProfile && <ProfilePanel session={authSession} userName={userName} onSaved={applyUserName} notify={notify} p={p} />}
 
         <div className="flex gap-2 mb-8">
           {STEPS.map((label, i) => (

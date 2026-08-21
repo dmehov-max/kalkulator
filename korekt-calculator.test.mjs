@@ -754,7 +754,8 @@ test("стълби: пътнически асансьор освобождава
 });
 test("едрогабаритни: диван 3-ка се таксува ДОРИ при пътнически асансьор", () => {
   const r = calc({ qty: { sofa3: 1 }, pickup: addr(3, true, "passenger") });
-  eq(stairAmount(r), 3 * P.heavyAppliancePerFloor);
+  // едрогабаритните са мебели (не "спец. уред") — мебелна ставка, не по-скъпата за уреди
+  eq(stairAmount(r), 3 * P.furniturePerFloor);
 });
 test("едрогабаритни: товарен асансьор освобождава и дивана", () => {
   const r = calc({ qty: { sofa3: 1 }, pickup: addr(3, true, "cargo") });
@@ -777,6 +778,12 @@ test("стълби: без асансьор на голяма мебел про�
   const партер = calc({ qty: { sofa2: 2 }, pickup: addr(0, false), dropoff: addr(0, false) });
   const петиЕтаж = calc({ qty: { sofa2: 2 }, pickup: addr(5, false), dropoff: addr(5, false) });
   ok(петиЕтаж.total > партер.total, "5-и етаж без асансьор трябва да е по-скъпо от партер дори само с мебели");
+});
+test("стълби: НЕ оскъпяват и транспорта при градско (вече са таксувани като перо)", () => {
+  const партер = calc({ qty: { sofa2: 2 }, pickup: addr(0, false), dropoff: addr(0, false) });
+  const петиЕтаж = calc({ qty: { sofa2: 2 }, pickup: addr(5, false), dropoff: addr(5, false) });
+  const tr = (r) => r.lines.find((l) => l.label.startsWith("Транспорт")).amount;
+  eq(tr(петиЕтаж), tr(партер), "стълбите вече се плащат чрез перото \"Стълби\" — да качат и часовете на камиона би било двойно начисляване");
 });
 
 
