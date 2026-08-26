@@ -6489,9 +6489,17 @@ function KorektCalculator() {
     }, msLeft - 60000);
     return () => clearTimeout(t);
   }, [authSession, p.supabaseUrl, p.supabaseKey]);
-  const [openGroups, setOpenGroups] = useState({
-    "Хол и трапезария": true
-  });
+  // групите тръгват ОТВОРЕНИ по подразбиране (за бързо броене на оглед, без тапкане за
+  // всяка стая) — тук пазим само изрично ЗАТВОРЕНИТE (false), виж "open" по-долу
+  const [openGroups, setOpenGroups] = useState({});
+  // разглоби/сглоби/стреч/велпапе/стълби за дадена вещ — скрити по подразбиране зад "⋯",
+  // за да не пълнят екрана веднага щом добавиш бройка (пречи на бързото броене на оглед);
+  // офисът/който иска прецизност ги отваря на воля
+  const [itemDetailsOpen, setItemDetailsOpen] = useState({});
+  const toggleItemDetails = id => setItemDetailsOpen(o => ({
+    ...o,
+    [id]: !o[id]
+  }));
   const [itemSearch, setItemSearch] = useState("");
   // поставен списък с вещи (копиран от клиент) — разпознаване по каталога, не AI извикване
   const [showPasteList, setShowPasteList] = useState(false);
@@ -7072,6 +7080,10 @@ function KorektCalculator() {
       className: "text-xs text-slate-500 underline"
     }, loginMode === "forgot" ? "Обратно към вход" : "Забравена парола?")))));
   }
+
+  // докато е отворен Записи/Параметри/Потребители/Профил, калкулаторът отдолу се крие —
+  // иначе е монтиран под панела и се вижда едновременно с него (объркващо, виж чернова + цена)
+  const anyPanelOpen = showLog || showSettings || showUsers || showProfile;
   return /*#__PURE__*/React.createElement("div", {
     className: "min-h-screen w-full",
     style: {
@@ -7163,7 +7175,7 @@ function KorektCalculator() {
     onSaved: applyUserName,
     notify: notify,
     p: p
-  }), /*#__PURE__*/React.createElement("div", {
+  }), !anyPanelOpen && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "flex gap-2 mb-8"
   }, STEPS.map((label, i) => /*#__PURE__*/React.createElement("div", {
     key: label,
@@ -7656,14 +7668,17 @@ function KorektCalculator() {
       const cnt = s.qty[it.id] || 0;
       return /*#__PURE__*/React.createElement("div", {
         key: it.id,
-        className: "py-2.5 flex items-center justify-between"
+        className: "py-3 flex items-center justify-between"
       }, /*#__PURE__*/React.createElement("div", {
         className: "min-w-0 pr-3"
       }, /*#__PURE__*/React.createElement("div", {
-        className: "text-sm text-slate-700"
+        className: "text-base font-medium",
+        style: {
+          color: ink
+        }
       }, it.label), /*#__PURE__*/React.createElement("div", {
         className: "text-xs text-slate-400"
-      }, it.group, " · ", it.m3, " м³ · ", it.kg, " кг/бр · 🪜 ", floorFeeRateFor(it, p), p.currency, "/ет. на бр. (", FLOOR_FEE_LABEL[it.kind] || "мебел", ")", cnt > 0 ? ` · избрани ${cnt}` : "")), /*#__PURE__*/React.createElement(Stepper, {
+      }, it.group, " · ", it.m3, " м³ · ", it.kg, " кг/бр", cnt > 0 ? ` · избрани ${cnt}` : "")), /*#__PURE__*/React.createElement(Stepper, {
         value: cnt,
         onChange: v => setQty(it.id, v)
       }));
@@ -7707,7 +7722,7 @@ function KorektCalculator() {
   }))), /*#__PURE__*/React.createElement("div", {
     className: "space-y-2"
   }, visibleCatalog.map(grp => {
-    const open = openGroups[grp.group];
+    const open = openGroups[grp.group] !== false;
     const grpVol = grp.items.reduce((a, i) => a + (s.qty[i.id] || 0) * i.m3, 0);
     return /*#__PURE__*/React.createElement("div", {
       key: grp.group,
@@ -7736,24 +7751,39 @@ function KorektCalculator() {
       className: "px-4 pb-3 divide-y divide-slate-50"
     }, grp.items.map(it => {
       const cnt = s.qty[it.id] || 0;
+      const hasDetails = it.dis || it.asm || it.wrap || it.protect || floorsStdTot > 0 || floorsOvrTot > 0;
+      const detailsOpen = !!itemDetailsOpen[it.id];
       return /*#__PURE__*/React.createElement("div", {
         key: it.id,
-        className: "py-2.5"
+        className: "py-3"
       }, /*#__PURE__*/React.createElement("div", {
         className: "flex items-center justify-between"
       }, /*#__PURE__*/React.createElement("div", {
         className: "min-w-0 pr-3"
       }, /*#__PURE__*/React.createElement("div", {
-        className: "text-sm text-slate-700"
+        className: "text-base font-medium",
+        style: {
+          color: ink
+        }
       }, it.label), /*#__PURE__*/React.createElement("div", {
         className: "text-xs text-slate-400"
-      }, it.m3, " м³ · ", it.kg, " кг/бр · 🪜 ", floorFeeRateFor(it, p), p.currency, "/ет. на бр. (", FLOOR_FEE_LABEL[it.kind] || "мебел", ")", it.surcharge ? ` · спец. +${it.surcharge}${p.currency}` : "", cnt > 0 ? ` · = ${(cnt * it.m3).toFixed(2)} м³ / ${cnt * it.kg} кг` : "")), /*#__PURE__*/React.createElement(Stepper, {
+      }, it.m3, " м³ · ", it.kg, " кг/бр", it.surcharge ? ` · спец. +${it.surcharge}${p.currency}` : "", cnt > 0 ? ` · = ${(cnt * it.m3).toFixed(2)} м³ / ${cnt * it.kg} кг` : "")), /*#__PURE__*/React.createElement("div", {
+        className: "flex items-center gap-2"
+      }, cnt > 0 && hasDetails && /*#__PURE__*/React.createElement("button", {
+        onClick: () => toggleItemDetails(it.id),
+        title: "Разглоби/сглоби/опаковане/стълби",
+        className: "w-9 h-11 rounded-lg border text-lg shrink-0",
+        style: {
+          borderColor: detailsOpen ? accent : "#e2e6ec",
+          color: detailsOpen ? accent : "#94a3b8"
+        }
+      }, "⋯"), /*#__PURE__*/React.createElement(Stepper, {
         value: cnt,
         onChange: v => setQty(it.id, v)
-      })), cnt > 0 && (it.dis || it.asm || it.wrap || it.protect || floorsStdTot > 0 || floorsOvrTot > 0) && (() => {
+      }))), cnt > 0 && hasDetails && detailsOpen && (() => {
         const packedCnt = pickCount(s.selfPack[it.id], cnt);
         return /*#__PURE__*/React.createElement("div", {
-          className: "flex flex-wrap gap-x-4 gap-y-1.5 mt-1.5"
+          className: "flex flex-wrap gap-x-4 gap-y-1.5 mt-2"
         }, (floorsStdTot > 0 || floorsOvrTot > 0) && /*#__PURE__*/React.createElement(OptionToggle, {
           label: "🪜 без такса стълби",
           cnt: cnt,
@@ -8472,10 +8502,26 @@ function KorektCalculator() {
     style: {
       background: ink
     }
-  }, step === 2 ? "Изчисли цена →" : "Напред →"))))), toast && /*#__PURE__*/React.createElement("div", {
-    role: "status",
-    className: "fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-sm px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white flex items-start gap-3",
+  }, step === 2 ? "Изчисли цена →" : "Напред →")))))), !anyPanelOpen && step === 2 && !isManualHoursService && vol > 0 &&
+  /*#__PURE__*/
+  // лепнал долен бар с текущия сбор — вижда се докато скролваш през дълъг списък на
+  // оглед, не само в самия край на страницата (виж и "Обем · тегло · курсове" по-горе)
+  React.createElement("div", {
+    className: "fixed bottom-0 inset-x-0 z-40 px-4 py-3 flex items-center justify-between text-sm",
     style: {
+      background: ink,
+      color: "#fff",
+      paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "font-medium opacity-80"
+  }, "Общо на момента"), /*#__PURE__*/React.createElement("span", {
+    className: "font-bold"
+  }, vol.toFixed(1), " м³ · ", weight, " кг · ", trips, " курс", trips === 1 ? "" : "а")), toast && /*#__PURE__*/React.createElement("div", {
+    role: "status",
+    className: "fixed left-1/2 -translate-x-1/2 z-50 max-w-sm px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white flex items-start gap-3",
+    style: {
+      bottom: step === 2 && !isManualHoursService && vol > 0 ? "4.5rem" : "1rem",
       background: toast.kind === "error" ? "#dc2626" : toast.kind === "success" ? "#16a34a" : ink
     }
   }, /*#__PURE__*/React.createElement("span", null, toast.msg), /*#__PURE__*/React.createElement("button", {

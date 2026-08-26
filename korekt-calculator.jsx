@@ -3422,7 +3422,14 @@ export default function KorektCalculator() {
     }, msLeft - 60000);
     return () => clearTimeout(t);
   }, [authSession, p.supabaseUrl, p.supabaseKey]);
-  const [openGroups, setOpenGroups] = useState({ "Хол и трапезария": true });
+  // групите тръгват ОТВОРЕНИ по подразбиране (за бързо броене на оглед, без тапкане за
+  // всяка стая) — тук пазим само изрично ЗАТВОРЕНИТE (false), виж "open" по-долу
+  const [openGroups, setOpenGroups] = useState({});
+  // разглоби/сглоби/стреч/велпапе/стълби за дадена вещ — скрити по подразбиране зад "⋯",
+  // за да не пълнят екрана веднага щом добавиш бройка (пречи на бързото броене на оглед);
+  // офисът/който иска прецизност ги отваря на воля
+  const [itemDetailsOpen, setItemDetailsOpen] = useState({});
+  const toggleItemDetails = (id) => setItemDetailsOpen((o) => ({ ...o, [id]: !o[id] }));
   const [itemSearch, setItemSearch] = useState("");
   // поставен списък с вещи (копиран от клиент) — разпознаване по каталога, не AI извикване
   const [showPasteList, setShowPasteList] = useState(false);
@@ -3799,6 +3806,10 @@ export default function KorektCalculator() {
     );
   }
 
+  // докато е отворен Записи/Параметри/Потребители/Профил, калкулаторът отдолу се крие —
+  // иначе е монтиран под панела и се вижда едновременно с него (объркващо, виж чернова + цена)
+  const anyPanelOpen = showLog || showSettings || showUsers || showProfile;
+
   return (
     <div className="min-h-screen w-full" style={{ background: "#f6f7f9", fontFamily: "'Inter', system-ui, sans-serif" }}>
       <div className="max-w-3xl mx-auto px-4 py-8">
@@ -3849,6 +3860,8 @@ export default function KorektCalculator() {
         {isAdmin && showUsers && <UsersPanel session={authSession} notify={notify} p={p} />}
         {showProfile && <ProfilePanel session={authSession} userName={userName} onSaved={applyUserName} notify={notify} p={p} />}
 
+        {!anyPanelOpen && (
+        <>
         <div className="flex gap-2 mb-8">
           {STEPS.map((label, i) => (
             <div key={label} className="flex-1">
@@ -4211,11 +4224,11 @@ export default function KorektCalculator() {
                             {hits.map((it) => {
                               const cnt = s.qty[it.id] || 0;
                               return (
-                                <div key={it.id} className="py-2.5 flex items-center justify-between">
+                                <div key={it.id} className="py-3 flex items-center justify-between">
                                   <div className="min-w-0 pr-3">
-                                    <div className="text-sm text-slate-700">{it.label}</div>
+                                    <div className="text-base font-medium" style={{ color: ink }}>{it.label}</div>
                                     <div className="text-xs text-slate-400">
-                                      {it.group} · {it.m3} м³ · {it.kg} кг/бр · 🪜 {floorFeeRateFor(it, p)}{p.currency}/ет. на бр. ({FLOOR_FEE_LABEL[it.kind] || "мебел"}){cnt > 0 ? ` · избрани ${cnt}` : ""}
+                                      {it.group} · {it.m3} м³ · {it.kg} кг/бр{cnt > 0 ? ` · избрани ${cnt}` : ""}
                                     </div>
                                   </div>
                                   <Stepper value={cnt} onChange={(v) => setQty(it.id, v)} />
@@ -4251,7 +4264,7 @@ export default function KorektCalculator() {
 
                   <div className="space-y-2">
                     {visibleCatalog.map((grp) => {
-                      const open = openGroups[grp.group];
+                      const open = openGroups[grp.group] !== false;
                       const grpVol = grp.items.reduce((a, i) => a + (s.qty[i.id] || 0) * i.m3, 0);
                       return (
                         <div key={grp.group} className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
@@ -4267,22 +4280,32 @@ export default function KorektCalculator() {
                             <div className="px-4 pb-3 divide-y divide-slate-50">
                               {grp.items.map((it) => {
                                 const cnt = s.qty[it.id] || 0;
+                                const hasDetails = it.dis || it.asm || it.wrap || it.protect || floorsStdTot > 0 || floorsOvrTot > 0;
+                                const detailsOpen = !!itemDetailsOpen[it.id];
                                 return (
-                                  <div key={it.id} className="py-2.5">
+                                  <div key={it.id} className="py-3">
                                     <div className="flex items-center justify-between">
                                       <div className="min-w-0 pr-3">
-                                        <div className="text-sm text-slate-700">{it.label}</div>
+                                        <div className="text-base font-medium" style={{ color: ink }}>{it.label}</div>
                                         <div className="text-xs text-slate-400">
-                                          {it.m3} м³ · {it.kg} кг/бр · 🪜 {floorFeeRateFor(it, p)}{p.currency}/ет. на бр. ({FLOOR_FEE_LABEL[it.kind] || "мебел"}){it.surcharge ? ` · спец. +${it.surcharge}${p.currency}` : ""}
+                                          {it.m3} м³ · {it.kg} кг/бр{it.surcharge ? ` · спец. +${it.surcharge}${p.currency}` : ""}
                                           {cnt > 0 ? ` · = ${(cnt * it.m3).toFixed(2)} м³ / ${cnt * it.kg} кг` : ""}
                                         </div>
                                       </div>
-                                      <Stepper value={cnt} onChange={(v) => setQty(it.id, v)} />
+                                      <div className="flex items-center gap-2">
+                                        {cnt > 0 && hasDetails && (
+                                          <button onClick={() => toggleItemDetails(it.id)}
+                                            title="Разглоби/сглоби/опаковане/стълби"
+                                            className="w-9 h-11 rounded-lg border text-lg shrink-0"
+                                            style={{ borderColor: detailsOpen ? accent : "#e2e6ec", color: detailsOpen ? accent : "#94a3b8" }}>⋯</button>
+                                        )}
+                                        <Stepper value={cnt} onChange={(v) => setQty(it.id, v)} />
+                                      </div>
                                     </div>
-                                    {cnt > 0 && (it.dis || it.asm || it.wrap || it.protect || floorsStdTot > 0 || floorsOvrTot > 0) && (() => {
+                                    {cnt > 0 && hasDetails && detailsOpen && (() => {
                                       const packedCnt = pickCount(s.selfPack[it.id], cnt);
                                       return (
-                                      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-1.5">
+                                      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2">
                                         {(floorsStdTot > 0 || floorsOvrTot > 0) && (
                                           <OptionToggle label="🪜 без такса стълби" cnt={cnt} value={s.floorFeeOff[it.id]}
                                             onChange={(v) => setField("floorFeeOff", it.id, v)}
@@ -4831,10 +4854,23 @@ export default function KorektCalculator() {
 
           {/* Sidebar */}
         </div>
+        </>
+        )}
       </div>
+      {!anyPanelOpen && step === 2 && !isManualHoursService && vol > 0 && (
+        // лепнал долен бар с текущия сбор — вижда се докато скролваш през дълъг списък на
+        // оглед, не само в самия край на страницата (виж и "Обем · тегло · курсове" по-горе)
+        <div className="fixed bottom-0 inset-x-0 z-40 px-4 py-3 flex items-center justify-between text-sm"
+          style={{ background: ink, color: "#fff", paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
+          <span className="font-medium opacity-80">Общо на момента</span>
+          <span className="font-bold">
+            {vol.toFixed(1)} м³ · {weight} кг · {trips} курс{trips === 1 ? "" : "а"}
+          </span>
+        </div>
+      )}
       {toast && (
-        <div role="status" className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-sm px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white flex items-start gap-3"
-          style={{ background: toast.kind === "error" ? "#dc2626" : toast.kind === "success" ? "#16a34a" : ink }}>
+        <div role="status" className="fixed left-1/2 -translate-x-1/2 z-50 max-w-sm px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white flex items-start gap-3"
+          style={{ bottom: step === 2 && !isManualHoursService && vol > 0 ? "4.5rem" : "1rem", background: toast.kind === "error" ? "#dc2626" : toast.kind === "success" ? "#16a34a" : ink }}>
           <span>{toast.msg}</span>
           <button onClick={() => setToast(null)} aria-label="Затвори" className="opacity-70 hover:opacity-100 leading-none">✕</button>
         </div>
