@@ -2144,6 +2144,74 @@ function Stepper({ value, onChange }) {
     </div>
   );
 }
+
+// ред за една вещ — броене + разглоби/сглоби/опаковане/стълби. Използва се и в
+// каталожните групи, и в резултатите от търсенето (по-рано второто нямаше тези опции
+// изобщо — вещ, добавена през търсачката, нямаше как да се маркира за разглобяване и пр.)
+function ItemRow({ it, s, p, setQty, setField, itemDetailsOpen, toggleItemDetails, floorsStdTot, floorsOvrTot, showGroup }) {
+  const cnt = s.qty[it.id] || 0;
+  const hasDetails = it.dis || it.asm || it.wrap || it.protect || floorsStdTot > 0 || floorsOvrTot > 0;
+  const detailsOpen = itemDetailsOpen[it.id] !== false;
+  const packedCnt = pickCount(s.selfPack[it.id], cnt);
+  return (
+    <div className="py-3">
+      <div className="flex items-center justify-between">
+        <div className="min-w-0 pr-3">
+          <div className="text-base font-medium" style={{ color: ink }}>{it.label}</div>
+          <div className="text-xs text-slate-400">
+            {showGroup ? `${it.group} · ` : ""}{it.m3} м³ · {it.kg} кг/бр{it.surcharge ? ` · спец. +${it.surcharge}${p.currency}` : ""}
+            {cnt > 0 ? ` · = ${(cnt * it.m3).toFixed(2)} м³ / ${cnt * it.kg} кг` : ""}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {cnt > 0 && hasDetails && (
+            <button onClick={() => toggleItemDetails(it.id)}
+              title="Разглоби/сглоби/опаковане/стълби"
+              className="w-9 h-11 rounded-lg border text-lg shrink-0"
+              style={{ borderColor: detailsOpen ? accent : "#e2e6ec", color: detailsOpen ? accent : "#94a3b8" }}>⋯</button>
+          )}
+          <Stepper value={cnt} onChange={(v) => setQty(it.id, v)} />
+        </div>
+      </div>
+      {cnt > 0 && hasDetails && detailsOpen && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2">
+          {(floorsStdTot > 0 || floorsOvrTot > 0) && (
+            <OptionToggle label="🪜 без такса стълби" cnt={cnt} value={s.floorFeeOff[it.id]}
+              onChange={(v) => setField("floorFeeOff", it.id, v)}
+              detail={(n) => `−${n} бр. × ${floorFeeRateFor(it, p)}${p.currency}/ет.`} />
+          )}
+          {it.dis && (
+            <OptionToggle label="🔧 разглоби" cnt={cnt} value={s.dis[it.id]}
+              onChange={(v) => setField("dis", it.id, v)}
+              detail={(n) => `+${(it.dis * n).toFixed(1)} чч`} />
+          )}
+          {it.asm && (
+            <OptionToggle label="🔩 сглоби" cnt={cnt} value={s.asm[it.id]}
+              onChange={(v) => setField("asm", it.id, v)}
+              detail={(n) => `+${(it.asm * n).toFixed(1)} чч`} />
+          )}
+          {(it.wrapReq || it.protectReq) && (
+            <OptionToggle label="✅ опаковано от клиента" cnt={cnt} value={s.selfPack[it.id]}
+              onChange={(v) => setField("selfPack", it.id, v)}
+              detail={(n) => `−${(((it.wrapReq ? it.wrap : 0) + (it.protectReq ? it.protect : 0)) * n).toFixed(1)} м материал`} />
+          )}
+          {it.protect && (!it.protectReq || packedCnt < cnt) && (
+            <OptionToggle label="🛡 велпапе" cnt={cnt} value={it.protectReq ? true : s.protect[it.id]}
+              locked={it.protectReq}
+              onChange={(v) => setField("protect", it.id, v)}
+              detail={(n) => `${it.protect * (it.protectReq ? Math.max(0, cnt - packedCnt) : n)} м${it.protectReq ? " (задълж.)" : ""}`} />
+          )}
+          {it.wrap && (!it.wrapReq || packedCnt < cnt) && (
+            <OptionToggle label="📦 стреч" cnt={cnt} value={it.wrapReq ? true : s.wrap[it.id]}
+              locked={it.wrapReq}
+              onChange={(v) => setField("wrap", it.id, v)}
+              detail={(n) => `${it.wrap * (it.wrapReq ? Math.max(0, cnt - packedCnt) : n)} м${it.wrapReq ? " (задълж.)" : ""}`} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 function Num({ label, value, onChange, step = 1, suffix }) {
   // държим суров текст, за да са валидни междинни състояния: "", "0.", "0,7"
   const [raw, setRaw] = useState(String(value ?? ""));
@@ -4237,21 +4305,12 @@ export default function KorektCalculator() {
                           });
                         if (!hits.length) return <div className="px-4 py-3 text-sm text-slate-400">Няма намерена вещ.</div>;
                         return (
-                          <div className="px-4 py-1 divide-y divide-slate-50">
-                            {hits.map((it) => {
-                              const cnt = s.qty[it.id] || 0;
-                              return (
-                                <div key={it.id} className="py-3 flex items-center justify-between">
-                                  <div className="min-w-0 pr-3">
-                                    <div className="text-base font-medium" style={{ color: ink }}>{it.label}</div>
-                                    <div className="text-xs text-slate-400">
-                                      {it.group} · {it.m3} м³ · {it.kg} кг/бр{cnt > 0 ? ` · избрани ${cnt}` : ""}
-                                    </div>
-                                  </div>
-                                  <Stepper value={cnt} onChange={(v) => setQty(it.id, v)} />
-                                </div>
-                              );
-                            })}
+                          <div className="px-4 divide-y divide-slate-50">
+                            {hits.map((it) => (
+                              <ItemRow key={it.id} it={it} s={s} p={p} setQty={setQty} setField={setField}
+                                itemDetailsOpen={itemDetailsOpen} toggleItemDetails={toggleItemDetails}
+                                floorsStdTot={floorsStdTot} floorsOvrTot={floorsOvrTot} showGroup />
+                            ))}
                           </div>
                         );
                       })()}
@@ -4295,72 +4354,11 @@ export default function KorektCalculator() {
                           </button>
                           {open && (
                             <div className="px-4 pb-3 divide-y divide-slate-50">
-                              {grp.items.map((it) => {
-                                const cnt = s.qty[it.id] || 0;
-                                const hasDetails = it.dis || it.asm || it.wrap || it.protect || floorsStdTot > 0 || floorsOvrTot > 0;
-                                const detailsOpen = itemDetailsOpen[it.id] !== false;
-                                return (
-                                  <div key={it.id} className="py-3">
-                                    <div className="flex items-center justify-between">
-                                      <div className="min-w-0 pr-3">
-                                        <div className="text-base font-medium" style={{ color: ink }}>{it.label}</div>
-                                        <div className="text-xs text-slate-400">
-                                          {it.m3} м³ · {it.kg} кг/бр{it.surcharge ? ` · спец. +${it.surcharge}${p.currency}` : ""}
-                                          {cnt > 0 ? ` · = ${(cnt * it.m3).toFixed(2)} м³ / ${cnt * it.kg} кг` : ""}
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        {cnt > 0 && hasDetails && (
-                                          <button onClick={() => toggleItemDetails(it.id)}
-                                            title="Разглоби/сглоби/опаковане/стълби"
-                                            className="w-9 h-11 rounded-lg border text-lg shrink-0"
-                                            style={{ borderColor: detailsOpen ? accent : "#e2e6ec", color: detailsOpen ? accent : "#94a3b8" }}>⋯</button>
-                                        )}
-                                        <Stepper value={cnt} onChange={(v) => setQty(it.id, v)} />
-                                      </div>
-                                    </div>
-                                    {cnt > 0 && hasDetails && detailsOpen && (() => {
-                                      const packedCnt = pickCount(s.selfPack[it.id], cnt);
-                                      return (
-                                      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-2">
-                                        {(floorsStdTot > 0 || floorsOvrTot > 0) && (
-                                          <OptionToggle label="🪜 без такса стълби" cnt={cnt} value={s.floorFeeOff[it.id]}
-                                            onChange={(v) => setField("floorFeeOff", it.id, v)}
-                                            detail={(n) => `−${n} бр. × ${floorFeeRateFor(it, p)}${p.currency}/ет.`} />
-                                        )}
-                                        {it.dis && (
-                                          <OptionToggle label="🔧 разглоби" cnt={cnt} value={s.dis[it.id]}
-                                            onChange={(v) => setField("dis", it.id, v)}
-                                            detail={(n) => `+${(it.dis * n).toFixed(1)} чч`} />
-                                        )}
-                                        {it.asm && (
-                                          <OptionToggle label="🔩 сглоби" cnt={cnt} value={s.asm[it.id]}
-                                            onChange={(v) => setField("asm", it.id, v)}
-                                            detail={(n) => `+${(it.asm * n).toFixed(1)} чч`} />
-                                        )}
-                                        {(it.wrapReq || it.protectReq) && (
-                                          <OptionToggle label="✅ опаковано от клиента" cnt={cnt} value={s.selfPack[it.id]}
-                                            onChange={(v) => setField("selfPack", it.id, v)}
-                                            detail={(n) => `−${(((it.wrapReq ? it.wrap : 0) + (it.protectReq ? it.protect : 0)) * n).toFixed(1)} м материал`} />
-                                        )}
-                                        {it.protect && (!it.protectReq || packedCnt < cnt) && (
-                                          <OptionToggle label="🛡 велпапе" cnt={cnt} value={it.protectReq ? true : s.protect[it.id]}
-                                            locked={it.protectReq}
-                                            onChange={(v) => setField("protect", it.id, v)}
-                                            detail={(n) => `${it.protect * (it.protectReq ? Math.max(0, cnt - packedCnt) : n)} м${it.protectReq ? " (задълж.)" : ""}`} />
-                                        )}
-                                        {it.wrap && (!it.wrapReq || packedCnt < cnt) && (
-                                          <OptionToggle label="📦 стреч" cnt={cnt} value={it.wrapReq ? true : s.wrap[it.id]}
-                                            locked={it.wrapReq}
-                                            onChange={(v) => setField("wrap", it.id, v)}
-                                            detail={(n) => `${it.wrap * (it.wrapReq ? Math.max(0, cnt - packedCnt) : n)} м${it.wrapReq ? " (задълж.)" : ""}`} />
-                                        )}
-                                      </div>
-                                      );
-                                    })()}
-                                  </div>
-                                );
-                              })}
+                              {grp.items.map((it) => (
+                                <ItemRow key={it.id} it={it} s={s} p={p} setQty={setQty} setField={setField}
+                                  itemDetailsOpen={itemDetailsOpen} toggleItemDetails={toggleItemDetails}
+                                  floorsStdTot={floorsStdTot} floorsOvrTot={floorsOvrTot} />
+                              ))}
                               <AddCatalogItem group={grp.group} p={p}
                                 onAdded={(id) => { setQty(id, 1); forceRedraw((x) => x + 1); }} />
                             </div>
