@@ -311,26 +311,27 @@ const disHoursFor = (qty, dis, asm, factor) => {
 };
 
 // метри твърда защита (велпапе / автопласт) — за чупливи повърхности
-// selfPack: бройки, за които клиентът вече е опаковал вещта сам — приспадат се
-// дори от задължителните (protectReq), не само от избираемите
+// protectReq вещите тръгват отметнати по подразбиране (когато отметката липсва изобщо —
+// ?? хваща само undefined, не false), но вече не са заключени: колегата може да ги разотметне.
+// selfPack: бройки, за които клиентът вече е опаковал вещта сам — приспадат се във всички случаи
 const protectMetersFor = (qty, protect, selfPack) =>
   Object.entries(qty).reduce((s, [id, cnt]) => {
     const it = ITEM_INDEX[id];
     if (!it?.protect || !cnt) return s;
+    const flag = protect?.[id] ?? (it.protectReq ? true : false);
     const packed = pickCount(selfPack?.[id], cnt);
-    const n = it.protectReq ? Math.max(0, cnt - packed) : pickCount(protect?.[id], cnt);
+    const n = Math.max(0, pickCount(flag, cnt) - packed);
     return s + it.protect * n;
   }, 0);
 
-// метри стреч фолио: задължителните вещи винаги, останалите — по избор
+// метри стреч фолио — вижте бележката при protectMetersFor, важи същото и за wrapReq
 const wrapMetersFor = (qty, wrap, selfPack) =>
   Object.entries(qty).reduce((s, [id, cnt]) => {
     const it = ITEM_INDEX[id];
     if (!it?.wrap || !cnt) return s;
-    // задължителните се опаковат всички, освен приспаднатите като "опаковано от клиента";
-    // за останалите важи избраният брой
+    const flag = wrap?.[id] ?? (it.wrapReq ? true : false);
     const packed = pickCount(selfPack?.[id], cnt);
-    const n = it.wrapReq ? Math.max(0, cnt - packed) : pickCount(wrap?.[id], cnt);
+    const n = Math.max(0, pickCount(flag, cnt) - packed);
     return s + it.wrap * n;
   }, 0);
 const totalWeight = (qty) =>
@@ -2081,18 +2082,9 @@ function Pill({ active, children, onClick }) {
 }
 /* Отметка за услуга по вещ. При няколко бройки позволява да се избере
    на колко от тях важи (напр. 4 бюра, но само 1 се разглобява). */
-function OptionToggle({ label, cnt, value, onChange, detail, locked }) {
+function OptionToggle({ label, cnt, value, onChange, detail }) {
   const active = value === true ? cnt : (Number(value) > 0 ? Math.min(Number(value), cnt) : 0);
   const on = active > 0;
-
-  if (locked) {
-    return (
-      <span className="flex items-center gap-1.5">
-        <input type="checkbox" checked readOnly disabled className="w-4 h-4 accent-orange-500" />
-        <span className="text-xs" style={{ color: accent }}>{label} {detail(cnt)}</span>
-      </span>
-    );
-  }
 
   return (
     <span className="flex items-center gap-1.5">
@@ -2152,7 +2144,6 @@ function ItemRow({ it, s, p, setQty, setField, itemDetailsOpen, toggleItemDetail
   const cnt = s.qty[it.id] || 0;
   const hasDetails = it.dis || it.asm || it.wrap || it.protect || floorsStdTot > 0 || floorsOvrTot > 0;
   const detailsOpen = itemDetailsOpen[it.id] !== false;
-  const packedCnt = pickCount(s.selfPack[it.id], cnt);
   return (
     <div className="py-3">
       <div className="flex items-center justify-between">
@@ -2190,22 +2181,20 @@ function ItemRow({ it, s, p, setQty, setField, itemDetailsOpen, toggleItemDetail
               onChange={(v) => setField("asm", it.id, v)}
               detail={(n) => `+${(it.asm * n).toFixed(1)} чч`} />
           )}
-          {(it.wrapReq || it.protectReq) && (
+          {(it.wrap || it.protect) && (
             <OptionToggle label="✅ опаковано от клиента" cnt={cnt} value={s.selfPack[it.id]}
               onChange={(v) => setField("selfPack", it.id, v)}
-              detail={(n) => `−${(((it.wrapReq ? it.wrap : 0) + (it.protectReq ? it.protect : 0)) * n).toFixed(1)} м материал`} />
+              detail={(n) => `−${((it.wrap || 0) + (it.protect || 0)) * n} м материал`} />
           )}
-          {it.protect && (!it.protectReq || packedCnt < cnt) && (
-            <OptionToggle label="🛡 велпапе" cnt={cnt} value={it.protectReq ? true : s.protect[it.id]}
-              locked={it.protectReq}
+          {it.protect && (
+            <OptionToggle label="🛡 велпапе" cnt={cnt} value={s.protect[it.id] ?? (it.protectReq ? true : false)}
               onChange={(v) => setField("protect", it.id, v)}
-              detail={(n) => `${it.protect * (it.protectReq ? Math.max(0, cnt - packedCnt) : n)} м${it.protectReq ? " (задълж.)" : ""}`} />
+              detail={(n) => `${it.protect * n} м${it.protectReq ? " (по подразбиране)" : ""}`} />
           )}
-          {it.wrap && (!it.wrapReq || packedCnt < cnt) && (
-            <OptionToggle label="📦 стреч" cnt={cnt} value={it.wrapReq ? true : s.wrap[it.id]}
-              locked={it.wrapReq}
+          {it.wrap && (
+            <OptionToggle label="📦 стреч" cnt={cnt} value={s.wrap[it.id] ?? (it.wrapReq ? true : false)}
               onChange={(v) => setField("wrap", it.id, v)}
-              detail={(n) => `${it.wrap * (it.wrapReq ? Math.max(0, cnt - packedCnt) : n)} м${it.wrapReq ? " (задълж.)" : ""}`} />
+              detail={(n) => `${it.wrap * n} м${it.wrapReq ? " (по подразбиране)" : ""}`} />
           )}
         </div>
       )}
@@ -4741,10 +4730,12 @@ export default function KorektCalculator() {
                       if (s.dis[id] && it.dis) tags.push("разглобяване");
                       if (s.asm[id] && it.asm) tags.push("сглобяване");
                       if (packedCnt > 0) tags.push(packedCnt >= cnt ? "опаковано от клиента" : `опаковано от клиента (${packedCnt} от ${cnt})`);
-                      if (it.wrapReq) { if (packedCnt < cnt) tags.push("стреч (задълж.)"); }
-                      else if (s.wrap[id] && it.wrap) tags.push("стреч");
-                      if (it.protectReq) { if (packedCnt < cnt) tags.push("велпапе (задълж.)"); }
-                      else if (s.protect[id] && it.protect) tags.push("велпапе");
+                      // "по подразбиране" вещите тръгват отметнати без изрична отметка (виж wrapMetersFor) —
+                      // тагът пита същото условие, за да не показва "стреч", ако колегата изрично го е разотметнал
+                      const wrapOn = it.wrap && pickCount(s.wrap[id] ?? (it.wrapReq ? true : false), cnt) > packedCnt;
+                      const protectOn = it.protect && pickCount(s.protect[id] ?? (it.protectReq ? true : false), cnt) > packedCnt;
+                      if (wrapOn) tags.push(it.wrapReq ? "стреч (по подразбиране)" : "стреч");
+                      if (protectOn) tags.push(it.protectReq ? "велпапе (по подразбиране)" : "велпапе");
                       return (
                         <div key={id} className="flex justify-between gap-3 text-sm">
                           <span className="text-slate-600">
