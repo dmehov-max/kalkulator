@@ -2056,12 +2056,13 @@ async function loadCalcs(p, session) {
 }
 
 function toCSV(rows) {
-  const head = ["№", "Заявка №", "Дата", "Услуга", "Град", "От", "До", "Км", "Обем м³", "Курсове", "Бригада", "Часове", "Цена €", "Марж €", "Марж %", "Име", "Телефон", "Имейл", "Статус"];
+  const head = ["№", "Заявка №", "Дата", "Услуга", "Град", "От", "До", "Км", "Обем м³", "Курсове", "Бригада", "Часове", "Цена €", "Марж €", "Марж %", "Име", "Телефон", "Имейл", "Статус", "Реални часове", "Реална цена €", "Бележка реални"];
   const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const body = rows.map((r) => [
     r.calcNumber ?? "", r.requestNumber || "", new Date(r.createdAt).toLocaleString("bg-BG"), r.service, r.city || r.destination || "",
     r.from || "", r.to || "", r.km, r.volumeM3, r.trips, r.crew, r.hours, r.total, r.margin ?? "", r.marginPercent ?? "",
     r.contact?.name || "", r.contact?.phone || "", r.contact?.email || "", r.status,
+    r.actual?.hours ?? "", r.actual?.price ?? "", r.actual?.note || "",
   ].map(esc).join(","));
   return [head.map(esc).join(","), ...body].join("\n");
 }
@@ -2747,8 +2748,75 @@ function recordRouteLabel(r) {
   return `Межд.: ${r.destination || ""}`;
 }
 
+// улавя реалните числа след завършена поръчка — за калибриране на калкулатора.
+// Δ спрямо прогнозата излиза веднага, докато пишеш (не само след запис), за да личи
+// разминаването на момента. Записва се в record.actual — без да пипа status/данните.
+function ActualResultForm({ r, p, session, notify }) {
+  const [hours, setHours] = useState(r.actual?.hours ?? "");
+  const [crew, setCrew] = useState(r.actual?.crew ?? "");
+  const [price, setPrice] = useState(r.actual?.price ?? "");
+  const [note, setNote] = useState(r.actual?.note ?? "");
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState(r.actual?.at || null);
+
+  const save = async () => {
+    setSaving(true);
+    const actual = {
+      hours: hours === "" ? null : Number(hours),
+      crew: crew === "" ? null : Number(crew),
+      price: price === "" ? null : Number(price),
+      note: note.trim() || null,
+      at: new Date().toISOString(),
+      by: session?.email || null,
+    };
+    const { key, ...record } = r;
+    const res = await pushCalcToSupabase({ ...record, actual }, p?.supabaseUrl, p?.supabaseKey, true, false, session);
+    setSaving(false);
+    if (res?.ok) { setSavedAt(actual.at); notify("Реалните стойности са запазени.", "success"); }
+    else notify("Неуспешен запис — базата не отговори.", "error");
+  };
+
+  const hoursNum = hours === "" ? null : Number(hours);
+  const priceNum = price === "" ? null : Number(price);
+  const dHours = hoursNum != null && !Number.isNaN(hoursNum) ? +(hoursNum - (r.hours || 0)).toFixed(1) : null;
+  const dPrice = priceNum != null && !Number.isNaN(priceNum) ? Math.round(priceNum - (r.total || 0)) : null;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 mt-3">
+      <div className="text-sm font-semibold mb-1" style={{ color: ink }}>Реални стойности (след изпълнение)</div>
+      <p className="text-xs text-slate-400 mb-3">
+        За сверка с прогнозата — редовно разминаване в една посока е сигнал да коригирате ставка в ⚙ Параметри.
+      </p>
+      <div className="grid grid-cols-3 gap-2 mb-2">
+        <Num label="Реални часове" value={hours} onChange={setHours} suffix="ч" />
+        <Num label="Реална бригада" value={crew} onChange={setCrew} suffix="души" />
+        <Num label={`Реална цена`} value={price} onChange={setPrice} suffix={p?.currency} />
+      </div>
+      <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Бележка (по избор) — напр. защо се е разминало"
+        className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mb-3" />
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <button onClick={save} disabled={saving}
+          className="text-xs font-semibold px-4 py-2 rounded-full text-white disabled:opacity-60" style={{ background: accent }}>
+          {saving ? "Записва…" : "Запази"}
+        </button>
+        <span className="text-xs">
+          {(dHours != null || dPrice != null) && (
+            <span style={{ color: ink }}>
+              Δ спрямо прогнозата ({(r.hours || 0).toFixed(1)} ч / {r.total} {p?.currency}):{" "}
+              {dHours != null && <b>{dHours > 0 ? "+" : ""}{dHours} ч</b>}
+              {dHours != null && dPrice != null ? " · " : ""}
+              {dPrice != null && <b>{dPrice > 0 ? "+" : ""}{dPrice} {p?.currency}</b>}
+            </span>
+          )}
+          {savedAt && <span className="text-slate-400"> {(dHours != null || dPrice != null) ? "· " : ""}запазено {new Date(savedAt).toLocaleString("bg-BG")}</span>}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // показва запазена калкулация в същия вид, в който е показана при генерирането ѝ
-function RecordDetail({ record: r, p, onClose, onEdit }) {
+function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
   const serviceLabel = SERVICE_LABELS[r.service] || r.service;
   const lift = (a) => (!a ? "" : a.elevator ? (a.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор") : "без асансьор");
   const disSet = new Set(r.disassembly || []);
@@ -2879,6 +2947,8 @@ function RecordDetail({ record: r, p, onClose, onEdit }) {
           )}
         </div>
 
+        <ActualResultForm r={r} p={p} session={session} notify={notify} />
+
         <div className="rounded-2xl border border-slate-200 bg-white p-5 mt-3 mb-8">
           <div className="text-sm font-semibold mb-3" style={{ color: ink }}>Как се формира</div>
           <div className="space-y-1.5">
@@ -2922,7 +2992,7 @@ function RecordDetail({ record: r, p, onClose, onEdit }) {
   );
 }
 
-function LogPanel({ onClose, p, session, onEdit }) {
+function LogPanel({ onClose, p, session, onEdit, notify }) {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState(false);
   const [confirming, setConfirming] = useState(null);
@@ -3100,6 +3170,9 @@ function LogPanel({ onClose, p, session, onEdit }) {
                         background: r.status === "потвърдена" ? "#dcfce7" : r.status === "заявка" ? "#fff8ef" : "#f1f5f9",
                         color: r.status === "потвърдена" ? "#166534" : r.status === "заявка" ? accent : "#64748b",
                       }}>{r.status || "калкулация"}</span>
+                      {r.actual && (
+                        <span className="ml-1 text-[11px]" style={{ color: accent }} title="Има въведени реални стойности">✓ реални</span>
+                      )}
                       {confirmError === r.key && (
                         <span className="ml-1 text-[11px] font-medium" style={{ color: "#dc2626" }} title="Базата не отговори — опитайте пак">
                           ⚠ не се запази
@@ -3161,7 +3234,7 @@ function LogPanel({ onClose, p, session, onEdit }) {
           ? "Записите се пазят локално за това устройство и този браузър."
           : "Тази среда не пази записи трайно."}
       </p>
-      {selected && <RecordDetail record={selected} p={p} onClose={() => setSelected(null)} onEdit={onEdit} />}
+      {selected && <RecordDetail record={selected} p={p} session={session} notify={notify} onClose={() => setSelected(null)} onEdit={onEdit} />}
     </div>
   );
 }
@@ -3923,7 +3996,7 @@ export default function KorektCalculator() {
             style={{ borderColor: showProfile ? accent : "#e2e6ec", color: showProfile ? accent : "#64748b" }}>🙋 Профил</button>
         </div>
 
-        {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} session={authSession} onEdit={loadRecordForEditing} />}
+        {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} session={authSession} onEdit={loadRecordForEditing} notify={notify} />}
         {/* остава монтиран, само скрит — за да не се затварят отворените секции при всяко отваряне на панела */}
         {isAdmin && (
           <div style={{ display: showSettings ? "block" : "none" }}>
