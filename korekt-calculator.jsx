@@ -3567,6 +3567,20 @@ export default function KorektCalculator() {
     notify(`Калкулация №${rec.calcNumber ?? ""} е заредена за редакция — промените ще обновят този запис.`, "info");
   };
 
+  // започва чисто нова калкулация — иначе НЯМАШЕ начин да се отдели от текущата чернова:
+  // recordKey се пазеше до 24 ч. (draft) и всеки следващ autosave я презаписваше (PATCH) на
+  // същия ред/номер вместо да създаде нов, затова всичко излизаше с един и същ №
+  const startNewCalc = () => {
+    setS(structuredClone(INITIAL_S));
+    setStep(0);
+    recordKey.current = null;
+    recordNumber.current = null;
+    pushedRef.current = false;
+    setCalcNumberState(null);
+    clearDraftLS(authSession?.email);
+    setShowLog(false);
+  };
+
   // --- чернова на текущата калкулация (за да наистина не се губи при презареждане) ---
   // пазим и ключа/номера на записа, за да не се трупат дубликати (№2, №3...) при презареждане
   useEffect(() => {
@@ -3832,6 +3846,9 @@ export default function KorektCalculator() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 mb-6">
+          <button onClick={startNewCalc} title="Започни отделна калкулация с нов номер, без да пипаш текущата"
+            className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+            style={{ borderColor: "#e2e6ec", color: "#64748b" }}>➕ Нова калкулация</button>
           <button onClick={() => guardAdmin(() => setShowLog((v) => !v))}
             className="text-sm font-semibold px-3 py-2 rounded-full border transition"
             style={{ borderColor: showLog ? ink : "#e2e6ec", color: showLog ? ink : "#64748b" }}>{adminUnlocked ? "📋" : "🔒"} Записи</button>
