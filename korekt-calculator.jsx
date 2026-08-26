@@ -2102,7 +2102,7 @@ function OptionToggle({ label, cnt, value, onChange, detail }) {
           <span className="text-xs text-slate-400">от {cnt}</span>
         </span>
       )}
-      {on && <span className="text-xs" style={{ color: accent }}>{detail(active)}</span>}
+      {on && detail && <span className="text-xs" style={{ color: accent }}>{detail(active)}</span>}
     </span>
   );
 }
@@ -2183,8 +2183,7 @@ function ItemRow({ it, s, p, setQty, setField, itemDetailsOpen, toggleItemDetail
           )}
           {(it.wrap || it.protect) && (
             <OptionToggle label="✅ опаковано от клиента" cnt={cnt} value={s.selfPack[it.id]}
-              onChange={(v) => setField("selfPack", it.id, v)}
-              detail={(n) => `−${((it.wrap || 0) + (it.protect || 0)) * n} м материал`} />
+              onChange={(v) => setField("selfPack", it.id, v)} />
           )}
           {it.protect && (
             <OptionToggle label="🛡 велпапе" cnt={cnt} value={s.protect[it.id] ?? (it.protectReq ? true : false)}

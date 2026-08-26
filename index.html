@@ -4176,7 +4176,7 @@ function OptionToggle({
     className: "w-6 h-6 rounded border border-slate-200 text-slate-500 text-xs leading-none"
   }, "+"), /*#__PURE__*/React.createElement("span", {
     className: "text-xs text-slate-400"
-  }, "от ", cnt)), on && /*#__PURE__*/React.createElement("span", {
+  }, "от ", cnt)), on && detail && /*#__PURE__*/React.createElement("span", {
     className: "text-xs",
     style: {
       color: accent
@@ -4295,8 +4295,7 @@ function ItemRow({
     label: "✅ опаковано от клиента",
     cnt: cnt,
     value: s.selfPack[it.id],
-    onChange: v => setField("selfPack", it.id, v),
-    detail: n => `−${((it.wrap || 0) + (it.protect || 0)) * n} м материал`
+    onChange: v => setField("selfPack", it.id, v)
   }), it.protect && /*#__PURE__*/React.createElement(OptionToggle, {
     label: "🛡 велпапе",
     cnt: cnt,
