@@ -3425,9 +3425,9 @@ export default function KorektCalculator() {
   // групите тръгват ОТВОРЕНИ по подразбиране (за бързо броене на оглед, без тапкане за
   // всяка стая) — тук пазим само изрично ЗАТВОРЕНИТE (false), виж "open" по-долу
   const [openGroups, setOpenGroups] = useState({});
-  // разглоби/сглоби/стреч/велпапе/стълби за дадена вещ — скрити по подразбиране зад "⋯",
-  // за да не пълнят екрана веднага щом добавиш бройка (пречи на бързото броене на оглед);
-  // офисът/който иска прецизност ги отваря на воля
+  // разглоби/сглоби/стреч/велпапе/стълби за дадена вещ — ОТВОРЕНИ по подразбиране (всички
+  // колеги виждат едни и същи опции); "⋯" ги свива за който иска по-чист екран на оглед —
+  // тук пазим само изрично СВИТИТЕ (false), виж "detailsOpen" по-долу
   const [itemDetailsOpen, setItemDetailsOpen] = useState({});
   const toggleItemDetails = (id) => setItemDetailsOpen((o) => ({ ...o, [id]: !o[id] }));
   const [itemSearch, setItemSearch] = useState("");
@@ -4298,7 +4298,7 @@ export default function KorektCalculator() {
                               {grp.items.map((it) => {
                                 const cnt = s.qty[it.id] || 0;
                                 const hasDetails = it.dis || it.asm || it.wrap || it.protect || floorsStdTot > 0 || floorsOvrTot > 0;
-                                const detailsOpen = !!itemDetailsOpen[it.id];
+                                const detailsOpen = itemDetailsOpen[it.id] !== false;
                                 return (
                                   <div key={it.id} className="py-3">
                                     <div className="flex items-center justify-between">
