@@ -139,38 +139,38 @@ const CATALOG = [
   { group: "Хол и трапезария", for: "home", items: [
     { id: "sofa2", label: "Диван 2-местен", m3: 1.4, kg: 45, wrap: 10, wrapReq: true, protect: 8 },
     { id: "sofa3", label: "Диван 3-местен", m3: 2.0, kg: 60, dis: 0.3, asm: 0.5, wrap: 12, wrapReq: true, kind: "oversized", protect: 10 },
-    { id: "sofaL", label: "Ъглов диван", m3: 3.0, kg: 90, dis: 0.5, asm: 0.9, wrap: 16, wrapReq: true, kind: "oversized", protect: 14 },
-    { id: "armchair", label: "Фотьойл", m3: 0.8, kg: 25, wrap: 6, protect: 5 },
+    { id: "sofaL", label: "Ъглов диван", pieces: 2, m3: 3.0, kg: 90, dis: 0.5, asm: 0.9, wrap: 16, wrapReq: true, kind: "oversized", protect: 14 },
+    { id: "armchair", label: "Фотьойл", m3: 0.8, kg: 25, wrap: 6, wrapReq: true, protect: 5 },
     { id: "tvstand", label: "ТВ", m3: 0.15, kg: 8, dis: 0.15, asm: 0.3, wrap: 4, protect: 4 },
-    { id: "tvcabinet", label: "ТВ шкаф", m3: 0.6, kg: 35, dis: 0.3, asm: 0.8, wrap: 7, protect: 4 },
+    { id: "tvcabinet", label: "ТВ шкаф", m3: 0.6, kg: 35, dis: 0.3, asm: 0.8, wrap: 7, wrapReq: true, protect: 4 },
     { id: "vitrine", label: "Витрина (със стъкла)", m3: 1.0, kg: 50, dis: 0.4, asm: 1.2, wrap: 10, wrapReq: true, protect: 6, protectReq: true },
-    { id: "table", label: "Маса за хранене", m3: 0.7, kg: 30, dis: 0.2, asm: 0.5, wrap: 8, protect: 5 },
+    { id: "table", label: "Маса за хранене", m3: 0.7, kg: 30, dis: 0.2, asm: 0.5, wrap: 8, wrapReq: true, protect: 5 },
     { id: "tableGlass", label: "Маса със стъклен плот", m3: 0.8, kg: 45, dis: 0.3, asm: 0.7, wrap: 10, wrapReq: true, protect: 8, protectReq: true },
-    { id: "tableSmall", label: "Малка масичка", m3: 0.25, kg: 12, dis: 0.1, asm: 0.25, wrap: 4, protect: 3, kind: "small" },
+    { id: "tableSmall", label: "Малка масичка", m3: 0.25, kg: 12, dis: 0.1, asm: 0.25, wrap: 4, wrapReq: true, protect: 3, kind: "small" },
     { id: "tableSmallGlass", label: "Малка масичка със стъкло", m3: 0.3, kg: 18, dis: 0.15, asm: 0.35, wrap: 6, wrapReq: true, protect: 5, protectReq: true, kind: "small" },
-    { id: "chair", label: "Стол", m3: 0.15, kg: 5, wrap: 3, protect: 2, kind: "small" },
-    { id: "shelf", label: "Библиотека / етажерка", m3: 0.8, kg: 35, dis: 0.3, asm: 0.9, wrap: 8, protect: 6 },
+    { id: "chair", label: "Стол", m3: 0.15, kg: 5, wrap: 3, wrapReq: true, protect: 2, kind: "small" },
+    { id: "shelf", label: "Библиотека / етажерка", m3: 0.8, kg: 35, dis: 0.3, asm: 0.9, wrap: 8, wrapReq: true, protect: 6 },
     { id: "rug", label: "Килим", m3: 0.2, kg: 12, wrap: 4, protect: 3, kind: "small" },
     { id: "lamp", label: "Лампа (подова/трапезна)", m3: 0.08, kg: 4, wrap: 4, protect: 3, kind: "small" },
   ]},
   { group: "Спалня", for: "home", items: [
-    { id: "bedSingle", label: "Единично легло", m3: 1.0, kg: 40, dis: 0.4, asm: 0.9, wrap: 8, protect: 6 },
+    { id: "bedSingle", label: "Единично легло", m3: 1.0, kg: 40, dis: 0.4, asm: 0.9, wrap: 8, wrapReq: true, protect: 6 },
     { id: "bedDouble", label: "Двойно легло (рамка + матрак)", m3: 2.0, kg: 70, dis: 0.5, asm: 1.2, wrap: 12, wrapReq: true, protect: 10 },
     { id: "mattress", label: "Матрак", m3: 0.6, kg: 25, wrap: 12, wrapReq: true, protect: 6 },
-    { id: "wardrobe2", label: "Гардероб 2-крилен", m3: 1.2, kg: 70, dis: 0.7, asm: 2.0, wrap: 8, protect: 8 },
-    { id: "wardrobe3", label: "Гардероб 3-крилен", m3: 1.8, kg: 110, dis: 1.5, asm: 3.0, wrap: 10, protect: 10 },
-    { id: "dresser", label: "Скрин / шкаф", m3: 0.6, kg: 40, dis: 0.3, asm: 0.9, wrap: 8, protect: 5 },
-    { id: "nightstand", label: "Нощно шкафче", m3: 0.2, kg: 12, wrap: 4, protect: 3, kind: "small" },
-    { id: "desk", label: "Бюро", m3: 0.6, kg: 30, dis: 0.3, asm: 0.9, wrap: 8, protect: 5 },
+    { id: "wardrobe2", label: "Гардероб 2-крилен", m3: 1.2, kg: 70, dis: 0.7, asm: 2.0, wrap: 8, wrapReq: true, protect: 8 },
+    { id: "wardrobe3", label: "Гардероб 3-крилен", m3: 1.8, kg: 110, dis: 1.5, asm: 3.0, wrap: 10, wrapReq: true, protect: 10 },
+    { id: "dresser", label: "Скрин / шкаф", m3: 0.6, kg: 40, dis: 0.3, asm: 0.9, wrap: 8, wrapReq: true, protect: 5 },
+    { id: "nightstand", label: "Нощно шкафче", m3: 0.2, kg: 12, wrap: 4, wrapReq: true, protect: 3, kind: "small" },
+    { id: "desk", label: "Бюро", m3: 0.6, kg: 30, dis: 0.3, asm: 0.9, wrap: 8, wrapReq: true, protect: 5 },
   ]},
   { group: "Офис", for: "office", items: [
-    { id: "officeDesk", label: "Офис бюро", m3: 0.5, kg: 25, dis: 0.2, asm: 0.5, wrap: 6, protect: 4 },
-    { id: "officeChair", label: "Офис стол (на колела)", m3: 0.3, kg: 12, wrap: 3, protect: 2, kind: "small" },
-    { id: "filingCabinet", label: "Шкаф с папки (картотека)", m3: 0.6, kg: 45, wrap: 6, protect: 4 },
-    { id: "officeCloset", label: "Офис шкаф / рафтове", m3: 0.8, kg: 50, dis: 0.3, asm: 0.8, wrap: 8, protect: 5 },
-    { id: "conferenceTable", label: "Конферентна маса", m3: 1.2, kg: 55, dis: 0.4, asm: 0.9, wrap: 10, protect: 6 },
-    { id: "reception", label: "Рецепционно бюро", m3: 1.0, kg: 60, dis: 0.4, asm: 1.0, wrap: 10, protect: 6 },
-    { id: "partition", label: "Преграда / параван", m3: 0.4, kg: 20, wrap: 5, protect: 3 },
+    { id: "officeDesk", label: "Офис бюро", m3: 0.5, kg: 25, dis: 0.2, asm: 0.5, wrap: 6, wrapReq: true, protect: 4 },
+    { id: "officeChair", label: "Офис стол (на колела)", m3: 0.3, kg: 12, wrap: 3, wrapReq: true, protect: 2, kind: "small" },
+    { id: "filingCabinet", label: "Шкаф с папки (картотека)", m3: 0.6, kg: 45, wrap: 6, wrapReq: true, protect: 4 },
+    { id: "officeCloset", label: "Офис шкаф / рафтове", m3: 0.8, kg: 50, dis: 0.3, asm: 0.8, wrap: 8, wrapReq: true, protect: 5 },
+    { id: "conferenceTable", label: "Конферентна маса", m3: 1.2, kg: 55, dis: 0.4, asm: 0.9, wrap: 10, wrapReq: true, protect: 6 },
+    { id: "reception", label: "Рецепционно бюро", m3: 1.0, kg: 60, dis: 0.4, asm: 1.0, wrap: 10, wrapReq: true, protect: 6 },
+    { id: "partition", label: "Преграда / параван", m3: 0.4, kg: 20, wrap: 5, wrapReq: true, protect: 3 },
     { id: "whiteboard", label: "Бяла дъска / флипчарт", m3: 0.2, kg: 10, wrap: 3, protect: 3, kind: "small" },
     { id: "printer", label: "Принтер / копирна машина", m3: 0.3, kg: 25, wrap: 5, protect: 3, kind: "small" },
     { id: "serverRack", label: "Сървърна стойка (rack)", m3: 0.6, kg: 60, wrap: 8, wrapReq: true, kind: "appliance_heavy", protect: 6 },
@@ -324,14 +324,15 @@ const protectMetersFor = (qty, protect, selfPack) =>
     return s + it.protect * n;
   }, 0);
 
-// метри стреч фолио — вижте бележката при protectMetersFor, важи същото и за wrapReq
+// метри стреч фолио: wrapReq (всяка мебел + техника) е ЗАДЪЛЖИТЕЛЕН и заключен — опакова се
+// всяка бройка, освен приспаднатите като "опаковано от клиента"; останалите (ТВ, принтер,
+// килим...) — само при отметка. За разлика от велпапето (protectReq), тук отметката не се разотметва.
 const wrapMetersFor = (qty, wrap, selfPack) =>
   Object.entries(qty).reduce((s, [id, cnt]) => {
     const it = ITEM_INDEX[id];
     if (!it?.wrap || !cnt) return s;
-    const flag = wrap?.[id] ?? (it.wrapReq ? true : false);
     const packed = pickCount(selfPack?.[id], cnt);
-    const n = Math.max(0, pickCount(flag, cnt) - packed);
+    const n = Math.max(0, (it.wrapReq ? cnt : pickCount(wrap?.[id], cnt)) - packed);
     return s + it.wrap * n;
   }, 0);
 const totalWeight = (qty) =>
@@ -362,6 +363,9 @@ const floorFeeRateFor = (it, p) => {
     default: return n(p.furniturePerFloor);
   }
 };
+// pieces: вещ, която се носи на няколко отделни части (ъглов диван = 2) — по стълбите всяка
+// част е отделно носене, затова таксата/времето се смятат на част, не на бройка
+const piecesOf = (it) => it?.pieces || 1;
 // бройки за таксата "Стълби", след като се извадят маркираните от служителя като
 // "без такса качване" (s.floorFeeOff) — напр. вещи, оставени на партера, качени с кран
 // през прозорец и пр. predicate избира кой "kind" (или "без категория" = мебел) да преброи
@@ -369,7 +373,7 @@ const netFloorQty = (qty, floorFeeOff, predicate) => Object.entries(qty).reduce(
   const it = ITEM_INDEX[id];
   if (!it || !cnt || !predicate(it)) return s;
   const off = pickCount(floorFeeOff?.[id], cnt);
-  return s + Math.max(0, cnt - off);
+  return s + Math.max(0, cnt - off) * piecesOf(it);
 }, 0);
 
 /* -------- Квартали с приблизителни координати (за оценка на км) -------- */
@@ -2083,9 +2087,18 @@ function Pill({ active, children, onClick }) {
 }
 /* Отметка за услуга по вещ. При няколко бройки позволява да се избере
    на колко от тях важи (напр. 4 бюра, но само 1 се разглобява). */
-function OptionToggle({ label, cnt, value, onChange, detail }) {
+function OptionToggle({ label, cnt, value, onChange, detail, locked }) {
   const active = value === true ? cnt : (Number(value) > 0 ? Math.min(Number(value), cnt) : 0);
   const on = active > 0;
+
+  if (locked) {
+    return (
+      <span className="flex items-center gap-1.5">
+        <input type="checkbox" checked readOnly disabled className="w-4 h-4 accent-orange-500" />
+        <span className="text-xs" style={{ color: accent }}>{label} {detail(cnt)}</span>
+      </span>
+    );
+  }
 
   return (
     <span className="flex items-center gap-1.5">
@@ -2145,13 +2158,14 @@ function ItemRow({ it, s, p, setQty, setField, itemDetailsOpen, toggleItemDetail
   const cnt = s.qty[it.id] || 0;
   const hasDetails = it.dis || it.asm || it.wrap || it.protect || floorsStdTot > 0 || floorsOvrTot > 0;
   const detailsOpen = itemDetailsOpen[it.id] !== false;
+  const packedCnt = pickCount(s.selfPack[it.id], cnt);
   return (
     <div className="py-3">
       <div className="flex items-center justify-between">
         <div className="min-w-0 pr-3">
           <div className="text-base font-medium" style={{ color: ink }}>{it.label}</div>
           <div className="text-xs text-slate-400">
-            {showGroup ? `${it.group} · ` : ""}{it.m3} м³ · {it.kg} кг/бр{it.surcharge ? ` · спец. +${it.surcharge}${p.currency}` : ""}
+            {showGroup ? `${it.group} · ` : ""}{it.m3} м³ · {it.kg} кг/бр{it.pieces > 1 ? ` · ${it.pieces} части` : ""}{it.surcharge ? ` · спец. +${it.surcharge}${p.currency}` : ""}
             {cnt > 0 ? ` · = ${(cnt * it.m3).toFixed(2)} м³ / ${cnt * it.kg} кг` : ""}
           </div>
         </div>
@@ -2170,7 +2184,7 @@ function ItemRow({ it, s, p, setQty, setField, itemDetailsOpen, toggleItemDetail
           {(floorsStdTot > 0 || floorsOvrTot > 0) && (
             <OptionToggle label="🪜 без такса стълби" cnt={cnt} value={s.floorFeeOff[it.id]}
               onChange={(v) => setField("floorFeeOff", it.id, v)}
-              detail={(n) => `−${n} бр. × ${floorFeeRateFor(it, p)}${p.currency}/ет.`} />
+              detail={(n) => `−${n} бр. × ${floorFeeRateFor(it, p) * piecesOf(it)}${p.currency}/ет.${it.pieces > 1 ? ` (${it.pieces} части)` : ""}`} />
           )}
           {it.dis && (
             <OptionToggle label="🔧 разглоби" cnt={cnt} value={s.dis[it.id]}
@@ -2191,10 +2205,11 @@ function ItemRow({ it, s, p, setQty, setField, itemDetailsOpen, toggleItemDetail
               onChange={(v) => setField("protect", it.id, v)}
               detail={(n) => `${it.protect * n} м${it.protectReq ? " (по подразбиране)" : ""}`} />
           )}
-          {it.wrap && (
-            <OptionToggle label="📦 стреч" cnt={cnt} value={s.wrap[it.id] ?? (it.wrapReq ? true : false)}
+          {it.wrap && (!it.wrapReq || packedCnt < cnt) && (
+            <OptionToggle label="📦 стреч" cnt={cnt} value={it.wrapReq ? true : s.wrap[it.id]}
+              locked={it.wrapReq}
               onChange={(v) => setField("wrap", it.id, v)}
-              detail={(n) => `${it.wrap * n} м${it.wrapReq ? " (по подразбиране)" : ""}`} />
+              detail={(n) => `${it.wrap * (it.wrapReq ? Math.max(0, cnt - packedCnt) : n)} м${it.wrapReq ? " (задълж.)" : ""}`} />
           )}
         </div>
       )}
@@ -4804,9 +4819,9 @@ export default function KorektCalculator() {
                       if (packedCnt > 0) tags.push(packedCnt >= cnt ? "опаковано от клиента" : `опаковано от клиента (${packedCnt} от ${cnt})`);
                       // "по подразбиране" вещите тръгват отметнати без изрична отметка (виж wrapMetersFor) —
                       // тагът пита същото условие, за да не показва "стреч", ако колегата изрично го е разотметнал
-                      const wrapOn = it.wrap && pickCount(s.wrap[id] ?? (it.wrapReq ? true : false), cnt) > packedCnt;
+                      const wrapOn = it.wrap && (it.wrapReq ? cnt : pickCount(s.wrap[id], cnt)) > packedCnt;
                       const protectOn = it.protect && pickCount(s.protect[id] ?? (it.protectReq ? true : false), cnt) > packedCnt;
-                      if (wrapOn) tags.push(it.wrapReq ? "стреч (по подразбиране)" : "стреч");
+                      if (wrapOn) tags.push(it.wrapReq ? "стреч (задълж.)" : "стреч");
                       if (protectOn) tags.push(it.protectReq ? "велпапе (по подразбиране)" : "велпапе");
                       return (
                         <div key={id} className="flex justify-between gap-3 text-sm">

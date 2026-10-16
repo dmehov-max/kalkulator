@@ -1091,9 +1091,27 @@ test("стреч: техниката е задължителна за опако
   for (const id of ["fridge", "washer", "stove", "fridgeSxS"])
     ok(E.ITEM_INDEX[id].wrapReq, `${id} трябва да е задължителен`);
 });
-test("стреч: обикновена мебел се опакова само при отметка", () => {
-  eq(E.wrapMetersFor({ wardrobe3: 1 }, {}), 0, "без отметка:");
-  eq(E.wrapMetersFor({ wardrobe3: 1 }, { wardrobe3: true }), E.ITEM_INDEX.wardrobe3.wrap);
+test("стреч: всяка мебел е задължителна — без отметка и дори изрично разотметната", () => {
+  for (const id of ["wardrobe3", "bedSingle", "table", "chair", "armchair", "officeDesk", "dresser"])
+    ok(E.ITEM_INDEX[id].wrapReq, `${id} трябва да е задължителен`);
+  eq(E.wrapMetersFor({ wardrobe3: 1 }, {}), E.ITEM_INDEX.wardrobe3.wrap, "без отметка:");
+  eq(E.wrapMetersFor({ wardrobe3: 1 }, { wardrobe3: false }), E.ITEM_INDEX.wardrobe3.wrap, "разотметнат:");
+});
+test("стреч: опаковано от клиента приспада и задължителния", () => {
+  eq(E.wrapMetersFor({ wardrobe3: 3 }, {}, { wardrobe3: 1 }), E.ITEM_INDEX.wardrobe3.wrap * 2);
+  eq(E.wrapMetersFor({ wardrobe3: 3 }, {}, { wardrobe3: true }), 0);
+});
+test("стреч: не-мебели (ТВ, килим) остават по избор", () => {
+  eq(E.wrapMetersFor({ tvstand: 1, rug: 1 }, {}), 0, "без отметка:");
+  eq(E.wrapMetersFor({ tvstand: 1 }, { tvstand: true }), E.ITEM_INDEX.tvstand.wrap);
+});
+test("ъглов диван: 2 части — стълбите се смятат за всяка част", () => {
+  eq(E.ITEM_INDEX.sofaL.pieces, 2);
+  const one = calc({ qty: { sofaL: 1 }, pickup: addr(3) });
+  const two3 = calc({ qty: { sofa3: 2 }, pickup: addr(3) });
+  const stairs = (r) => r.lines.filter((l) => l.label.startsWith("Стълби")).reduce((a, l) => a + l.amount, 0);
+  ok(stairs(one) > 0, "липсва такса стълби");
+  near(stairs(one), stairs(two3), 0.01, "1 ъглов = 2 едрогабаритни части:");
 });
 test("стреч: метрите се умножават по броя", () => {
   eq(E.wrapMetersFor({ mattress: 3 }, {}), E.ITEM_INDEX.mattress.wrap * 3);
@@ -1481,9 +1499,9 @@ test("частично: разглобяване и сглобяване мож�
   near(r.asmOnlyHours, B.asm * 1, 0.01, "сглобяване на 1:");
 });
 test("частично: важи и за опаковането", () => {
-  const цяло = E.wrapMetersFor({ wardrobe3: 4 }, { wardrobe3: true });
-  const частично = E.wrapMetersFor({ wardrobe3: 4 }, { wardrobe3: 1 });
-  eq(частично, цяло / 4, "един гардероб вместо четири:");
+  const цяло = E.wrapMetersFor({ tvstand: 4 }, { tvstand: true });
+  const частично = E.wrapMetersFor({ tvstand: 4 }, { tvstand: 1 });
+  eq(частично, цяло / 4, "един ТВ вместо четири:");
 });
 test("частично: задължителното опаковане важи за всички бройки", () => {
   const r = calc({ qty: { mattress: 3 } });
