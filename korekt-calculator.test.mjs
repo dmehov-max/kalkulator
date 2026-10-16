@@ -1091,11 +1091,13 @@ test("стреч: техниката е задължителна за опако
   for (const id of ["fridge", "washer", "stove", "fridgeSxS"])
     ok(E.ITEM_INDEX[id].wrapReq, `${id} трябва да е задължителен`);
 });
-test("стреч: всяка мебел е задължителна — без отметка и дори изрично разотметната", () => {
-  for (const id of ["wardrobe3", "bedSingle", "table", "chair", "armchair", "officeDesk", "dresser"])
-    ok(E.ITEM_INDEX[id].wrapReq, `${id} трябва да е задължителен`);
-  eq(E.wrapMetersFor({ wardrobe3: 1 }, {}), E.ITEM_INDEX.wardrobe3.wrap, "без отметка:");
-  eq(E.wrapMetersFor({ wardrobe3: 1 }, { wardrobe3: false }), E.ITEM_INDEX.wardrobe3.wrap, "разотметнат:");
+test("стреч: всяка мебел тръгва отметната, но отметката може да се махне", () => {
+  for (const id of ["wardrobe3", "bedSingle", "table", "chair", "armchair", "officeDesk", "dresser", "sofaL", "mattress"])
+    ok(E.ITEM_INDEX[id].wrapReq, `${id} трябва да тръгва със стреч`);
+  eq(E.wrapMetersFor({ wardrobe3: 1 }, {}), E.ITEM_INDEX.wardrobe3.wrap, "без отметка (по подразбиране):");
+  eq(E.wrapMetersFor({ wardrobe3: 1 }, { wardrobe3: false }), 0, "разотметнат:");
+  eq(E.wrapMetersFor({ wardrobe3: 3 }, { wardrobe3: 1 }), E.ITEM_INDEX.wardrobe3.wrap, "само 1 от 3:");
+  eq(calc({ qty: { sofaL: 1 }, wrap: { sofaL: false } }).wrapMeters, 0, "махнат стреч не се таксува:");
 });
 test("стреч: опаковано от клиента приспада и задължителния", () => {
   eq(E.wrapMetersFor({ wardrobe3: 3 }, {}, { wardrobe3: 1 }), E.ITEM_INDEX.wardrobe3.wrap * 2);

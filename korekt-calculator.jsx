@@ -324,15 +324,16 @@ const protectMetersFor = (qty, protect, selfPack) =>
     return s + it.protect * n;
   }, 0);
 
-// метри стреч фолио: wrapReq (всяка мебел + техника) е ЗАДЪЛЖИТЕЛЕН и заключен — опакова се
-// всяка бройка, освен приспаднатите като "опаковано от клиента"; останалите (ТВ, принтер,
-// килим...) — само при отметка. За разлика от велпапето (protectReq), тук отметката не се разотметва.
+// метри стреч фолио: wrapReq (всяка мебел + техника) тръгва ОТМЕТНАТ по подразбиране (когато
+// отметката липсва изобщо — ?? хваща само undefined, не false), но колегата може да го разотметне;
+// останалите (ТВ, принтер, килим...) — само при отметка. "Опаковано от клиента" се приспада винаги.
+const wrapDefault = (it) => (it?.wrapReq ? true : false);
 const wrapMetersFor = (qty, wrap, selfPack) =>
   Object.entries(qty).reduce((s, [id, cnt]) => {
     const it = ITEM_INDEX[id];
     if (!it?.wrap || !cnt) return s;
     const packed = pickCount(selfPack?.[id], cnt);
-    const n = Math.max(0, (it.wrapReq ? cnt : pickCount(wrap?.[id], cnt)) - packed);
+    const n = Math.max(0, pickCount(wrap?.[id] ?? wrapDefault(it), cnt) - packed);
     return s + it.wrap * n;
   }, 0);
 const totalWeight = (qty) =>
@@ -2090,18 +2091,9 @@ function Pill({ active, children, onClick }) {
 }
 /* Отметка за услуга по вещ. При няколко бройки позволява да се избере
    на колко от тях важи (напр. 4 бюра, но само 1 се разглобява). */
-function OptionToggle({ label, cnt, value, onChange, detail, locked }) {
+function OptionToggle({ label, cnt, value, onChange, detail }) {
   const active = value === true ? cnt : (Number(value) > 0 ? Math.min(Number(value), cnt) : 0);
   const on = active > 0;
-
-  if (locked) {
-    return (
-      <span className="flex items-center gap-1.5">
-        <input type="checkbox" checked readOnly disabled className="w-4 h-4 accent-orange-500" />
-        <span className="text-xs" style={{ color: accent }}>{label} {detail(cnt)}</span>
-      </span>
-    );
-  }
 
   return (
     <span className="flex items-center gap-1.5">
@@ -2161,7 +2153,6 @@ function ItemRow({ it, s, p, setQty, setField, itemDetailsOpen, toggleItemDetail
   const cnt = s.qty[it.id] || 0;
   const hasDetails = it.dis || it.asm || it.wrap || it.protect || floorsStdTot > 0 || floorsOvrTot > 0;
   const detailsOpen = itemDetailsOpen[it.id] !== false;
-  const packedCnt = pickCount(s.selfPack[it.id], cnt);
   return (
     <div className="py-3">
       <div className="flex items-center justify-between">
@@ -2208,11 +2199,10 @@ function ItemRow({ it, s, p, setQty, setField, itemDetailsOpen, toggleItemDetail
               onChange={(v) => setField("protect", it.id, v)}
               detail={(n) => `${it.protect * n} м${it.protectReq ? " (по подразбиране)" : ""}`} />
           )}
-          {it.wrap && (!it.wrapReq || packedCnt < cnt) && (
-            <OptionToggle label="📦 стреч" cnt={cnt} value={it.wrapReq ? true : s.wrap[it.id]}
-              locked={it.wrapReq}
+          {it.wrap && (
+            <OptionToggle label="📦 стреч" cnt={cnt} value={s.wrap[it.id] ?? wrapDefault(it)}
               onChange={(v) => setField("wrap", it.id, v)}
-              detail={(n) => `${it.wrap * (it.wrapReq ? Math.max(0, cnt - packedCnt) : n)} м${it.wrapReq ? " (задълж.)" : ""}`} />
+              detail={(n) => `${it.wrap * n} м`} />
           )}
         </div>
       )}
@@ -4822,9 +4812,9 @@ export default function KorektCalculator() {
                       if (packedCnt > 0) tags.push(packedCnt >= cnt ? "опаковано от клиента" : `опаковано от клиента (${packedCnt} от ${cnt})`);
                       // "по подразбиране" вещите тръгват отметнати без изрична отметка (виж wrapMetersFor) —
                       // тагът пита същото условие, за да не показва "стреч", ако колегата изрично го е разотметнал
-                      const wrapOn = it.wrap && (it.wrapReq ? cnt : pickCount(s.wrap[id], cnt)) > packedCnt;
+                      const wrapOn = it.wrap && pickCount(s.wrap[id] ?? wrapDefault(it), cnt) > packedCnt;
                       const protectOn = it.protect && pickCount(s.protect[id] ?? (it.protectReq ? true : false), cnt) > packedCnt;
-                      if (wrapOn) tags.push(it.wrapReq ? "стреч (задълж.)" : "стреч");
+                      if (wrapOn) tags.push("стреч");
                       if (protectOn) tags.push(it.protectReq ? "велпапе (по подразбиране)" : "велпапе");
                       return (
                         <div key={id} className="flex justify-between gap-3 text-sm">
