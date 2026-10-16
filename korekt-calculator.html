@@ -3264,7 +3264,10 @@ function computePrice(s, p) {
   // costCity/workerCostRate вече са изчислени най-отгоре (общи и за цената към клиента).
   const laborCost = manHours * workerCostRate;
   const truckCostRate = usesFieldCrew ? 0 : n(isCourse || isDisposal ? p.truckCostPerKm : p.truckCostPerHour);
-  const truckCostBasis = isCourse || isDisposal ? totalKm : clockHours;
+  // градско: СЪЩИТЕ часове като перото "Транспорт" към клиента (truckClockHours, закръглени) —
+  // без стълбите: по стълбите носят хората, камионът не участва (виж калк. №143 — 3.0 ч към
+  // клиента, а 3.99 ч в маржа, заради 1 ч носене на ъглов диван)
+  const truckCostBasis = isCourse || isDisposal ? totalKm : roundHalf(truckClockHours);
   const truckCost = usesFieldCrew ? 0 : truckCostBasis * truckCostRate;
   // материали + кола + такса сметище (реален разход, минус за да не изглежда маржа завишен)
   const totalCost = laborCost + truckCost + extraCostTotal;

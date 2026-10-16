@@ -1105,6 +1105,15 @@ test("стреч: не-мебели (ТВ, килим) остават по из�
   eq(E.wrapMetersFor({ tvstand: 1, rug: 1 }, {}), 0, "без отметка:");
   eq(E.wrapMetersFor({ tvstand: 1 }, { tvstand: true }), E.ITEM_INDEX.tvstand.wrap);
 });
+test("марж: камионът се смята по същите часове като транспорта към клиента (без стълбите)", () => {
+  const params = { ...P, truckCostPerHour: 18, truckRate: 20 };
+  const r = calc({ qty: { sofaL: 1, books: 30, shelf: 1 }, pickup: addr(7, true), dropoff: addr(12, true, "cargo") }, params);
+  const tr = r.lines.find((l) => l.label.startsWith("Транспорт"));
+  const h = tr.amount / params.truckRate;
+  ok(r.lines.some((l) => l.label.startsWith("Стълби")), "очаквани стълби (ъглов диван в пътнически асансьор)");
+  ok(r.clockHours > h + 0.5, "престоят на обекта включва стълбите");
+  near(r.truckCost, Math.round(h * params.truckCostPerHour), 0.5, "разходът за камион:");
+});
 test("ъглов диван: 2 части — стълбите се смятат за всяка част", () => {
   eq(E.ITEM_INDEX.sofaL.pieces, 2);
   const one = calc({ qty: { sofaL: 1 }, pickup: addr(3) });
