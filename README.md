@@ -22,6 +22,9 @@
 | `shema-na-kalkulatora.html` | Визуална схема на логиката |
 | `cenoobrazuvane.md` | Описание на ценообразуването (за колеги) |
 | `kak-da-kacha-kalkulatora.md` | Инструкция за качване |
+| `oferti.html` | Раздел „📄 Оферти“ — формата за оферти към клиента (вграден в калкулатора) |
+| `oferta-template.html` | Шаблон на офертата, която вижда клиентът (ползва се от `oferti.html`) |
+| `supabase/offers.sql` | Таблица `offers` в Supabase — само за логнати колеги |
 
 ## Тестове
 

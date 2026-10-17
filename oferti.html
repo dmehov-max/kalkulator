@@ -1,0 +1,573 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Корект оферти — админ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Open+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: toolbar on top; form column left, live client preview right; on phones one pane at a time with a switch. */
+:root {
+  --bg: #eef1f3; --surface: #ffffff; --ink: #232e33; --muted: #5d6c73; --line: #d7dee2;
+  --brand: #c8191f; --brand-ink: #ffffff; --slate: #37474f; --slate-ink: #ffffff;
+  --soft: #fbecec; --ok: #1e7a46; --ok-soft: #e5f3ea; --warn: #8a5a00; --warn-soft: #fff4d6;
+  --f-display: "Oswald", "Arial Narrow", sans-serif;
+  --f-body: "Open Sans", "Segoe UI", Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1417; --surface: #192125; --ink: #e7ecee; --muted: #9aa9b0; --line: #2c373c;
+    --brand: #ec4a50; --slate: #0b1013; --slate-ink: #e7ecee; --soft: #2c1d1f; --ok: #5ccf8b; --ok-soft: #17291f; --warn: #f2c35b; --warn-soft: #2b2414; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1417; --surface: #192125; --ink: #e7ecee; --muted: #9aa9b0; --line: #2c373c;
+  --brand: #ec4a50; --slate: #0b1013; --slate-ink: #e7ecee; --soft: #2c1d1f; --ok: #5ccf8b; --ok-soft: #17291f; --warn: #f2c35b; --warn-soft: #2b2414; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.45; display: flex; flex-direction: column; }
+button { font: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* Toolbar */
+.bar { background: var(--slate); color: var(--slate-ink); padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.bar h1 { font-family: var(--f-display); font-weight: 600; font-size: 1.15rem; margin: 0 8px 0 0; letter-spacing: .02em; }
+.bar select { min-width: 0; max-width: 260px; border-radius: 6px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: inherit; padding: 6px 8px; font: inherit; }
+.bar select option { color: #232e33; }
+.bar .sp { flex: 1; }
+.tb { border: 1px solid rgba(255,255,255,.3); background: transparent; color: inherit; border-radius: 6px; padding: 6px 12px; font-weight: 600; }
+.tb.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+.tb:disabled { opacity: .5; cursor: default; }
+.pill { font-size: .78rem; padding: 3px 10px; border-radius: 999px; background: rgba(255,255,255,.12); }
+.pill.dirty { background: #fbbc04; color: #2a2100; }
+.panes-switch { display: none; }
+
+/* Workspace */
+.work { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(360px, 520px) minmax(0, 1fr); }
+.form { overflow-y: auto; border-right: 1px solid var(--line); padding-block: 16px 60px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 16px; display: grid; gap: 14px; align-content: start; }
+.preview { min-width: 0; display: flex; flex-direction: column; }
+.preview iframe { flex: 1; width: 100%; border: 0; background: var(--bg); }
+.pv-note { font-size: .78rem; color: var(--muted); padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--surface); }
+@media (max-width: 860px) {
+  .work { grid-template-columns: minmax(0,1fr); }
+  .form { border-right: 0; padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .work[data-pane="form"] .preview, .work[data-pane="preview"] .form { display: none; }
+  .panes-switch { display: inline-flex; }
+}
+
+/* Form */
+fieldset { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 14px; margin: 0; display: grid; gap: 10px; min-width: 0; }
+legend { font-family: var(--f-display); font-weight: 600; font-size: 1rem; padding: 0 6px; letter-spacing: .02em; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+label.f { display: grid; gap: 4px; font-size: .78rem; font-weight: 600; color: var(--muted); min-width: 0; }
+input[type=text], input[type=number], input[type=date], input[type=tel], input[type=email], textarea, select.in {
+  width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font: inherit; font-weight: 400; color: var(--ink); background: var(--bg);
+}
+textarea { min-height: 54px; resize: vertical; }
+.seg { display: inline-grid; grid-auto-flow: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 7px 12px; color: var(--muted); font-weight: 700; }
+.seg button[aria-pressed="true"] { background: var(--brand); color: #fff; }
+.hint { font-size: .78rem; color: var(--muted); }
+.rows { display: grid; gap: 8px; }
+.row { display: grid; grid-template-columns: minmax(0,1fr) 92px 30px; gap: 6px; align-items: start; background: var(--bg); border-radius: 8px; padding: 8px; }
+.row.nomoney { grid-template-columns: minmax(0,1fr) 30px; }
+.row .stack { display: grid; gap: 6px; min-width: 0; }
+.row input, .row textarea { background: var(--surface); }
+.x { border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 6px; height: 32px; }
+.x:hover { color: var(--brand); border-color: var(--brand); }
+.add { justify-self: start; border: 1px dashed var(--line); background: transparent; color: var(--ink); border-radius: 6px; padding: 6px 12px; font-weight: 600; }
+.totals { display: grid; gap: 4px; background: var(--soft); border-radius: 8px; padding: 10px 12px; }
+.totals div { display: flex; justify-content: space-between; gap: 10px; }
+.totals .big { font-weight: 700; font-size: 1.05rem; color: var(--brand); }
+.photo { display: grid; grid-template-columns: 64px minmax(0,1fr); gap: 12px; align-items: center; }
+.photo img, .photo .ph { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; background: var(--line); }
+.msgbox { border-radius: 8px; padding: 10px 12px; font-size: .86rem; }
+.msgbox.warn { background: var(--warn-soft); color: var(--warn); }
+.msgbox.ok { background: var(--ok-soft); color: var(--ok); }
+.fixed-only, .ind-only { display: contents; }
+</style>
+
+<header class="bar">
+  <h1>Корект · Оферти</h1>
+  <select id="pick" aria-label="Запазени оферти"><option value="">Запазени оферти…</option></select>
+  <button type="button" class="tb" id="btnNew">+ Нова</button>
+  <button type="button" class="tb" id="btnDup">Копие</button>
+  <span class="sp"></span>
+  <span class="pill" id="status">Зарежда…</span>
+  <div class="seg panes-switch" role="group" aria-label="Изглед">
+    <button type="button" data-pane="form" aria-pressed="true">Форма</button>
+    <button type="button" data-pane="preview" aria-pressed="false">Преглед</button>
+  </div>
+  <button type="button" class="tb" id="btnExport">Изтегли HTML</button>
+  <button type="button" class="tb primary" id="btnSave">Запази</button>
+</header>
+
+<div class="work" id="work" data-pane="form">
+  <form class="form" id="form" autocomplete="off" onsubmit="return false">
+    <div id="dbMsg"></div>
+
+    <fieldset>
+      <legend>Оферта</legend>
+      <div class="grid2">
+        <label class="f">Номер<input type="text" id="f-id" data-k="id"></label>
+        <label class="f">Дата на издаване<input type="date" id="f-issued" data-k="issued"></label>
+        <label class="f">Валидна (дни)<input type="number" id="f-valid" data-k="validDays" min="1"></label>
+      </div>
+      <label class="f">Обръщение към клиента<input type="text" id="f-client" data-k="client" placeholder="напр. г-жо Петрова"></label>
+      <div>
+        <div class="hint" style="margin-bottom:6px">Вид поръчка</div>
+        <div class="seg" role="group" aria-label="Вид поръчка">
+          <button type="button" data-kind="domestic" aria-pressed="false">В България</button>
+          <button type="button" data-kind="international" aria-pressed="true">Международно</button>
+        </div>
+      </div>
+      <div id="stageWrap">
+        <div class="hint" style="margin-bottom:6px">Етап на цената</div>
+        <div class="seg" role="group" aria-label="Етап">
+          <button type="button" data-stage="indicative" aria-pressed="true">1 · Индикативна</button>
+          <button type="button" data-stage="fixed" aria-pressed="false">2 · Точна с дата</button>
+        </div>
+      </div>
+      <div class="grid2" id="stageFields"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Маршрут и товар</legend>
+      <div class="grid2">
+        <label class="f">От град<input type="text" id="f-fromCity" data-k="fromCity"></label>
+        <label class="f">Държава<input type="text" id="f-fromCountry" data-k="fromCountry"></label>
+      </div>
+      <label class="f">Адрес / етаж (товарене)<input type="text" id="f-fromAddr" data-k="fromAddr"></label>
+      <div class="grid2">
+        <label class="f">До град<input type="text" id="f-toCity" data-k="toCity"></label>
+        <label class="f">Държава<input type="text" id="f-toCountry" data-k="toCountry"></label>
+      </div>
+      <label class="f">Адрес / етаж (доставка)<input type="text" id="f-toAddr" data-k="toAddr"></label>
+      <div class="grid2">
+        <label class="f">Разстояние (км)<input type="number" id="f-km" data-k="km" min="0"></label>
+        <label class="f">Обем (м³)<input type="number" id="f-volume" data-k="volume" min="0" step="0.5"></label>
+        <label class="f">Тегло (кг)<input type="number" id="f-weight" data-k="weight" min="0"></label>
+      </div>
+      <div class="grid2">
+        <label class="f">Вид услуга<input type="text" id="f-service" data-k="service" list="svc"></label>
+        <label class="f">Превозно средство<input type="text" id="f-vehicle" data-k="vehicle" list="veh"></label>
+      </div>
+      <datalist id="svc"><option value="Споделен камион (групаж)"><option value="Самостоятелен камион"><option value="Палетна доставка"></datalist>
+      <datalist id="veh"><option value="Партньорски камион 20 м³"><option value="TIR 45 м³"><option value="Собствен камион"></datalist>
+    </fieldset>
+
+    <fieldset>
+      <legend>Списък на багажа</legend>
+      <p class="hint">Клиентът вижда списъка в офертата. Цената е за тези вещи.</p>
+      <div class="rows" id="inventory"></div>
+      <button type="button" class="add" data-add="inventory">+ Предмет</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Цена</legend>
+      <p class="hint">Клиентът вижда само крайната сума и имената на услугите. Сумите по редове са само за вас.</p>
+      <div class="rows" id="lines"></div>
+      <button type="button" class="add" data-add="lines">+ Услуга</button>
+      <div class="totals" id="totals"></div>
+      <label class="f">Аванс при потвърждение (%) — 0 = общо правило за плащане<input type="number" id="f-advance" data-k="advance" min="0" max="100" step="5"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Допълнителни услуги (по избор на клиента)</legend>
+      <div class="rows" id="addons"></div>
+      <button type="button" class="add" data-add="addons">+ Допълнителна услуга</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Условия под заглавната част</legend>
+      <div class="rows" id="conditions"></div>
+      <button type="button" class="add" data-add="conditions">+ Условие</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Кой прави офертата</legend>
+      <label class="f">Служител<select class="in" id="f-team"></select></label>
+      <div class="photo">
+        <span id="photoView"></span>
+        <div style="display:grid;gap:6px">
+          <label class="f">Снимка<input type="file" id="f-photo" accept="image/*"></label>
+          <button type="button" class="add" id="photoClear">Махни снимката</button>
+        </div>
+      </div>
+      <div class="grid2">
+        <label class="f">Име<input type="text" id="f-coName" data-k="coName"></label>
+        <label class="f">Роля<input type="text" id="f-coRole" data-k="coRole"></label>
+        <label class="f">Телефон<input type="tel" id="f-coPhone" data-k="coPhone"></label>
+        <label class="f">Офис<input type="tel" id="f-coPhone2" data-k="coPhone2"></label>
+      </div>
+      <label class="f">Имейл (по желание)<input type="email" id="f-coEmail" data-k="coEmail"></label>
+    </fieldset>
+  </form>
+
+  <section class="preview" aria-label="Преглед на офертата">
+    <div class="pv-note">Така ще изглежда офертата за клиента. Бутоните в прегледа не изпращат нищо.</div>
+    <iframe id="pv" title="Преглед на офертата"></iframe>
+  </section>
+</div>
+
+<script>
+/* ---------- Състояние на формата (само български текстове) ---------- */
+const GENERIC_CONDITIONS = [
+  { title: "Обаждане преди доставка", text: "Шофьорът Ви се обажда преди да пристигне на адреса." },
+  { title: "Нужен е работещ местен телефон", text: "При доставката трябва да имате работещ телефонен номер в страната на доставка." },
+  { title: "Само неопасен товар", text: "Офертата не важи за запалими, опасни или забранени за превоз вещи." },
+  { title: "Срокът е приблизителен", text: "Датата на доставка се потвърждава с обаждане. Сроковете са в работни дни." }
+];
+const DOMESTIC_CONDITIONS = [
+  { title: "Цената е по задание", text: "Ако всичко е по описа и списъка на багажа, цената не се променя." },
+  { title: "Доплащане извън работно време", text: "Работа в събота, неделя, празник или извън 08–18 ч. по Ваше желание се доплаща." },
+  { title: "Достъп и паркинг", text: "Достъп над 20 м от входа и паркинг таксите на място се доплащат." }
+];
+// Екипът. Личните телефони, които не знаем, са на офиса — сменете ги тук.
+const TEAM = [
+  { name: "Тодор Петков", role: "Международни премествания", phone: "0888 883 237", photo: "sample" },
+  { name: "Тихомир Каишев", role: "Корпоративни клиенти, София", phone: "0882 944 098" },
+  { name: "Мирослав Георгиев", role: "Огледи и оферти, София", phone: "0882 944 098" },
+  { name: "Сузи", role: "Запитвания, София", phone: "0882 944 098" },
+  { name: "Мира Буреш", role: "Клиенти и опаковки, София", phone: "0882 944 098" },
+  { name: "Християн Димитров", role: "Бургас и Черноморие", phone: "0882 944 099" },
+  { name: "Мария Келбечева", role: "Пловдив", phone: "0700 1 4485" }
+];
+/* ---------- Обща база: Supabase, таблица offers (виж supabase/offers.sql) ----------
+   Входът е този на калкулатора: сесията се чете от localStorage „korekt:authSession“. */
+const SB_URL = "https://ncwiyhndgyssepaqyiss.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jd2l5aG5kZ3lzc2VwYXF5aXNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzMjU0MzUsImV4cCI6MjEwMDkwMTQzNX0.ve7p8ZKe0DYgD_LrY0rcPyHAGF-NNLuh0R-2noess7w";
+function session() {
+  try { const s = JSON.parse(localStorage.getItem("korekt:authSession") || "null"); return s && s.access_token ? s : null; } catch (e) { return null; }
+}
+function sbHeaders(extra) {
+  const s = session();
+  return { apikey: SB_KEY, Authorization: "Bearer " + (s ? s.access_token : SB_KEY), "Content-Type": "application/json", ...extra };
+}
+const db = {
+  async list() {
+    const res = await fetch(`${SB_URL}/rest/v1/offers?select=id,data,updated_at&order=updated_at.desc`, { headers: sbHeaders() });
+    if (!res.ok) throw Object.assign(new Error("list"), { status: res.status });
+    return res.json();
+  },
+  async save(id, data) {
+    const s = session();
+    const res = await fetch(`${SB_URL}/rest/v1/offers?on_conflict=id`, {
+      method: "POST", headers: sbHeaders({ Prefer: "resolution=merge-duplicates,return=minimal" }),
+      body: JSON.stringify({ id, data, updated_at: data.updatedAt, updated_by: s ? s.email : null })
+    });
+    if (!res.ok) throw Object.assign(new Error("save"), { status: res.status });
+  }
+};
+async function reloadSaved() {
+  const rows = await db.list();
+  saved = {};
+  rows.forEach(r => { saved[r.id] = r.data; });
+  refreshPick(); if (!dirty) markDirty(false);
+}
+
+/* Калкулация от калкулатора → нова оферта (бутонът „Направи оферта“ на стъпка „Цена“) */
+function fromCalc(c) {
+  const kind = c.service === "international" ? "international" : "domestic";
+  const o = blank(kind);
+  const addr = (hood, x) => [hood, x && x.floor != null ? `ет. ${x.floor}${x.elevator ? ", с асансьор" : ", без асансьор"}` : ""].filter(Boolean).join(", ");
+  o.fromCity = c.fromCity || o.fromCity; o.toCity = c.toCity || ""; o.toCountry = c.toCountry || o.toCountry;
+  o.fromAddr = addr(c.from, c.pickup); o.toAddr = addr(c.to, c.dropoff);
+  o.km = c.km || ""; o.volume = c.volumeM3 || ""; o.weight = c.weightKg || "";
+  o.service = c.serviceLabel || o.service; if (c.truck) o.vehicle = c.truck;
+  o.inventory = (c.items || []).map(i => ({ item: i.label, qty: i.qty, note: "" }));
+  o.lines = [{ name: c.serviceLabel || "Услуга", desc: c.calcNumber ? `По калкулация №${c.calcNumber}` : "", amount: c.total || "" }];
+  return o;
+}
+
+const TODAY = new Date().toISOString().slice(0, 10);
+let TEMPLATE = "", DEFAULT_PHOTO = "";
+let S = null;            // текущата оферта
+let dirty = false, saved = {}, pvReady = false;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const eur = n => new Intl.NumberFormat("bg-BG", { style: "currency", currency: "EUR" }).format(n || 0);
+
+function nextId(kind) {
+  const yr = TODAY.slice(0, 4), pre = kind === "domestic" ? "BG" : "INT";
+  const re = new RegExp(`^${pre}-(\\d{4})-(\\d+)$`);
+  const nums = Object.keys(saved).map(k => (k.match(re) || [])).filter(m => m[1] === yr).map(m => +m[2]);
+  return `${pre}-${yr}-${String((nums.length ? Math.max(...nums) : 0) + 1).padStart(4, "0")}`;
+}
+
+function blank(kind = "international") {
+  const intl = kind === "international";
+  const who = intl ? TEAM[0] : TEAM[2];
+  return {
+    id: nextId(kind), kind, issued: TODAY, validDays: 28, client: "", stage: "indicative",
+    period: "", loadDate: "", delivery: "",
+    fromCity: "София", fromCountry: "България", fromAddr: "", toCity: "", toCountry: intl ? "" : "България", toAddr: "",
+    km: "", volume: "", weight: "",
+    service: intl ? "Споделен камион (групаж)" : "Преместване на дом", vehicle: intl ? "Партньорски камион 20 м³" : "Камион до 3.5 т",
+    inventory: [],
+    lines: intl
+      ? [{ name: "Транспорт", desc: "", amount: "" }, { name: "Опаковане и товарене", desc: "", amount: "" }, { name: "Разтоварване", desc: "", amount: "" }]
+      : [{ name: "Работници", desc: "", amount: "" }, { name: "Транспорт", desc: "", amount: "" }, { name: "Опаковъчни материали", desc: "", amount: "" }],
+    addons: [], conditions: (intl ? GENERIC_CONDITIONS : DOMESTIC_CONDITIONS).map(c => ({ ...c })), advance: intl ? 30 : 0,
+    coName: who.name, coRole: who.role, coPhone: who.phone, coPhone2: "0700 1 4485", coEmail: "", coPhoto: who.photo === "sample" ? DEFAULT_PHOTO : ""
+  };
+}
+
+/* Пример от шаблона: превръща двуезичния OFFER в състояние на формата */
+function fromTemplateOffer(o) {
+  const b = v => (v && typeof v === "object") ? (v.bg || "") : (v ?? "");
+  return {
+    id: o.id, kind: o.kind || "international", issued: o.issued, validDays: o.validDays, client: b(o.client), stage: o.stage || "indicative",
+    inventory: (o.inventory || []).map(r => ({ item: b(r.item), qty: r.qty, note: b(r.note) })),
+    period: b(o.preferredPeriod), loadDate: o.loadDate || "", delivery: b(o.deliveryWindow),
+    fromCity: b(o.from.city), fromCountry: b(o.from.country), fromAddr: b(o.from.addr),
+    toCity: b(o.to.city), toCountry: b(o.to.country), toAddr: b(o.to.addr),
+    km: o.km || "", volume: o.volume || "", weight: o.weightKg || "", service: b(o.service), vehicle: b(o.vehicle),
+    lines: o.lines.map(l => ({ name: l.bg, desc: b(l.q), amount: l.amount })),
+    addons: o.addons.map(a => ({ name: a.bg, desc: b(a.d), amount: a.amount })),
+    conditions: (o.conditions || []).map(c => ({ title: b(c.b), text: b(c.s) })),
+    advance: o.payments && o.payments.length ? Math.round(o.payments[0].share * 100) : 0,
+    coName: b(o.coordinator.name), coRole: b(o.coordinator.role), coPhone: o.coordinator.phone, coPhone2: o.coordinator.phone2, coEmail: o.coordinator.email || "", coPhoto: o.coordinator.photo || ""
+  };
+}
+
+/* Състояние на формата → OFFER за шаблона на клиента */
+function toOffer(s) {
+  const B = v => ({ bg: v || "", en: v || "" });
+  const initials = (s.coName || "").split(/\s+/).filter(Boolean).map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  const adv = Math.min(100, Math.max(0, +s.advance || 0));
+  return {
+    id: s.id || "—", example: false, demo: true, langs: ["bg"], kind: s.kind || "international",
+    inventory: (s.inventory || []).filter(r => r.item).map(r => ({ item: B(r.item), qty: +r.qty || 1, note: B(r.note) })),
+    client: B(s.client), issued: s.issued || TODAY, validDays: +s.validDays || 28, vatRate: 0.2,
+    from: { city: B(s.fromCity), country: B(s.fromCountry), addr: B(s.fromAddr) },
+    to: { city: B(s.toCity || "…"), country: B(s.toCountry), addr: B(s.toAddr) },
+    km: +s.km || null, stage: s.stage, preferredPeriod: B(s.period || "предстои да се уточни"),
+    loadDate: s.loadDate || (s.kind === "domestic" ? "" : s.issued || TODAY), deliveryWindow: B(s.kind === "domestic" ? "" : s.delivery),
+    volume: +s.volume || 0, weightKg: +s.weight || 0, service: B(s.service), vehicle: B(s.vehicle),
+    coordinator: { name: B(s.coName), initials, role: B(s.coRole), phone: s.coPhone || "", phone2: s.coPhone2 || "", email: s.coEmail || "", photo: s.coPhoto || "" },
+    conditions: s.conditions.filter(c => c.title || c.text).map(c => ({ b: B(c.title), s: B(c.text) })),
+    lines: s.lines.filter(l => l.name || +l.amount).map(l => ({ bg: l.name, en: l.name, q: B(l.desc), amount: +l.amount || 0 })),
+    addons: s.addons.filter(a => a.name).map((a, i) => ({ id: "ad-" + i, bg: a.name, en: a.name, d: B(a.desc), amount: +a.amount || 0 })),
+    payments: adv > 0 && adv < 100
+      ? [{ bg: "Аванс при потвърждение", en: "Advance on confirmation", share: adv / 100 }, { bg: "Остатък преди разтоварване", en: "Balance before unloading", share: 1 - adv / 100 }]
+      : []
+  };
+}
+
+function offerScript(offer) { return "const OFFER = " + JSON.stringify(offer).replace(/</g, "\\u003c") + ";"; }
+function buildHtml(offer, preview) {
+  const a = TEMPLATE.indexOf("/*OFFER-START*/"), b = TEMPLATE.indexOf("/*OFFER-END*/");
+  const body = TEMPLATE.slice(0, a) + offerScript(offer) + TEMPLATE.slice(b + "/*OFFER-END*/".length);
+  const head = `<!doctype html><html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">` +
+    (preview ? `<script>window.KOREKT_PREVIEW=true<\/script>` : "") + `</head><body style="margin:0">`;
+  return head + body + "</body></html>";
+}
+
+/* ---------- Рендер на формата ---------- */
+function fillInputs() {
+  document.querySelectorAll("[data-k]").forEach(el => { el.value = S[el.dataset.k] ?? ""; });
+  S.kind = S.kind || "international"; S.inventory = S.inventory || [];
+  document.querySelectorAll("[data-stage]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.stage === S.stage)));
+  document.querySelectorAll("[data-kind]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.kind === S.kind)));
+  $("stageWrap").hidden = S.kind === "domestic";
+  const ti = TEAM.findIndex(m => m.name === S.coName);
+  $("f-team").innerHTML = TEAM.map((m, i) => `<option value="${i}">${esc(m.name)} · ${esc(m.role)}</option>`).join("") + `<option value="-1">Друг (попълнете ръчно)</option>`;
+  $("f-team").value = String(ti);
+  renderStageFields(); renderRows(); renderPhoto(); renderTotals();
+}
+function renderStageFields() {
+  if (S.kind === "domestic") {
+    $("stageFields").innerHTML = `<label class="f">Дата на преместване (по желание)<input type="date" id="f-loadDate" data-k="loadDate" value="${esc(S.loadDate)}"></label>
+      <p class="hint" style="grid-column:1/-1">Клиентът вижда цена без ДДС и бутон „Приемам офертата“.</p>`;
+    return;
+  }
+  $("stageFields").innerHTML = S.stage === "indicative"
+    ? `<label class="f" style="grid-column:1/-1">Желан период<input type="text" id="f-period" data-k="period" value="${esc(S.period)}" placeholder="напр. втората половина на ноември 2026"></label>
+       <p class="hint" style="grid-column:1/-1">Клиентът вижда „≈“ пред сумата и бутон „Изберете дати за точна цена“.</p>`
+    : `<label class="f">Дата на товарене<input type="date" id="f-loadDate" data-k="loadDate" value="${esc(S.loadDate)}"></label>
+       <label class="f">Доставка<input type="text" id="f-delivery" data-k="delivery" value="${esc(S.delivery)}" placeholder="напр. 20–21 ноември 2026"></label>
+       <p class="hint" style="grid-column:1/-1">Транспортът е резервиран за тази дата. Клиентът вижда бутон „Приемам офертата“.</p>`;
+}
+const ROWDEF = {
+  inventory: { num: ["qty", "Брой", "1"], f: [["item", "Предмет, напр. гардероб"], ["note", "Бележка, напр. разглобяване"]], blank: { item: "", qty: 1, note: "" } },
+  lines: { num: ["amount", "€ без ДДС", "0.01"], f: [["name", "Услуга"], ["desc", "Описание за клиента"]], blank: { name: "", desc: "", amount: "" } },
+  addons: { num: ["amount", "€ без ДДС", "0.01"], f: [["name", "Допълнителна услуга"], ["desc", "Описание"]], blank: { name: "", desc: "", amount: "" } },
+  conditions: { num: null, f: [["title", "Заглавие"], ["text", "Текст", true]], blank: { title: "", text: "" } }
+};
+function renderRows() {
+  Object.entries(ROWDEF).forEach(([list, def]) => {
+    $(list).innerHTML = (S[list] || []).map((r, i) => `<div class="row ${def.num ? "" : "nomoney"}"><div class="stack">` +
+      def.f.map(([k, ph, ta]) => ta
+        ? `<textarea id="${list}-${i}-${k}" data-list="${list}" data-i="${i}" data-f="${k}" placeholder="${ph}" aria-label="${ph}">${esc(r[k])}</textarea>`
+        : `<input type="text" id="${list}-${i}-${k}" data-list="${list}" data-i="${i}" data-f="${k}" placeholder="${ph}" aria-label="${ph}" value="${esc(r[k])}">`).join("") +
+      `</div>` + (def.num ? `<input type="number" id="${list}-${i}-${def.num[0]}" data-list="${list}" data-i="${i}" data-f="${def.num[0]}" placeholder="${def.num[1]}" aria-label="${def.num[1]}" value="${esc(r[def.num[0]])}" min="0" step="${def.num[2]}">` : "") +
+      `<button type="button" class="x" data-del="${list}" data-i="${i}" aria-label="Изтрий реда">×</button></div>`).join("") ||
+      `<p class="hint">Няма редове.</p>`;
+  });
+}
+function renderTotals() {
+  const net = S.lines.reduce((a, l) => a + (+l.amount || 0), 0);
+  const vat = Math.round(net * 20) / 100;
+  $("totals").innerHTML = `<div><span>Крайна цена без ДДС</span><span class="mono big">${S.kind !== "domestic" && S.stage === "indicative" ? "≈ " : ""}${eur(net)}</span></div>
+    <div><span>ДДС 20% (ако е приложимо)</span><span class="mono">${eur(vat)}</span></div>
+    <div><span>С ДДС</span><span class="mono">${eur(net + vat)}</span></div>`;
+}
+function renderPhoto() {
+  $("photoView").innerHTML = S.coPhoto ? `<img src="${esc(S.coPhoto)}" alt="Снимка на координатора">` : `<span class="ph" style="display:block"></span>`;
+}
+
+/* ---------- Преглед ---------- */
+let pvTimer = null;
+function schedulePreview() { clearTimeout(pvTimer); pvTimer = setTimeout(pushPreview, 250); }
+function pushPreview() {
+  if (!TEMPLATE) return;
+  const offer = toOffer(S);
+  if (pvReady) $("pv").contentWindow.postMessage({ type: "korekt-offer", offer }, "*");
+  else $("pv").srcdoc = buildHtml(offer, true);
+}
+window.addEventListener("message", e => {
+  if (e.source === $("pv").contentWindow && e.data && e.data.type === "korekt-ready") { pvReady = true; pushPreview(); }
+});
+
+/* ---------- Промени ---------- */
+function markDirty(v) {
+  dirty = v;
+  const st = $("status");
+  st.className = "pill" + (v ? " dirty" : "");
+  st.textContent = v ? "Незапазени промени" : (saved[S.id] ? "Запазено" : "Нова оферта");
+}
+function changed() { markDirty(true); renderTotals(); schedulePreview(); try { localStorage.setItem("korekt-admin-draft", JSON.stringify(S)); } catch (e) {} }
+
+$("form").addEventListener("input", e => {
+  const el = e.target;
+  if (el.dataset.k) { S[el.dataset.k] = el.value; if (el.dataset.k === "id") markDirty(true); changed(); }
+  else if (el.dataset.list) { S[el.dataset.list][+el.dataset.i][el.dataset.f] = el.value; changed(); }
+});
+document.addEventListener("click", e => {
+  const st = e.target.closest("[data-stage]");
+  if (st) { S.stage = st.dataset.stage; fillInputs(); changed(); return; }
+  const kd = e.target.closest("[data-kind]");
+  if (kd) {
+    const k = kd.dataset.kind; if (k === S.kind) return;
+    S.kind = k;
+    if (!saved[S.id]) S.id = nextId(k);           // нов номер с правилния префикс (BG- / INT-)
+    if (k === "domestic" && !S.toCountry) S.toCountry = "България";
+    fillInputs(); changed(); return;
+  }
+  const add = e.target.closest("[data-add]");
+  if (add) {
+    const l = add.dataset.add;
+    S[l] = S[l] || [];
+    S[l].push({ ...ROWDEF[l].blank });
+    renderRows(); changed();
+    const rows = $(l).querySelectorAll(".row");
+    const first = rows[rows.length - 1] && rows[rows.length - 1].querySelector("input,textarea");
+    first && first.focus();
+    return;
+  }
+  const del = e.target.closest("[data-del]");
+  if (del) { S[del.dataset.del].splice(+del.dataset.i, 1); renderRows(); changed(); return; }
+  const pane = e.target.closest("[data-pane]");
+  if (pane && pane.tagName === "BUTTON") {
+    $("work").dataset.pane = pane.dataset.pane;
+    document.querySelectorAll(".panes-switch button").forEach(b => b.setAttribute("aria-pressed", String(b === pane)));
+  }
+});
+
+$("f-photo").addEventListener("change", e => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement("canvas"); c.width = c.height = 200;
+    const k = Math.max(200 / img.width, 200 / img.height), w = img.width * k, h = img.height * k;
+    c.getContext("2d").drawImage(img, (200 - w) / 2, (200 - h) / 2, w, h);
+    S.coPhoto = c.toDataURL("image/jpeg", 0.82); URL.revokeObjectURL(img.src);
+    renderPhoto(); changed(); e.target.value = "";
+  };
+  img.src = URL.createObjectURL(file);
+});
+$("f-team").addEventListener("change", e => {
+  const m = TEAM[+e.target.value];
+  if (!m) return;                                  // „Друг“: попълва се ръчно
+  S.coName = m.name; S.coRole = m.role; S.coPhone = m.phone;
+  S.coPhoto = m.photo === "sample" ? DEFAULT_PHOTO : "";
+  ["coName", "coRole", "coPhone"].forEach(k => { $("f-" + k).value = S[k]; });
+  renderPhoto(); changed();
+});
+$("photoClear").onclick =() => { S.coPhoto = ""; renderPhoto(); changed(); };
+
+/* ---------- Запазване (обща база) ---------- */
+function refreshPick() {
+  const ids = Object.keys(saved).sort((a, b) => (saved[b].updatedAt || "").localeCompare(saved[a].updatedAt || ""));
+  $("pick").innerHTML = `<option value="">Запазени оферти (${ids.length})…</option>` +
+    ids.map(id => { const o = saved[id]; return `<option value="${esc(id)}" ${S && id === S.id ? "selected" : ""}>${esc(id)} · ${esc(o.fromCity)} → ${esc(o.toCity)}${o.client ? " · " + esc(o.client) : ""}</option>`; }).join("");
+}
+function load(state) { S = JSON.parse(JSON.stringify(state)); delete S.updatedAt; fillInputs(); markDirty(false); schedulePreview(); refreshPick(); }
+
+$("pick").onchange = () => {
+  const id = $("pick").value; if (!id) return;
+  if (dirty && !$("pick").dataset.confirm) { showMsg("warn", `Имате незапазени промени. Изберете „${id}“ пак, за да ги откажете.`); $("pick").dataset.confirm = id; refreshPick(); return; }
+  delete $("pick").dataset.confirm; showMsg("", ""); load(saved[id]);
+};
+$("btnNew").onclick = () => { load(blank()); };
+$("btnDup").onclick = () => { const c = JSON.parse(JSON.stringify(S)); c.id = nextId(c.kind); c.issued = TODAY; load(c); markDirty(true); };
+
+$("btnSave").onclick = async () => {
+  if (!session()) { showMsg("warn", "Не сте влезли. Влезте в калкулатора и отворете „Оферти“ оттам."); return; }
+  const id = (S.id || "").trim();
+  if (!/^[A-Za-z0-9_.~:@+-]{1,60}$/.test(id)) { showMsg("warn", "Номерът може да съдържа само латински букви, цифри и тире, напр. INT-2026-0148."); $("f-id").focus(); return; }
+  if (S.kind !== "domestic" && S.stage === "fixed" && !S.loadDate) { showMsg("warn", "За точна цена въведете дата на товарене."); return; }
+  $("btnSave").disabled = true;
+  try {
+    const doc = { ...S, id, updatedAt: new Date().toISOString() };
+    await db.save(id, doc);
+    saved[id] = doc; S.id = id; markDirty(false); refreshPick();
+    try { localStorage.removeItem("korekt-admin-draft"); } catch (e) {}
+    showMsg("ok", `Запазено: ${id}.`);
+  } catch (err) {
+    showMsg("warn", err && (err.status === 401 || err.status === 403) ? "Сесията е изтекла. Презаредете калкулатора и влезте пак." : "Не успях да запазя. Опитайте пак след малко.");
+  } finally { $("btnSave").disabled = false; }
+};
+
+$("btnExport").onclick = async () => {
+  if (!TEMPLATE) { showMsg("warn", "Шаблонът на офертата не се зареди. Опитайте пак."); return; }
+  const blob = new Blob([buildHtml(toOffer(S), false)], { type: "text/html;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `oferta-${(S.id || "korekt").replace(/[^A-Za-z0-9-]/g, "")}.html`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  showMsg("ok", "Файлът е изтеглен. Може да го пратите на клиента или да го качите на сайта.");
+};
+
+function showMsg(kind, text) { $("dbMsg").innerHTML = text ? `<div class="msgbox ${kind}" role="status">${esc(text)}</div>` : ""; }
+
+/* ---------- Старт ---------- */
+(async function start() {
+  try {
+    TEMPLATE = await (await fetch("oferta-template.html")).text();
+    const a = TEMPLATE.indexOf("/*OFFER-START*/") + 15, b = TEMPLATE.indexOf("/*OFFER-END*/");
+    const sample = new Function(TEMPLATE.slice(a, b) + "; return OFFER;")();
+    DEFAULT_PHOTO = sample.coordinator.photo || "";
+    let draft = null;
+    try { draft = JSON.parse(localStorage.getItem("korekt-admin-draft") || "null"); } catch (e) {}
+    S = draft || fromTemplateOffer(sample);
+  } catch (e) {
+    S = blank(); showMsg("warn", "Шаблонът на офертата не се зареди. Прегледът няма да работи.");
+  }
+  fillInputs(); markDirty(false); refreshPick(); schedulePreview();
+
+  if (!session()) { $("status").textContent = "Не сте влезли"; showMsg("warn", "Влезте в калкулатора и отворете „Оферти“ оттам, за да пазите офертите в общата база."); }
+  try { await reloadSaved(); }
+  catch (e) { $("status").textContent = "Базата не отговаря"; }
+
+  // калкулация, пратена от калкулатора: става нова оферта с пореден номер (след зареждане на базата)
+  let calc = null;
+  try { calc = JSON.parse(localStorage.getItem("korekt:offerFromCalc") || "null"); localStorage.removeItem("korekt:offerFromCalc"); } catch (e) {}
+  if (calc) { load(fromCalc(calc)); markDirty(true); showMsg("ok", `Офертата е попълнена от калкулацията${calc.calcNumber ? " №" + calc.calcNumber : ""}. Проверете и натиснете „Запази“.`); }
+})();
+</script>
+
+</body></html>

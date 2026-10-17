@@ -3539,7 +3539,7 @@ export default function KorektCalculator() {
   const logout = () => {
     setAuthSession(null);
     saveAuthSession(null);
-    setShowLog(false); setShowSettings(false); setShowMargin(false); setShowUsers(false);
+    setShowLog(false); setShowSettings(false); setShowMargin(false); setShowUsers(false); setShowOffers(false);
   };
   // опреснява сесията малко преди да изтече, вместо да чака 401 от базата
   useEffect(() => {
@@ -3734,6 +3734,32 @@ export default function KorektCalculator() {
   // --- автоматичен запис на калкулацията при показване на цената ---
   const [showLog, setShowLog] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
+  // "Оферти" — формата за оферти към клиента (oferti.html) вградена като раздел;
+  // пази се в таблица offers в Supabase, виж supabase/offers.sql
+  const [showOffers, setShowOffers] = useState(false);
+  const [offersFrameKey, setOffersFrameKey] = useState(0); // смяна → iframe-ът се презарежда и поема нова калкулация
+  // „Направи оферта“ от стъпка „Цена“: оставя калкулацията в localStorage (същият
+  // origin като oferti.html) и отваря раздела; формата я превръща в нова оферта
+  const makeOfferFromCalc = () => {
+    const rec = buildRecord(s, p, r, null, recordNumber.current, userName);
+    const intl = s.service === "international";
+    const payload = {
+      service: s.service, serviceLabel: SERVICE_LABELS[s.service] || s.service,
+      calcNumber: recordNumber.current || null, total: rec.total,
+      fromCity: s.service === "local" ? s.city : s.pickupCity || s.city || "",
+      toCity: s.service === "local" ? s.city : intl ? "" : s.dropoffCity || "",
+      toCountry: intl ? s.country || "" : "България",
+      from: rec.from, to: rec.to, pickup: rec.pickup, dropoff: rec.dropoff,
+      km: rec.km, volumeM3: rec.volumeM3, weightKg: rec.weightKg, truck: rec.truck,
+      items: rec.items.map((i) => ({ label: i.label, qty: i.qty })),
+    };
+    try { localStorage.setItem("korekt:offerFromCalc", JSON.stringify(payload)); } catch (e) { /* без значение */ }
+    guardAdmin(() => {
+      setShowLog(false); setShowSettings(false); setShowUsers(false); setShowProfile(false);
+      setOffersFrameKey((k) => k + 1); setShowOffers(true);
+      window.scrollTo(0, 0);
+    });
+  };
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
 
   // Всяка калкулация се пази автоматично — без клиентът да прави нищо.
@@ -3959,11 +3985,11 @@ export default function KorektCalculator() {
 
   // докато е отворен Записи/Параметри/Потребители/Профил, калкулаторът отдолу се крие —
   // иначе е монтиран под панела и се вижда едновременно с него (объркващо, виж чернова + цена)
-  const anyPanelOpen = showLog || showSettings || showUsers || showProfile;
+  const anyPanelOpen = showLog || showSettings || showUsers || showProfile || showOffers;
 
   return (
     <div className="min-h-screen w-full" style={{ background: "#f6f7f9", fontFamily: "'Inter', system-ui, sans-serif" }}>
-      <div className="max-w-3xl mx-auto px-4 py-8">
+      <div className={`${showOffers ? "max-w-7xl" : "max-w-3xl"} mx-auto px-4 py-8`}>
         <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
           <div>
             <div className="text-2xl font-extrabold tracking-tight" style={{ color: ink }}>КОРЕКТ<span style={{ color: accent }}>.</span></div>
@@ -3989,6 +4015,9 @@ export default function KorektCalculator() {
           <button onClick={() => guardAdmin(() => setShowLog((v) => !v))}
             className="text-sm font-semibold px-3 py-2 rounded-full border transition"
             style={{ borderColor: showLog ? ink : "#e2e6ec", color: showLog ? ink : "#64748b" }}>{adminUnlocked ? "📋" : "🔒"} Записи</button>
+          <button onClick={() => guardAdmin(() => setShowOffers((v) => !v))}
+            className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+            style={{ borderColor: showOffers ? accent : "#e2e6ec", color: showOffers ? accent : "#64748b" }}>📄 Оферти</button>
           {isAdmin && (
             <button onClick={() => guardAdmin(() => setShowSettings((v) => !v))}
               className="text-sm font-semibold px-3 py-2 rounded-full border transition"
@@ -4013,6 +4042,12 @@ export default function KorektCalculator() {
         )}
         {isAdmin && showUsers && <UsersPanel session={authSession} notify={notify} p={p} />}
         {showProfile && <ProfilePanel session={authSession} userName={userName} onSaved={applyUserName} notify={notify} p={p} />}
+        {showOffers && (
+          <div className="rounded-2xl overflow-hidden mb-4 bg-white border border-slate-200">
+            <iframe key={offersFrameKey} src="oferti.html" title="Оферти за клиенти"
+              style={{ width: "100%", height: "calc(100vh - 170px)", minHeight: 560, border: 0, display: "block" }} />
+          </div>
+        )}
 
         {!anyPanelOpen && (
         <>
@@ -4726,6 +4761,10 @@ export default function KorektCalculator() {
                     {saveState === "unavailable" && <span className="ml-1">· Записът не е наличен в тази среда</span>}
                     {saveState === "error" && <span className="ml-1">· Записът не бе запазен</span>}
                   </div>
+                  <button onClick={makeOfferFromCalc}
+                    className="mt-3 w-full rounded-xl py-2.5 text-sm font-semibold" style={{ background: "#fff", color: ink }}>
+                    📄 Направи оферта за клиента
+                  </button>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">

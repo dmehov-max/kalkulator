@@ -1,0 +1,779 @@
+<title>Корект онлайн оферта</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Open+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: brand header strip, route hero, then two columns — details left, sticky price card right; one column on phones. */
+:root {
+  --bg: #f3f5f6;
+  --surface: #ffffff;
+  --ink: #232e33;
+  --muted: #5d6c73;
+  --line: #dde3e6;
+  --brand: #c8191f;
+  --brand-ink: #ffffff;
+  --slate: #37474f;
+  --slate-ink: #ffffff;
+  --soft: #fbecec;
+  --ok: #1e7a46;
+  --ok-soft: #e5f3ea;
+  --f-display: "Oswald", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --f-body: "Open Sans", "Segoe UI", Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11171a; --surface: #1a2226; --ink: #e7ecee; --muted: #9aa9b0; --line: #2c373c;
+    --brand: #ec4a50; --brand-ink: #ffffff; --slate: #0b1013; --slate-ink: #e7ecee;
+    --soft: #2c1d1f; --ok: #5ccf8b; --ok-soft: #17291f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11171a; --surface: #1a2226; --ink: #e7ecee; --muted: #9aa9b0; --line: #2c373c;
+  --brand: #ec4a50; --brand-ink: #ffffff; --slate: #0b1013; --slate-ink: #e7ecee;
+  --soft: #2c1d1f; --ok: #5ccf8b; --ok-soft: #17291f; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; letter-spacing: .01em; text-wrap: balance; margin: 0; }
+h2 { font-size: 1.45rem; }
+p { margin: 0; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.eyebrow { font-size: .72rem; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); font-weight: 700; }
+button { font: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+
+/* Header */
+.top { background: var(--surface); border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 12px; flex-wrap: wrap; }
+.logo { background: #fff; border-radius: 6px; padding: 4px 6px; display: inline-flex; }
+.logo img { height: 38px; width: auto; display: block; }
+.top-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.offer-no { font-size: .8rem; color: var(--muted); }
+.lang { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.lang button { border: 0; background: transparent; color: var(--muted); padding: 5px 12px; font-size: .8rem; font-weight: 700; }
+.lang button[aria-pressed="true"] { background: var(--slate); color: var(--slate-ink); }
+
+/* Hero */
+.hero { background: var(--slate); color: var(--slate-ink); }
+.hero .wrap { padding-block: 34px 30px; display: grid; gap: 22px; }
+.hero .greet { opacity: .8; font-size: 1rem; }
+.route { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; gap: 14px; }
+.route .city { font-family: var(--f-display); font-size: clamp(1.8rem, 5.2vw, 3.2rem); line-height: 1.05; text-transform: uppercase; }
+.route .country { font-size: .85rem; opacity: .75; margin-top: 4px; }
+.route .to { text-align: right; }
+.route .mid { display: grid; justify-items: center; gap: 6px; min-width: 90px; }
+.route svg { width: clamp(90px, 18vw, 220px); height: 26px; display: block; }
+.route .km { font-size: .78rem; opacity: .85; white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid color-mix(in srgb, var(--slate-ink) 28%, transparent); border-radius: 999px; padding: 4px 12px; font-size: .82rem; }
+.chip b { font-weight: 700; }
+.chip.example { background: #fbbc04; color: #2a2100; border-color: #fbbc04; font-weight: 700; }
+
+/* Offer conditions band, right under the hero */
+.cond { background: var(--surface); border-bottom: 1px solid var(--line); }
+.cond .wrap { padding-block: 20px; display: grid; gap: 12px; }
+.cond ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 24px; }
+.cond li { display: grid; grid-template-columns: 22px minmax(0,1fr); gap: 10px; font-size: .92rem; }
+.cond .ic { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--brand); color: var(--brand); display: grid; place-items: center; font-weight: 700; font-size: .78rem; margin-top: 1px; }
+.cond b { display: block; }
+.cond .s { color: var(--muted); font-size: .86rem; }
+.avatar img, .avatar svg { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.avatar { overflow: hidden; }
+
+/* Main grid */
+main .wrap { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 28px; padding-block: 28px 48px; align-items: start; }
+@media (max-width: 880px) { main .wrap { grid-template-columns: minmax(0,1fr); } }
+.col { display: grid; gap: 26px; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 22px; display: grid; gap: 16px; min-width: 0; }
+.panel > header { display: grid; gap: 4px; }
+.panel > header p { color: var(--muted); font-size: .92rem; }
+
+/* Facts */
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0; border-top: 1px solid var(--line); }
+.fact { padding: 12px 14px 12px 0; border-bottom: 1px solid var(--line); display: grid; gap: 2px; min-width: 0; }
+.fact .v { font-weight: 600; overflow-wrap: anywhere; }
+.fact .s { font-size: .82rem; color: var(--muted); }
+
+/* Inventory */
+.invwrap { overflow-x: auto; }
+.inv { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.inv th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 6px 10px 6px 0; border-bottom: 2px solid var(--line); }
+.inv td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.inv .n { text-align: right; width: 64px; }
+.inv .note { color: var(--muted); font-size: .86rem; }
+.inv tfoot td { font-weight: 700; border-bottom: 0; }
+
+/* Coordinator */
+.coord { display: grid; grid-template-columns: 72px minmax(0,1fr); gap: 16px; align-items: center; }
+.avatar { width: 72px; height: 72px; border-radius: 50%; background: var(--brand); color: var(--brand-ink); display: grid; place-items: center; font-family: var(--f-display); font-size: 1.4rem; }
+.coord .name { font-weight: 700; font-size: 1.05rem; }
+.contact-rows { display: grid; gap: 6px; margin-top: 4px; }
+.contact-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: .92rem; }
+.contact-row .lbl { color: var(--muted); min-width: 74px; }
+.copy { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 6px; font-size: .72rem; padding: 2px 8px; }
+
+/* Included */
+.incl { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px 22px; }
+.incl li { display: grid; grid-template-columns: 22px minmax(0,1fr); gap: 10px; }
+.incl .tick { width: 22px; height: 22px; border-radius: 50%; background: var(--ok-soft); color: var(--ok); display: grid; place-items: center; font-size: .8rem; font-weight: 700; margin-top: 1px; }
+.incl b { display: block; }
+.incl span { color: var(--muted); font-size: .88rem; }
+
+/* Add-ons */
+.addons { display: grid; gap: 10px; }
+.addon { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; cursor: pointer; }
+.addon:has(input:checked) { border-color: var(--brand); background: var(--soft); }
+.addon input { width: 18px; height: 18px; accent-color: var(--brand); margin: 0; }
+.addon .t { font-weight: 600; }
+.addon .d { color: var(--muted); font-size: .85rem; }
+.addon .p { font-weight: 700; white-space: nowrap; }
+
+/* Timeline */
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: s; }
+.steps li { display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 14px; position: relative; padding-bottom: 18px; }
+.steps li::before { counter-increment: s; content: counter(s); width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--brand); color: var(--brand); display: grid; place-items: center; font-weight: 700; background: var(--surface); position: relative; z-index: 1; }
+.steps li:not(:last-child)::after { content: ""; position: absolute; left: 16px; top: 34px; bottom: 0; width: 2px; background: var(--line); }
+.steps .when { font-size: .82rem; color: var(--brand); font-weight: 700; }
+.steps .what { font-weight: 600; }
+.steps .how { color: var(--muted); font-size: .88rem; }
+
+/* Info */
+.info { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+.info h3 { font-size: 1.05rem; margin-bottom: 6px; }
+.info ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: .9rem; display: grid; gap: 4px; }
+.link { color: var(--brand); font-weight: 600; }
+
+/* Trust */
+.trust { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+.trust div { border-left: 3px solid var(--brand); padding-left: 12px; }
+.trust .big { font-family: var(--f-display); font-size: 1.6rem; line-height: 1.1; }
+.trust .small { color: var(--muted); font-size: .84rem; }
+
+/* Price card */
+.price { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; box-shadow: 0 10px 30px -18px rgba(20, 30, 35, .45); }
+.price .head { background: var(--brand); color: var(--brand-ink); padding: 16px 20px; display: grid; gap: 2px; }
+.price .head .eyebrow { color: color-mix(in srgb, var(--brand-ink) 80%, transparent); }
+.price .total { font-family: var(--f-display); font-size: 2.3rem; line-height: 1.05; }
+.price .vatnote { font-size: .82rem; opacity: .9; }
+.price .body { padding: 16px 20px 20px; display: grid; gap: 14px; }
+.lines { display: grid; gap: 8px; font-size: .9rem; }
+.line { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; }
+.line .q { color: var(--muted); font-size: .8rem; display: block; }
+.line.sum { border-top: 1px solid var(--line); padding-top: 8px; font-weight: 700; }
+.line.grand { font-size: 1.05rem; font-weight: 700; }
+.line.addonline, .pincl .addonline { color: var(--brand); }
+.pincl { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pincl li { display: grid; grid-template-columns: 18px minmax(0,1fr); column-gap: 8px; }
+.pincl li::before { content: "✓"; color: var(--ok); font-weight: 700; grid-row: span 2; }
+.pincl .q { color: var(--muted); font-size: .8rem; }
+.bap { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 14px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; color: var(--ink); text-decoration: none; }
+.bap:hover { border-color: var(--brand); }
+.bap .logo img { height: 44px; width: auto; }
+.bap b { display: block; }
+.bap .small { color: var(--muted); font-size: .84rem; }
+@media (max-width: 520px) { .bap { grid-template-columns: minmax(0,1fr); } }
+.stagebox { display: grid; gap: 10px; }
+.track { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.track span { border-radius: 6px; padding: 6px 8px; font-size: .78rem; font-weight: 700; background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+.track span.on { background: var(--soft); color: var(--brand); border-color: var(--brand); }
+.track span.done { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
+.why { font-size: .84rem; color: var(--muted); }
+.why b { color: var(--ink); }
+.stagepick::before { content: attr(aria-label); align-self: center; font-size: .72rem; color: var(--muted); padding: 0 8px; }
+.act .field { display: grid; gap: 6px; font-size: .9rem; }
+.act input[type="date"], .act select { border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; font: inherit; background: var(--bg); color: var(--ink); max-width: 100%; }
+.act .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.pay { background: var(--bg); border-radius: 8px; padding: 12px; display: grid; gap: 6px; font-size: .86rem; }
+.pay .line { font-size: .86rem; }
+.valid { font-size: .84rem; color: var(--muted); }
+.valid b { color: var(--ink); }
+.btn { display: block; width: 100%; border-radius: 8px; padding: 12px 14px; font-weight: 700; border: 1px solid transparent; text-align: center; }
+.btn.primary { background: var(--brand); color: var(--brand-ink); }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.promise { font-size: .82rem; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 12px; }
+
+/* Accept / change panel */
+.act { border: 2px solid var(--brand); }
+.act textarea { width: 100%; min-height: 90px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: inherit; background: var(--bg); color: var(--ink); resize: vertical; }
+.act label.chk { display: flex; gap: 10px; align-items: flex-start; font-size: .9rem; }
+.act label.chk input { margin-top: 4px; accent-color: var(--brand); }
+.msg { background: var(--bg); border-radius: 8px; padding: 12px; font-family: var(--f-mono); font-size: .82rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.done { background: var(--ok-soft); color: var(--ok); border-radius: 8px; padding: 12px; font-weight: 600; }
+
+footer { border-top: 1px solid var(--line); background: var(--surface); }
+footer .wrap { padding-block: 22px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; color: var(--muted); font-size: .85rem; }
+footer .sig { font-style: italic; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .route .truck { animation: drive 3.2s ease-in-out infinite alternate; }
+  @keyframes drive { from { transform: translateX(0); } to { transform: translateX(150px); } }
+}
+@media (max-width: 520px) {
+  .route { grid-template-columns: minmax(0,1fr); }
+  .route .to { text-align: left; }
+  .route .mid { justify-items: start; }
+  .panel { padding: 18px; }
+}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <span class="logo"><img id="logo" alt="Корект преместване" src="data:image/png;base64,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"></span>
+    <div class="top-right">
+      <span class="offer-no"><span data-t="offerNo"></span> <b class="mono" id="offerId"></b></span>
+      <div class="lang" role="group" aria-label="Език / Language">
+        <button type="button" id="lang-bg" data-lang="bg" aria-pressed="true">БГ</button>
+        <button type="button" id="lang-en" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+      <div class="lang stagepick" role="group" id="stagePick" hidden>
+        <button type="button" id="st-ind" data-stage="indicative" aria-pressed="true">1</button>
+        <button type="button" id="st-fix" data-stage="fixed" aria-pressed="false">2</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <p class="greet" id="greet"></p>
+    <div class="route">
+      <div><div class="city" id="fromCity"></div><div class="country" id="fromCountry"></div></div>
+      <div class="mid">
+        <svg viewBox="0 0 220 26" aria-hidden="true">
+          <line x1="4" y1="13" x2="216" y2="13" stroke="currentColor" stroke-width="2" stroke-dasharray="5 5" opacity=".55"/>
+          <circle cx="4" cy="13" r="4" fill="currentColor"/>
+          <circle cx="216" cy="13" r="4" fill="currentColor"/>
+          <g class="truck"><rect x="18" y="5" width="34" height="16" rx="2" fill="#c8191f"/><rect x="52" y="9" width="11" height="12" rx="2" fill="#c8191f"/><circle cx="26" cy="22" r="3" fill="currentColor"/><circle cx="56" cy="22" r="3" fill="currentColor"/></g>
+        </svg>
+        <span class="km mono" id="km"></span>
+      </div>
+      <div class="to"><div class="city" id="toCity"></div><div class="country" id="toCountry"></div></div>
+    </div>
+    <div class="chips" id="chips"></div>
+  </div>
+</section>
+
+<section class="cond" aria-labelledby="h-cond">
+  <div class="wrap">
+    <span class="eyebrow" id="h-cond" data-t="condEyebrow"></span>
+    <ul id="cond"></ul>
+  </div>
+</section>
+
+<main>
+  <div class="wrap">
+    <div class="col">
+
+      <section class="panel act" id="actPanel" hidden></section>
+
+      <section class="panel" aria-labelledby="h-details">
+        <header><span class="eyebrow" data-t="detailsEyebrow"></span><h2 id="h-details" data-t="detailsTitle"></h2></header>
+        <div class="facts" id="facts"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-inv" id="invPanel" hidden>
+        <header><span class="eyebrow" data-t="invEyebrow"></span><h2 id="h-inv" data-t="invTitle"></h2><p data-t="invLead"></p></header>
+        <div class="invwrap"><table class="inv" id="inv"></table></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-coord">
+        <header><span class="eyebrow" data-t="coordEyebrow"></span><h2 id="h-coord" data-t="coordTitle"></h2></header>
+        <div class="coord">
+          <div class="avatar" id="coordInit"></div>
+          <div>
+            <div class="name" id="coordName"></div>
+            <div class="s" id="coordRole" style="color:var(--muted);font-size:.88rem"></div>
+            <div class="contact-rows" id="coordContacts"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-incl">
+        <header><span class="eyebrow" data-t="inclEyebrow"></span><h2 id="h-incl" data-t="inclTitle"></h2></header>
+        <ul class="incl" id="incl"></ul>
+      </section>
+
+      <section class="panel" aria-labelledby="h-add">
+        <header><span class="eyebrow" data-t="addEyebrow"></span><h2 id="h-add" data-t="addTitle"></h2><p data-t="addLead"></p></header>
+        <div class="addons" id="addons"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-steps">
+        <header><span class="eyebrow" data-t="stepsEyebrow"></span><h2 id="h-steps" data-t="stepsTitle"></h2></header>
+        <ol class="steps" id="steps"></ol>
+      </section>
+
+      <section class="panel" aria-labelledby="h-info">
+        <header><span class="eyebrow" data-t="infoEyebrow"></span><h2 id="h-info" data-t="infoTitle"></h2></header>
+        <div class="info" id="info"></div>
+        <p><a class="link" href="https://www.korekt-bg.com/obshti-usloviya-za-premestvane" target="_blank" rel="noopener" data-t="terms"></a></p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-trust">
+        <header><span class="eyebrow" data-t="trustEyebrow"></span><h2 id="h-trust" data-t="trustTitle"></h2></header>
+        <div class="trust" id="trust"></div>
+        <a class="bap" href="https://bulgarian-movers.org/" target="_blank" rel="noopener">
+          <span class="logo"><img src="data:image/png;base64,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" alt="Българска асоциация за премествания"></span>
+          <span><b data-t="bapTitle"></b><span class="small" data-t="bapText"></span></span>
+        </a>
+      </section>
+    </div>
+
+    <aside class="price" aria-labelledby="h-price">
+      <div class="head">
+        <span class="eyebrow" id="h-price" data-t="priceEyebrow"></span>
+        <div class="total mono" id="grandTop"></div>
+        <span class="vatnote" id="vatNote"></span>
+      </div>
+      <div class="body">
+        <div class="stagebox" id="stageBox"></div>
+        <div class="lines" id="lines"></div>
+        <div class="pay"><span class="eyebrow" data-t="payEyebrow"></span><div id="pay" class="lines"></div></div>
+        <p class="valid" id="valid"></p>
+        <button type="button" class="btn primary" id="btnAccept" data-t="accept"></button>
+        <div class="btn-row">
+          <button type="button" class="btn ghost" id="btnChange" data-t="change"></button>
+          <button type="button" class="btn ghost" id="btnAsk" data-t="ask"></button>
+        </div>
+        <p class="promise" data-t="promise"></p>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Корект – Преместване ООД · <span data-t="since"></span> · член на БАП · 0700 1 4485</span>
+    <span class="sig" data-t="sig"></span>
+  </div>
+</footer>
+
+<script>
+/* ===================== ДАННИ НА ОФЕРТАТА =====================
+   Това е единственото място, което се сменя за всеки клиент.
+   Всички суми са в EUR БЕЗ ДДС. ДДС се смята автоматично.
+   ПРИМЕРНИ ДАННИ — не е реален клиент.                          */
+/*OFFER-START*/const OFFER = {
+  id: "INT-2026-0147",
+  example: true,
+  client: { bg: "г-жо Петрова", en: "Ms Petrova" },
+  issued: "2026-10-15",
+  validDays: 28,
+  vatRate: 0.20,
+  from: { city: { bg: "София", en: "Sofia" }, country: { bg: "България", en: "Bulgaria" },
+          addr: { bg: "жк Лозенец, 4 етаж, с асансьор", en: "Lozenets, 4th floor, lift available" } },
+  to:   { city: { bg: "Мюнхен", en: "Munich" }, country: { bg: "Германия", en: "Germany" },
+          addr: { bg: "Швабинг, 2 етаж, без асансьор", en: "Schwabing, 2nd floor, no lift" } },
+  km: 1530,
+  // Етап: "indicative" = индикативна цена, без фиксирани дати
+  //       "fixed"      = точна цена, транспортът е резервиран за датите по-долу
+  kind: "international",   // "international" или "domestic"
+  stage: "indicative",
+  inventory: [
+    { item: { bg: "Диван, тричленен", en: "Three-seat sofa" }, qty: 1, note: { bg: "опаковане във фолио", en: "wrapped in film" } },
+    { item: { bg: "Гардероб", en: "Wardrobe" }, qty: 2, note: { bg: "разглобяване и сглобяване", en: "disassembly and assembly" } },
+    { item: { bg: "Спалня с матрак", en: "Bed with mattress" }, qty: 1, note: { bg: "разглобяване", en: "disassembly" } },
+    { item: { bg: "Маса и 4 стола", en: "Table and 4 chairs" }, qty: 5, note: { bg: "", en: "" } },
+    { item: { bg: "Перална машина", en: "Washing machine" }, qty: 1, note: { bg: "без свързване", en: "not connected" } },
+    { item: { bg: "Кашони с лични вещи", en: "Boxes of personal items" }, qty: 30, note: { bg: "опаковани от нас", en: "packed by us" } }
+  ],
+  preferredPeriod: { bg: "втората половина на ноември 2026", en: "second half of November 2026" },
+  loadDate: "2026-11-18",        // попълва се при точна цена
+  deliveryWindow: { bg: "20–21 ноември 2026", en: "20–21 November 2026" },
+  volume: 18, weightKg: 1400,
+  service: { bg: "Споделен камион (групаж)", en: "Shared truck (part load)" },
+  vehicle: { bg: "Партньорски камион 20 м³", en: "Partner truck 20 m³" },
+  coordinator: { name: { bg: "Тодор Петков", en: "Todor Petkov" }, initials: "ТП",
+                 role: { bg: "Международни премествания, съосновател на Корект", en: "International moves, Korekt co-founder" },
+                 phone: "0888 883 237", phone2: "0700 1 4485", email: "",
+                 photo: "data:image/jpeg;base64,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" },  // ПРИМЕРНА снимка (Unsplash) — смени със снимка на Тодор (data:image/jpeg;base64,...) — празно = силует
+  // Условия на офертата — показват се веднага под заглавната част
+  conditions: [
+    { b: { bg: "Обаждане преди доставка", en: "Phone call before delivery" }, s: { bg: "Шофьорът Ви се обажда преди да пристигне на адреса в Мюнхен.", en: "The driver calls you before arriving at your Munich address." } },
+    { b: { bg: "Нужен е германски телефон", en: "German phone number required" }, s: { bg: "При доставката трябва да имате работещ германски номер, на който шофьорът да Ви намери.", en: "You need a working German phone number so the driver can reach you on delivery." } },
+    { b: { bg: "Само неопасен товар", en: "Non-hazardous goods only" }, s: { bg: "Офертата не важи за запалими, опасни или забранени за превоз вещи.", en: "The quote does not cover flammable, hazardous or restricted goods." } },
+    { b: { bg: "Срокът е приблизителен", en: "Transit time is approximate" }, s: { bg: "Датата на доставка се потвърждава с обаждане. Сроковете са в работни дни.", en: "The delivery date is confirmed by phone. Times are in working days." } },
+    { b: { bg: "Малък багаж? Изпратете го на пале", en: "Small load? Send it on a pallet" }, s: { bg: "Взимаме от адреса, палетизираме в наш склад (120 × 80 × 215 см, до 600 кг) и доставяме до тротоара, без внасяне. По-ниска цена, 5–6 работни дни.", en: "We collect, palletise at our warehouse (120 × 80 × 215 cm, up to 600 kg) and deliver kerbside, not carried inside. Lower price, 5–6 working days." } }
+  ],
+  lines: [
+    { bg: "Транспорт София → Мюнхен", en: "Transport Sofia → Munich", q: { bg: "споделен камион, 18 м³", en: "shared truck, 18 m³" }, amount: 1620 },
+    { bg: "Опаковане и товарене в София", en: "Packing and loading in Sofia", q: { bg: "екип от 3 работници", en: "crew of 3 movers" }, amount: 240 },
+    { bg: "Демонтаж и монтаж на мебели", en: "Furniture disassembly and assembly", q: { bg: "квалифициран майстор", en: "skilled fitter" }, amount: 88 },
+    { bg: "Разтоварване в Мюнхен, 2 етаж", en: "Unloading in Munich, 2nd floor", q: { bg: "екип на място", en: "local crew" }, amount: 290 },
+    { bg: "Опаковъчни материали", en: "Packing materials", q: { bg: "кашони, фолио, стреч", en: "boxes, wrap, stretch film" }, amount: 85 }
+  ],
+  addons: [
+    { id: "ad-storage", bg: "Складиране в София, 1 месец", en: "Storage in Sofia, 1 month", d: { bg: "охраняван склад в София", en: "secured warehouse in Sofia" }, amount: 144 },
+    { id: "ad-piano", bg: "Пиано или тежък предмет", en: "Piano or heavy item", d: { bg: "специални колани и колички, допълнителен човек", en: "special straps and dollies, extra mover" }, amount: 160 },
+    { id: "ad-boxes", bg: "Кашони доставени предварително", en: "Boxes delivered in advance", d: { bg: "20 кашона до адреса в София", en: "20 boxes to your Sofia address" }, amount: 45 },
+    { id: "ad-waste", bg: "Изхвърляне на ненужни вещи", en: "Disposal of unwanted items", d: { bg: "включително таксата за сметище", en: "landfill fee included" }, amount: 90 }
+  ],
+  // Схема на плащане: дял от общата сума с ДДС. Потвърди преди реално ползване.
+  payments: [
+    { bg: "Аванс при потвърждение", en: "Advance on confirmation", share: 0.3 },
+    { bg: "Остатък преди разтоварване", en: "Balance before unloading", share: 0.7 }
+  ]
+};/*OFFER-END*/
+
+/* ===================== ТЕКСТОВЕ ===================== */
+const T = {
+  bg: {
+    condEyebrow: "Условия на тази оферта",
+    bapTitle: "Член на Българската асоциация за премествания (БАП)",
+    bapText: "Асоциацията обединява фирми за премествания, които работят по общи стандарти за качество и отговорност. Вижте списъка с членовете →",
+    offerNo: "Оферта №", greet: n => `Здравейте, ${n}, ето Вашата оферта за международно преместване`,
+    example: "ПРИМЕР", volume: "Обем", load: "Товарене", delivery: "Доставка",
+    detailsEyebrow: "Задание", detailsTitle: "Какво местим и къде",
+    fFrom: "Товарене от", fTo: "Доставка до", fLoad: "Дата на товарене", fDel: "Очаквана доставка", fVol: "Обем и тегло", fSvc: "Вид услуга", fVeh: "Превозно средство", fDist: "Разстояние",
+    coordEyebrow: "Един човек от началото до края", coordTitle: "Вашият координатор",
+    phone: "Телефон", office: "Офис", email: "Имейл", copy: "Копирай", copied: "Копирано",
+    inclEyebrow: "В цената", inclTitle: "Какво е включено",
+    incl: [
+      ["Застраховка", "Годишна полица за щети по вещите по време на преместването"],
+      ["Опаковане и етикети", "Всеки кашон е надписан, за да знаете къде отива"],
+      ["Демонтаж и монтаж", "Разглобяваме в София и сглобяваме в новия дом"],
+      ["Приемо-предавателен протокол", "Описваме вещите при товарене и при разтоварване"],
+      ["Цената не се променя", "Ако всичко е по задание, сумата остава същата"],
+      ["Един координатор", "Тодор следи пратката и отговаря на въпросите Ви"]
+    ],
+    addEyebrow: "По избор", addTitle: "Допълнителни услуги", addLead: "Отбележете каквото Ви трябва. Крайната сума се обновява веднага.",
+    stepsEyebrow: "От потвърждението до ключа", stepsTitle: "Как протича преместването",
+    steps: [
+      ["Сега", "Индикативна цена", "Ориентир по обема и маршрута, преди да са ясни датите."],
+      ["Когато изберете дати", "Точна цена", "Резервираме транспорт за конкретните дати и фиксираме цената."],
+      ["При потвърждение", "Потвърждавате офертата", "Камионът е Ваш за датите. Изпращаме Ви фактура за аванса."],
+      ["Ден на товарене", "Опаковане и товарене в София", "Екипът опакова, разглобява мебелите и попълва протокола."],
+      ["2–3 дни", "Транспорт", "Камионът пътува по маршрута. Шофьорът Ви се обажда преди доставка."],
+      ["Ден на доставка", "Разтоварване и монтаж", "Внасяме, сглобяваме и подписваме протокола заедно."]
+    ],
+    infoEyebrow: "Преди да потвърдите", infoTitle: "Важна информация",
+    info: [
+      ["Доплаща се при", ["Работа в събота, неделя, празник или извън 08–18 ч. по Ваше желание", "Вещи и услуги извън заданието", "Достъп над 20 м от входа", "Паркинг и пътни такси на място"]],
+      ["Не е включено без писмена уговорка", ["Монтаж на техника и свързване на уреди", "Подови настилки и тавани без безопасен достъп", "Митническо оформяне извън ЕС"]],
+      ["Ограничения", ["Не превозваме пари, бижута, документи и лекарства", "Опасни и запалими вещества", "Растения и храни, които се развалят"]]
+    ],
+    terms: "Общи условия за преместване →",
+    trustEyebrow: "Защо Корект", trustTitle: "Местим от 1999 г.",
+    trust: [["от 1999", "двамата основатели и днес работят във фирмата"], ["4.9 ★", "393 отзива в Google за офиса в София"], ["ISO 9001", "плюс 14001 и 45001, ТЮФ НОРД"], ["ЕС", "Германия, Гърция, Австрия, Италия и още"]],
+    priceEyebrow: "Обща сума с ДДС", vatNote: (net, vat) => `${net} без ДДС + ${vat} ДДС 20%`,
+    subtotal: "Общо без ДДС", vat: "ДДС 20%", grand: "Общо с ДДС", priceIncl: "Цената включва",
+    payEyebrow: "Схема на плащане", valid: d => `Офертата важи до <b>${d}</b>.`,
+    accept: "Приемам офертата", change: "Искам промени", ask: "Имам въпрос",
+    promise: "Ще получите качествено обслужване на справедлива цена. Цената не се променя, ако всичко е по задание.",
+    since: "от 1999 г.", sig: "Коректността не е просто име, тя е наш стандарт.",
+    actAccept: "Потвърждение на офертата", actChange: "Какво да променим?", actAsk: "Вашият въпрос",
+    actAcceptLead: "Проверете сумата и потвърдете. Тодор ще се свърже с Вас в рамките на работния ден.",
+    actChangeLead: "Опишете какво искате да е различно. Ще Ви изпратим обновена оферта.",
+    actAskLead: "Напишете въпроса си. Ще Ви отговорим в рамките на работния ден.",
+    agree: "Запознат/а съм с общите условия за преместване.", send: "Изпрати", cancel: "Отказ",
+    placeholderChange: "Например: искаме товарене на 25 ноември; добавете още 3 м³ ...",
+    placeholderAsk: "Например: може ли да вземете и велосипед?",
+    sentAccept: "Благодарим! Потвърждението е записано. Тодор ще Ви се обади, за да уточни аванса.",
+    sentOther: "Благодарим! Получихме съобщението Ви.",
+    demoNote: "Пример: в тази версия съобщението не се изпраща. В реалната версия отива директно в ERP и при Тодор.",
+    msgAccept: "Приемам оферта", msgChange: "Искане за промени по оферта", msgAsk: "Въпрос по оферта",
+    selected: "Избрани допълнителни услуги", none: "няма",
+    stageInd: "Индикативна оферта", stageFix: "Точна оферта", period: "Период",
+    greetInd: n => `Здравейте, ${n}, ето Вашата индикативна оферта за международно преместване`,
+    tbd: "Предстои да се уточни", wished: p => `желан период: ${p}`,
+    priceInd: "Индикативна цена без ДДС", priceFix: "Точна цена без ДДС",
+    vatLine: v => `+ ДДС 20%: ${v} (ако е приложимо)`,
+    track1: "Индикативна цена", track2: "Точна цена с дата",
+    whyInd: "При международно преместване транспортът се резервира за конкретни дати. Затова тази цена е ориентир. Точната цена ще получите, щом изберем датите заедно.",
+    whyFix: d => `Цената е фиксирана за товарене на <b>${d}</b>. Транспортът е резервиран за тези дати. При смяна на датата цената се изчислява наново.`,
+    condInd: ["Цената е индикативна", "Точната цена зависи от датите, защото транспортът се резервира за конкретни дати."],
+    condFix: ["Цената е фиксирана за датите", "Транспортът е резервиран за посочените дати. При смяна на датата цената се изчислява наново."],
+    askDates: "Изберете дати за точна цена",
+    actDates: "Кога искате да се преместите?",
+    actDatesLead: "Посочете желаната дата за товарене. Тодор ще провери транспорта и ще Ви изпрати точна цена.",
+    fDate: "Желана дата за товарене", fFlex: "Колко гъвкави сте?", flex: ["Само тази дата", "± 2–3 дни", "± 1 седмица"], fNote: "Бележка (по желание)",
+    sentDates: "Благодарим! Тодор ще провери транспорта за тези дати и ще Ви изпрати точна цена.",
+    payAfter: "Схемата на плащане се определя с точната цена.",
+    payDefault: "По банка, с карта или в брой. Срокът за плащане се уточнява с координатора.",
+    invEyebrow: "Опис", invTitle: "Списък на багажа", invLead: "Цената е изчислена за тези вещи. Ако нещо липсва, натиснете „Искам промени“.",
+    fDate: "Дата на преместване", invItem: "Предмет", invQty: "Брой", invNote: "Бележка", invTotal: "Общо",
+    greetDom: n => n ? `Здравейте, ${n}, ето Вашата оферта за преместване` : "Здравейте, ето Вашата оферта за преместване",
+    priceDom: "Цена без ДДС",
+    whyDom: "Цената не се променя, ако всичко е по задание и по списъка на багажа.",
+    stepsDom: [
+      ["При потвърждение", "Потвърждавате офертата", "Записваме поръчката и Ви казваме номера ѝ."],
+      ["Преди преместването", "Безплатен оглед, ако е нужен", "Уточняваме достъпа, етажите и асансьора."],
+      ["В деня", "Опаковане и товарене", "Екипът опакова, разглобява мебелите и товари."],
+      ["В деня", "Транспорт и разтоварване", "Внасяме, сглобяваме и подписваме протокола заедно."]
+    ],
+    preview: "Преглед на етапа"
+  },
+  en: {
+    condEyebrow: "Conditions of this quote",
+    bapTitle: "Member of the Bulgarian Association of Movers (BAP)",
+    bapText: "The association brings together moving companies that work to shared standards of quality and responsibility. See the member list →",
+    offerNo: "Quote No.", greet: n => `Hello ${n}, here is your international moving quote`,
+    example: "EXAMPLE", volume: "Volume", load: "Loading", delivery: "Delivery",
+    detailsEyebrow: "Scope", detailsTitle: "What we move and where",
+    fFrom: "Loading from", fTo: "Delivery to", fLoad: "Loading date", fDel: "Expected delivery", fVol: "Volume and weight", fSvc: "Service type", fVeh: "Vehicle", fDist: "Distance",
+    coordEyebrow: "One person from start to finish", coordTitle: "Your moving coordinator",
+    phone: "Phone", office: "Office", email: "Email", copy: "Copy", copied: "Copied",
+    inclEyebrow: "In the price", inclTitle: "What is included",
+    incl: [
+      ["Insurance", "Annual policy covering damage to your belongings during the move"],
+      ["Packing and labels", "Every box is labelled so you know where it goes"],
+      ["Disassembly and assembly", "We take furniture apart in Sofia and put it back together"],
+      ["Handover report", "We record your items at loading and at unloading"],
+      ["Fixed price", "If the job matches the brief, the price stays the same"],
+      ["One coordinator", "Todor tracks your shipment and answers your questions"]
+    ],
+    addEyebrow: "Optional", addTitle: "Additional services", addLead: "Tick what you need. The final price updates straight away.",
+    stepsEyebrow: "From confirmation to keys", stepsTitle: "How your move works",
+    steps: [
+      ["Now", "Indicative price", "A guide price based on volume and route, before the dates are set."],
+      ["Once you choose dates", "Exact price", "We book transport for your dates and fix the price."],
+      ["On confirmation", "You confirm the quote", "The truck is booked for your dates. We send the advance invoice."],
+      ["Loading day", "Packing and loading in Sofia", "The crew packs, takes furniture apart and fills in the report."],
+      ["2–3 days", "Transport", "The truck travels the route. The driver calls you before delivery."],
+      ["Delivery day", "Unloading and assembly", "We carry in, assemble and sign the report together."]
+    ],
+    infoEyebrow: "Before you confirm", infoTitle: "Important information",
+    info: [
+      ["Extra charges apply for", ["Work on weekends, holidays or outside 08:00–18:00 at your request", "Items or services outside the brief", "Access more than 20 m from the entrance", "Parking and road fees on site"]],
+      ["Not included unless agreed in writing", ["Installing and connecting appliances", "Flooring, or ceilings without safe access", "Customs clearance outside the EU"]],
+      ["Restrictions", ["We do not carry cash, jewellery, documents or medicines", "Hazardous or flammable goods", "Plants and perishable food"]]
+    ],
+    terms: "Moving terms and conditions (in Bulgarian) →",
+    trustEyebrow: "Why Korekt", trustTitle: "Moving people since 1999",
+    trust: [["since 1999", "both founders still work in the company"], ["4.9 ★", "393 Google reviews for our Sofia office"], ["ISO 9001", "plus 14001 and 45001, TÜV NORD"], ["EU", "Germany, Greece, Austria, Italy and more"]],
+    priceEyebrow: "Total incl. VAT", vatNote: (net, vat) => `${net} excl. VAT + ${vat} VAT 20%`,
+    subtotal: "Total excl. VAT", vat: "VAT 20%", grand: "Total incl. VAT", priceIncl: "The price includes",
+    payEyebrow: "Payment schedule", valid: d => `This quote is valid until <b>${d}</b>.`,
+    accept: "Accept the quote", change: "Request changes", ask: "Ask a question",
+    promise: "Quality service at a fair price. The price does not change if the job matches the brief.",
+    since: "since 1999", sig: "Korekt is not just a name. It is our standard.",
+    actAccept: "Confirm the quote", actChange: "What should we change?", actAsk: "Your question",
+    actAcceptLead: "Check the total and confirm. Todor will contact you within the working day.",
+    actChangeLead: "Tell us what you would like to be different. We will send an updated quote.",
+    actAskLead: "Write your question. We will reply within the working day.",
+    agree: "I have read the moving terms and conditions.", send: "Send", cancel: "Cancel",
+    placeholderChange: "For example: we'd like loading on 25 November; add 3 m³ more ...",
+    placeholderAsk: "For example: can you also take a bicycle?",
+    sentAccept: "Thank you! Your confirmation is recorded. Todor will call you about the advance.",
+    sentOther: "Thank you! We received your message.",
+    demoNote: "Example: this version does not send anything. In the live version it goes straight to the ERP and to Todor.",
+    msgAccept: "I accept quote", msgChange: "Change request for quote", msgAsk: "Question about quote",
+    selected: "Selected additional services", none: "none",
+    stageInd: "Indicative quote", stageFix: "Exact quote", period: "Period",
+    greetInd: n => `Hello ${n}, here is your indicative international moving quote`,
+    tbd: "To be agreed", wished: p => `preferred period: ${p}`,
+    priceInd: "Indicative price excl. VAT", priceFix: "Exact price excl. VAT",
+    vatLine: v => `+ VAT 20%: ${v} (if applicable)`,
+    track1: "Indicative price", track2: "Exact price with date",
+    whyInd: "For international moves, transport is booked for specific dates. That is why this price is a guide. You will get the exact price as soon as we agree the dates.",
+    whyFix: d => `The price is fixed for loading on <b>${d}</b>. Transport is booked for these dates. If the date changes, the price is recalculated.`,
+    condInd: ["This price is indicative", "The exact price depends on the dates, because transport is booked for specific dates."],
+    condFix: ["The price is fixed for these dates", "Transport is booked for the dates shown. If the date changes, the price is recalculated."],
+    askDates: "Choose dates for an exact price",
+    actDates: "When would you like to move?",
+    actDatesLead: "Give us your preferred loading date. Todor will check transport and send you the exact price.",
+    fDate: "Preferred loading date", fFlex: "How flexible are you?", flex: ["This date only", "± 2–3 days", "± 1 week"], fNote: "Note (optional)",
+    sentDates: "Thank you! Todor will check transport for these dates and send you the exact price.",
+    payAfter: "The payment schedule is set with the exact price.",
+    payDefault: "By bank transfer, card or cash. The payment date is agreed with your coordinator.",
+    invEyebrow: "Inventory", invTitle: "List of items", invLead: "The price is calculated for these items. If something is missing, press “Request changes”.",
+    fDate: "Moving date", invItem: "Item", invQty: "Qty", invNote: "Note", invTotal: "Total",
+    greetDom: n => n ? `Hello ${n}, here is your moving quote` : "Hello, here is your moving quote",
+    priceDom: "Price excl. VAT",
+    whyDom: "The price does not change if the job matches the brief and the list of items.",
+    stepsDom: [
+      ["On confirmation", "You confirm the quote", "We record the order and give you its number."],
+      ["Before the move", "Free survey if needed", "We check access, floors and the lift."],
+      ["On the day", "Packing and loading", "The crew packs, takes furniture apart and loads."],
+      ["On the day", "Transport and unloading", "We carry in, assemble and sign the report together."]
+    ],
+    preview: "Preview stage"
+  }
+};
+
+/* ===================== ЛОГИКА ===================== */
+let lang = "bg";
+try { lang = localStorage.getItem("korekt-lang") || "bg"; } catch (e) {}
+const picked = new Set();
+const $ = id => document.getElementById(id);
+const L = v => (v && typeof v === "object" && "bg" in v) ? v[lang] : v;
+const eur = n => new Intl.NumberFormat(lang === "bg" ? "bg-BG" : "en-GB", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
+const date = s => new Date(s + "T12:00:00").toLocaleDateString(lang === "bg" ? "bg-BG" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+const isIntl = () => (OFFER.kind || "international") === "international";
+const isInd = () => isIntl() && OFFER.stage === "indicative";
+function renderInventory() {
+  const t = T[lang], inv = OFFER.inventory || [];
+  $("invPanel").hidden = !inv.length;
+  if (!inv.length) return;
+  const total = inv.reduce((a, r) => a + (+r.qty || 0), 0);
+  $("inv").innerHTML = `<thead><tr><th>${t.invItem}</th><th class="n">${t.invQty}</th><th>${t.invNote}</th></tr></thead><tbody>` +
+    inv.map(r => `<tr><td>${esc(L(r.item))}</td><td class="n mono">${esc(r.qty)}</td><td class="note">${esc(L(r.note))}</td></tr>`).join("") +
+    `</tbody><tfoot><tr><td>${t.invTotal}</td><td class="n mono">${total}</td><td></td></tr></tfoot>`;
+}
+function totals() {
+  const base = OFFER.lines.reduce((a, l) => a + l.amount, 0);
+  const extra = OFFER.addons.filter(a => picked.has(a.id)).reduce((a, l) => a + l.amount, 0);
+  const net = Math.round((base + extra) * 100) / 100;
+  const vat = Math.round(net * OFFER.vatRate * 100) / 100;
+  return { net, vat, gross: Math.round((net + vat) * 100) / 100 };
+}
+
+function renderPrice() {
+  const t = T[lang], s = totals(), ind = isInd(), intl = isIntl();
+  $("h-price").textContent = !intl ? t.priceDom : ind ? t.priceInd : t.priceFix;
+  $("grandTop").textContent = (ind ? "≈ " : "") + eur(s.net);
+  $("vatNote").textContent = t.vatLine(eur(s.vat));
+  $("stageBox").innerHTML = !intl ? `<p class="why">${t.whyDom}</p>` : `<div class="track"><span class="${ind ? "on" : "done"}">${ind ? "1" : "✓"} · ${t.track1}</span><span class="${ind ? "" : "on"}">2 · ${t.track2}</span></div>` +
+    `<p class="why">${ind ? t.whyInd : t.whyFix(date(OFFER.loadDate))}</p>`;
+  $("btnAccept").textContent = ind ? t.askDates : t.accept;
+  $("pay").parentElement.querySelector(".eyebrow").hidden = false;
+  // Само крайна цена: показваме какво включва, без суми по редове
+  const items = OFFER.lines.map(l => `<li>${esc(l[lang])}<span class="q">${esc(L(l.q))}</span></li>`);
+  OFFER.addons.filter(a => picked.has(a.id)).forEach(a => items.push(`<li class="addonline">${esc(a[lang])}</li>`));
+  $("lines").innerHTML = `<span class="eyebrow">${t.priceIncl}</span><ul class="pincl">${items.join("")}</ul>`;
+  if (ind) { $("pay").innerHTML = `<span>${t.payAfter}</span>`; return; }
+  if (!OFFER.payments.length) { $("pay").innerHTML = `<span>${t.payDefault}</span>`; return; }
+  let left = s.gross;
+  $("pay").innerHTML = OFFER.payments.map((p, i) => {
+    const amt = i === OFFER.payments.length - 1 ? left : Math.round(s.gross * p.share * 100) / 100;
+    left = Math.round((left - amt) * 100) / 100;
+    return `<div class="line"><span>${esc(p[lang])} · ${Math.round(p.share * 100)}%</span><span class="mono">${eur(amt)}</span></div>`;
+  }).join("");
+}
+
+function render() {
+  const langs = OFFER.langs || ["bg", "en"];
+  if (!langs.includes(lang)) lang = langs[0];
+  document.querySelector(".lang:not(.stagepick)").hidden = langs.length < 2;
+  const t = T[lang], o = OFFER;
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-t]").forEach(el => { const v = t[el.dataset.t]; if (typeof v === "string") el.textContent = v; });
+  document.querySelectorAll(".lang button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
+  $("offerId").textContent = o.id;
+  const ind = isInd(), intl = isIntl();
+  $("greet").textContent = !intl ? t.greetDom(L(o.client)) : ind ? t.greetInd(L(o.client)) : t.greet(L(o.client));
+  $("stagePick").hidden = !o.example || !intl;
+  $("stagePick").setAttribute("aria-label", t.preview);
+  document.querySelectorAll("[data-stage]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.stage === o.stage)));
+  $("fromCity").textContent = L(o.from.city); $("fromCountry").textContent = L(o.from.country);
+  $("toCity").textContent = L(o.to.city); $("toCountry").textContent = L(o.to.country);
+  $("km").textContent = o.km ? `≈ ${o.km.toLocaleString(lang === "bg" ? "bg-BG" : "en-GB")} km` : L(o.service);
+  $("chips").innerHTML = (o.example ? `<span class="chip example">${t.example}</span>` : "") +
+    (intl ? `<span class="chip"><b>${ind ? t.stageInd : t.stageFix}</b></span>` : "") +
+    (ind
+      ? `<span class="chip">${t.period}: <b>${esc(L(o.preferredPeriod))}</b></span>`
+      : (o.loadDate ? `<span class="chip">${t.load}: <b>${date(o.loadDate)}</b></span>` : "") + (L(o.deliveryWindow) ? `<span class="chip">${t.delivery}: <b>${esc(L(o.deliveryWindow))}</b></span>` : "")) +
+    (o.volume ? `<span class="chip">${t.volume}: <b>${o.volume} m³${o.weightKg ? " / " + o.weightKg + " kg" : ""}</b></span>` : "") +
+    `<span class="chip">${esc(L(o.service))}</span>`;
+  const facts = [
+    [t.fFrom, `${L(o.from.city)}, ${L(o.from.country)}`, L(o.from.addr)],
+    [t.fTo, `${L(o.to.city)}, ${L(o.to.country)}`, L(o.to.addr)],
+    [intl ? t.fLoad : t.fDate, ind || !o.loadDate ? t.tbd : date(o.loadDate), ind ? t.wished(L(o.preferredPeriod)) : ""],
+    [t.fDel, ind ? t.tbd : L(o.deliveryWindow), ""],
+    [t.fVol, o.volume ? `${o.volume} m³${o.weightKg ? " · " + o.weightKg + " kg" : ""}` : "", ""],
+    [t.fSvc, L(o.service), L(o.vehicle)],
+    [t.fDist, o.km ? `≈ ${o.km} km` : "", ""]
+  ].filter(f => f[1]);
+  $("facts").innerHTML = facts.map(([k, v, s]) => `<div class="fact"><span class="eyebrow">${k}</span><span class="v">${esc(v)}</span>${s ? `<span class="s">${esc(s)}</span>` : ""}</div>`).join("");
+  const c = o.coordinator;
+  const sc = ind ? t.condInd : t.condFix;
+  $("cond").innerHTML = (intl ? `<li><span class="ic">€</span><div><b>${sc[0]}</b><span class="s">${sc[1]}</span></div></li>` : "") + o.conditions.map(x => `<li><span class="ic">!</span><div><b>${esc(L(x.b))}</b><span class="s">${esc(L(x.s))}</span></div></li>`).join("");
+  $("coordInit").innerHTML = c.photo
+    ? `<img src="${esc(c.photo)}" alt="${esc(L(c.name))}">`
+    : `<svg viewBox="0 0 56 56" role="img" aria-label="${esc(L(c.name))}"><rect width="56" height="56" fill="#cfd8dc"/><circle cx="28" cy="22" r="10" fill="#90a4ae"/><path d="M8 56c2-12 10-18 20-18s18 6 20 18z" fill="#90a4ae"/></svg>`;
+$("coordName").textContent = L(c.name); $("coordRole").textContent = L(c.role);
+  const contacts = [[t.phone, c.phone], [t.office, c.phone2], [t.email, c.email]].filter(x => x[1]);
+  $("coordContacts").innerHTML = contacts.map(([k, v], i) => `<div class="contact-row"><span class="lbl">${k}</span><span class="mono" id="ct-${i}">${esc(v)}</span><button type="button" class="copy" data-copy="${esc(v)}">${t.copy}</button></div>`).join("");
+  $("incl").innerHTML = t.incl.map(([b, s]) => `<li><span class="tick">✓</span><div><b>${b}</b><span>${s}</span></div></li>`).join("");
+  $("addons").innerHTML = o.addons.map(a => `<label class="addon" for="${a.id}"><input type="checkbox" id="${a.id}" ${picked.has(a.id) ? "checked" : ""}><span><span class="t">${esc(a[lang])}</span><br><span class="d">${esc(L(a.d))}</span></span></label>`).join("");
+  renderInventory();
+  $("steps").innerHTML = (intl ? t.steps : t.stepsDom).map(([w, h, d]) => `<li><div><div class="when">${w}</div><div class="what">${h}</div><div class="how">${d}</div></div></li>`).join("");
+  $("info").innerHTML = t.info.map(([h, items]) => `<div><h3>${h}</h3><ul>${items.map(i => `<li>${i}</li>`).join("")}</ul></div>`).join("");
+  $("trust").innerHTML = t.trust.map(([b, s]) => `<div><div class="big">${b}</div><div class="small">${s}</div></div>`).join("");
+  const until = new Date(o.issued + "T12:00:00"); until.setDate(until.getDate() + o.validDays);
+  $("valid").innerHTML = t.valid(date(until.toISOString().slice(0, 10)));
+  renderPrice();
+  if (!$("actPanel").hidden) openAct(currentAct, true);
+}
+
+let currentAct = null;
+function openAct(kind, keep) {
+  const t = T[lang], p = $("actPanel"), s = totals();
+  currentAct = kind;
+  const title = { accept: t.actAccept, change: t.actChange, ask: t.actAsk, dates: t.actDates }[kind];
+  const lead = { accept: t.actAcceptLead, change: t.actChangeLead, ask: t.actAskLead, dates: t.actDatesLead }[kind];
+  if (kind === "dates") {
+    const pd = keep && $("act-date") ? $("act-date").value : "", pf = keep && $("act-flex") ? $("act-flex").value : "1", pn = keep && $("act-note") ? $("act-note").value : "";
+    p.innerHTML = `<header><span class="eyebrow">${OFFER.id}</span><h2>${title}</h2><p>${lead}</p></header>` +
+      `<div class="fields"><label class="field" for="act-date">${t.fDate}<input type="date" id="act-date" min="${OFFER.issued}" value="${esc(pd)}"></label>` +
+      `<label class="field" for="act-flex">${t.fFlex}<select id="act-flex">${t.flex.map((f, i) => `<option value="${i}" ${String(i) === pf ? "selected" : ""}>${f}</option>`).join("")}</select></label></div>` +
+      `<label class="field" for="act-note">${t.fNote}<textarea id="act-note">${esc(pn)}</textarea></label>` +
+      `<div class="btn-row"><button type="button" class="btn primary" id="act-send">${t.send}</button><button type="button" class="btn ghost" id="act-cancel">${t.cancel}</button></div><div id="act-result"></div>`;
+    p.hidden = false;
+    if (!keep) p.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    $("act-cancel").onclick = () => { p.hidden = true; currentAct = null; };
+    $("act-send").onclick = () => {
+      if (!$("act-date").value) { $("act-date").focus(); return; }
+      $("act-result").innerHTML = `<div class="done">${t.sentDates}</div>` + (OFFER.example ? `<p style="color:var(--muted);font-size:.84rem;margin-top:8px">${t.demoNote}</p>` : "");
+      $("act-send").disabled = true;
+    };
+    return;
+  }
+  const prev = keep && $("act-text") ? $("act-text").value : "";
+  const addons = OFFER.addons.filter(a => picked.has(a.id)).map(a => a[lang]).join(", ") || t.none;
+  p.innerHTML = `<header><span class="eyebrow">${OFFER.id}</span><h2>${title}</h2><p>${lead}</p></header>` +
+    (kind === "accept"
+      ? `<div class="msg">${esc(t.grand)}: ${eur(s.gross)}\n${esc(t.selected)}: ${esc(addons)}</div><label class="chk" for="act-agree"><input type="checkbox" id="act-agree"> <span>${t.agree} <a class="link" href="https://www.korekt-bg.com/obshti-usloviya-za-premestvane" target="_blank" rel="noopener">→</a></span></label>`
+      : `<textarea id="act-text" placeholder="${esc(kind === "change" ? t.placeholderChange : t.placeholderAsk)}">${esc(prev)}</textarea>`) +
+    `<div class="btn-row"><button type="button" class="btn primary" id="act-send">${t.send}</button><button type="button" class="btn ghost" id="act-cancel">${t.cancel}</button></div><div id="act-result"></div>`;
+  p.hidden = false;
+  if (!keep) p.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  $("act-cancel").onclick = () => { p.hidden = true; currentAct = null; };
+  $("act-send").onclick = () => {
+    if (kind === "accept" && !$("act-agree").checked) { $("act-agree").focus(); $("act-agree").closest("label").style.color = "var(--brand)"; return; }
+    if (kind !== "accept" && !$("act-text").value.trim()) { $("act-text").focus(); return; }
+    $("act-result").innerHTML = `<div class="done">${kind === "accept" ? t.sentAccept : t.sentOther}</div>` + (OFFER.example ? `<p style="color:var(--muted);font-size:.84rem;margin-top:8px">${t.demoNote}</p>` : "");
+    $("act-send").disabled = true;
+  };
+}
+
+document.addEventListener("change", e => {
+  if (e.target.matches(".addon input")) { e.target.checked ? picked.add(e.target.id) : picked.delete(e.target.id); renderPrice(); if (currentAct === "accept") openAct("accept", true); }
+});
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-lang]");
+  if (b) { lang = b.dataset.lang; try { localStorage.setItem("korekt-lang", lang); } catch (err) {} render(); return; }
+  const st = e.target.closest("[data-stage]");
+  if (st) { OFFER.stage = st.dataset.stage; $("actPanel").hidden = true; currentAct = null; render(); return; }
+  const c = e.target.closest("[data-copy]");
+  if (c) {
+    const done = () => { c.textContent = T[lang].copied; setTimeout(() => c.textContent = T[lang].copy, 1400); };
+    navigator.clipboard?.writeText(c.dataset.copy).then(done).catch(() => { const r = document.createRange(); r.selectNodeContents(c.previousElementSibling); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); });
+  }
+});
+$("btnAccept").onclick = () => openAct(isInd() ? "dates" : "accept");
+$("btnChange").onclick = () => openAct("change");
+$("btnAsk").onclick = () => openAct("ask");
+// Преглед в админ панела: панелът праща нови данни, без да презарежда страницата
+if (window.KOREKT_PREVIEW) {
+  window.addEventListener("message", e => {
+    const d = e.data;
+    if (!d || d.type !== "korekt-offer" || !d.offer) return;
+    Object.keys(OFFER).forEach(k => delete OFFER[k]);
+    Object.assign(OFFER, d.offer);
+    picked.clear(); $("actPanel").hidden = true; currentAct = null;
+    render();
+  });
+  parent.postMessage({ type: "korekt-ready" }, "*");
+}
+render();
+</script>
