@@ -2,7 +2,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Open+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400&display=swap">
 <style>
 /* Layout: brand header strip, route hero, then two columns — details left, sticky price card right; one column on phones. */
 :root {
@@ -18,9 +18,9 @@
   --soft: #fbecec;
   --ok: #1e7a46;
   --ok-soft: #e5f3ea;
-  --f-display: "Oswald", "Arial Narrow", "Roboto Condensed", sans-serif;
-  --f-body: "Open Sans", "Segoe UI", Arial, sans-serif;
-  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --f-display: "Times New Roman", Tinos, Times, serif;
+  --f-body: "Times New Roman", Tinos, Times, serif;
+  --f-mono: "Times New Roman", Tinos, Times, serif;
   --r: 10px;
 }
 @media (prefers-color-scheme: dark) {
@@ -212,8 +212,8 @@ footer .wrap { padding-block: 22px; display: flex; flex-wrap: wrap; justify-cont
 footer .sig { font-style: italic; }
 
 @media (prefers-reduced-motion: no-preference) {
-  .route .truck { animation: drive 3.2s ease-in-out infinite alternate; }
-  @keyframes drive { from { transform: translateX(0); } to { transform: translateX(150px); } }
+  .route .truck { transform-origin: 40.5px 13px; animation: drive 8s ease-in-out infinite; } /* стига до края, обръща се и се връща с лице напред */
+  @keyframes drive { 0% { transform: translateX(0) scaleX(1); } 44% { transform: translateX(150px) scaleX(1); } 50% { transform: translateX(150px) scaleX(-1); } 94% { transform: translateX(0) scaleX(-1); } 100% { transform: translateX(0) scaleX(1); } }
 }
 @media (max-width: 520px) {
   .route { grid-template-columns: minmax(0,1fr); }
