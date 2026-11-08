@@ -1670,11 +1670,10 @@ function clearDraftLS(email) {
 
 // --- Достъп до вътрешните панели (Записи / Параметри / Марж) ---------------
 // Истински вход през Supabase Auth (имейл + парола), не UI парола в кода.
-// ВАЖНО — за да заработи реално (не само визуално):
-//   1) в Supabase таблото трябва да съществуват потребители (Authentication → Users)
-//   2) RLS политиките на "calculations" трябва да ограничат SELECT само до
-//      authenticated роля — иначе всеки все още чете директно през anon ключа,
-//      независимо от този login екран. Виж README за точния SQL.
+// RLS на "calculations" (от 08.11.2026, supabase/migrations/20261108_lock_calculations.sql):
+// четене/запис/триене само за authenticated — затова ВСЕКИ fetch към calculations трябва
+// да носи authHeaders(session, ...), не supabaseHeaders(anonKey). Гласовият асистент
+// пише през RPC save_voice_calc (само id "calc:voice-...").
 const AUTH_SESSION_KEY = "korekt:authSession";
 
 function loadAuthSession() {
@@ -2025,8 +2024,7 @@ async function pushCalcToSupabase(record, url, key, isUpdate, touchStatus = true
 }
 
 // изтегля всички калкулации от Supabase (видими за всички устройства) — праща логнатата
-// сесия (ако има), за да важи RLS "authenticated"; без сесия разчита на anon (само докато
-// не се сменят политиките — виж бележката при AUTH_SESSION_KEY)
+// сесия; от 08.11.2026 RLS пуска calculations само на authenticated, anon вижда празно
 async function fetchCalcsFromSupabase(url, key, session) {
   if (!url || !key) return [];
   try {
@@ -3736,6 +3734,10 @@ export default function KorektCalculator() {
 
   // --- вътрешни панели зад истински вход (Supabase Auth), не UI парола ---
   const [authSession, setAuthSession] = useState(() => loadAuthSession());
+  // текущата сесия за отложените записи (автосейв таймер, pagehide) — closure-ите им
+  // иначе държат стар token. Таблицата calculations е достъпна само за authenticated (RLS)
+  const authRef = useRef(authSession);
+  authRef.current = authSession;
   // името идва от профила на акаунта (authSession.displayName); при вход/освежаване на
   // сесията се синхронизира тук автоматично — колегата не го пише повторно на ново устройство
   useEffect(() => {
@@ -4075,7 +4077,7 @@ export default function KorektCalculator() {
       const wasFirstPush = !pushedRef.current;
       // след първия запис рутинният автосейв вече не пипа status — иначе "потвърдена",
       // сложена от оператор през "Записи", би паднала обратно при следваща промяна тук
-      pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey, pushedRef.current, wasFirstPush).then((res) => {
+      pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey, pushedRef.current, wasFirstPush, authRef.current).then((res) => {
         // номерът от базата е авторитетният — синхронизираме показания номер с него,
         // за да не се разминава картата с цената от таблицата в "Записи"
         if (wasFirstPush && res?.ok && res.calcNumber != null && res.calcNumber !== recordNumber.current) {
@@ -4105,7 +4107,7 @@ export default function KorektCalculator() {
             {
               method: isUpdate ? "PATCH" : "POST",
               keepalive: true,
-              headers: supabaseHeaders(p.supabaseKey, {
+              headers: authHeaders(authRef.current, p.supabaseKey, {
                 "Content-Type": "application/json",
                 Prefer: isUpdate ? "return=minimal" : "resolution=merge-duplicates,return=minimal",
               }),
@@ -4150,7 +4152,7 @@ export default function KorektCalculator() {
     rec.status = "заявка";
     setSaveState("saving");
     const wasFirstPush = !pushedRef.current;
-    pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey, pushedRef.current).then((res) => {
+    pushCalcToSupabase(rec, p.supabaseUrl, p.supabaseKey, pushedRef.current, true, authRef.current).then((res) => {
       if (wasFirstPush && res?.ok && res.calcNumber != null && res.calcNumber !== recordNumber.current) {
         recordNumber.current = res.calcNumber;
         setCalcNumberState(res.calcNumber);
