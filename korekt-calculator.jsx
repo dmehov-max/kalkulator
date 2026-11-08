@@ -2123,8 +2123,33 @@ function toCSV(rows) {
 /* ===== END ENGINE (по-горе всичко е чиста логика — тества се) ===== */
 
 /* -------- UI helpers -------- */
-const ink = "#15263f";
-const accent = "#e8952f";
+// визия като ERP-то (erp.korekt-bg.com): бяла горна лента, синьо за активното, червеното лого
+const ink = "#1f2a44";
+const accent = "#1b66c9";
+const pageBg = "linear-gradient(135deg, #fff4f6 0%, #f6f7fb 30%, #f4f6fb 100%)";
+const brandGradient = "linear-gradient(90deg, #ef4b6c 0%, #c25bd6 55%, #6d7cf0 100%)";
+const uiFont = "'Fira Sans', system-ui, sans-serif";
+
+// иконки в стила на ERP менюто (тънки линии, 24×24)
+const NAV_ICON_PATHS = {
+  home: "M3 10.5 12 3l9 7.5M5 9v11h5v-6h4v6h5V9",
+  plus: "M12 5v14M5 12h14",
+  list: "M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01",
+  lock: "M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3",
+  file: "M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h6",
+  mic: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3",
+  gear: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
+  users: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8",
+  logout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
+};
+function NavIcon({ name, size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={NAV_ICON_PATHS[name] || ""} />
+    </svg>
+  );
+}
 const fmtTime = (h) => (h >= 1 ? `${h.toFixed(1)} ч` : `${Math.round(h * 60)} мин`);
 
 function Pill({ active, children, onClick }) {
@@ -2144,7 +2169,7 @@ function OptionToggle({ label, cnt, value, onChange, detail }) {
     <span className="flex items-center gap-1.5">
       <input type="checkbox" checked={on}
         onChange={() => onChange(on ? 0 : cnt)}
-        className="w-4 h-4 accent-orange-500" />
+        className="w-4 h-4 accent-blue-600" />
       <span className="text-xs" style={{ color: on ? accent : "#94a3b8" }}>{label}</span>
       {on && cnt > 1 && (
         <span className="flex items-center gap-1">
@@ -3554,7 +3579,7 @@ function VoicePanel({ session, p }) {
         <div className="mt-4 space-y-2 max-h-80 overflow-y-auto">
           {lines.map((l) => (
             <div key={l.id} className={`text-sm rounded-xl px-3 py-2 ${l.who === "Вие" ? "bg-slate-100 ml-8" : "mr-8"}`}
-              style={l.who === "Вие" ? { color: ink } : { background: "#fff7ed", color: ink }}>
+              style={l.who === "Вие" ? { color: ink } : { background: "#eef4fc", color: ink }}>
               <span className="text-[11px] font-semibold text-slate-400 block">{l.who}</span>{l.text}
             </div>
           ))}
@@ -4079,9 +4104,9 @@ export default function KorektCalculator() {
   // сесия на това устройство, показваме екран за нова парола преди каквото и да е друго
   if (recoveryToken) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center p-4" style={{ background: "#f6f7f9", fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <div className="min-h-screen w-full flex items-center justify-center p-4" style={{ background: pageBg, fontFamily: uiFont }}>
         <form onSubmit={doSetNewPassword} className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-slate-200">
-          <div className="text-2xl font-extrabold tracking-tight mb-1" style={{ color: ink }}>КОРЕКТ<span style={{ color: accent }}>.</span></div>
+          <img src="logo-korekt.png" alt="Корект — преместване на дома и бизнеса" className="mb-3" style={{ height: 40, width: "auto" }} /><div style={{ height: 3, background: brandGradient, borderRadius: 2 }} className="mb-4" />
           {newPwDone ? (
             <>
               <div className="text-sm font-semibold mb-1 mt-4" style={{ color: ink }}>✅ Паролата е сменена</div>
@@ -4109,10 +4134,10 @@ export default function KorektCalculator() {
 
   if (!authSession) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center p-4" style={{ background: "#f6f7f9", fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <div className="min-h-screen w-full flex items-center justify-center p-4" style={{ background: pageBg, fontFamily: uiFont }}>
         <form onSubmit={loginMode === "signup" ? doSignup : loginMode === "forgot" ? doForgotPassword : doLogin}
           className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-slate-200">
-          <div className="text-2xl font-extrabold tracking-tight mb-1" style={{ color: ink }}>КОРЕКТ<span style={{ color: accent }}>.</span></div>
+          <img src="logo-korekt.png" alt="Корект — преместване на дома и бизнеса" className="mb-3" style={{ height: 40, width: "auto" }} /><div style={{ height: 3, background: brandGradient, borderRadius: 2 }} className="mb-4" />
           <div className="text-xs text-slate-500 mb-5">Калкулатор за приблизителна цена — само за екипа</div>
           {signupDone ? (
             <>
@@ -4178,53 +4203,65 @@ export default function KorektCalculator() {
   // иначе е монтиран под панела и се вижда едновременно с него (объркващо, виж чернова + цена)
   const anyPanelOpen = showLog || showSettings || showUsers || showProfile || showOffers || showVoice;
 
+  // горното меню (визия като ERP-то): един раздел наведнъж — отварянето на един затваря другите
+  const panels = { log: [showLog, setShowLog], offers: [showOffers, setShowOffers], voice: [showVoice, setShowVoice],
+    settings: [showSettings, setShowSettings], users: [showUsers, setShowUsers], profile: [showProfile, setShowProfile] };
+  const closePanels = () => Object.values(panels).forEach(([, set]) => set(false));
+  const openPanel = (name) => {
+    const wasOpen = panels[name][0];
+    closePanels();
+    if (!wasOpen) panels[name][1](true);
+  };
+  const navItems = [
+    { key: "home", icon: "home", label: "Калкулатор", active: !anyPanelOpen, onClick: closePanels },
+    { key: "new", icon: "plus", label: "Нова калкулация", onClick: () => { closePanels(); startNewCalc(); }, title: "Започни отделна калкулация с нов номер, без да пипаш текущата" },
+    { key: "log", icon: adminUnlocked ? "list" : "lock", label: "Записи", active: showLog, onClick: () => guardAdmin(() => openPanel("log")) },
+    { key: "offers", icon: "file", label: "Оферти", active: showOffers, onClick: () => guardAdmin(() => openPanel("offers")) },
+    { key: "voice", icon: "mic", label: "Разговор", active: showVoice, onClick: () => guardAdmin(() => openPanel("voice")) },
+    isAdmin && { key: "settings", icon: "gear", label: "Параметри", active: showSettings, onClick: () => guardAdmin(() => openPanel("settings")) },
+    isAdmin && { key: "users", icon: "users", label: "Потребители", active: showUsers, onClick: () => guardAdmin(() => openPanel("users")) },
+  ].filter(Boolean);
+  const initials = (userName || authSession?.email || "?").split(/[\s.@]+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
   return (
-    <div className="min-h-screen w-full" style={{ background: "#f6f7f9", fontFamily: "'Inter', system-ui, sans-serif" }}>
-      <div className={`${showOffers ? "max-w-7xl" : "max-w-3xl"} mx-auto px-4 py-8`}>
-        <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
-          <div>
-            <div className="text-2xl font-extrabold tracking-tight" style={{ color: ink }}>КОРЕКТ<span style={{ color: accent }}>.</span></div>
-            <div className="text-xs text-slate-500 -mt-0.5">Калкулатор за приблизителна цена</div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button onClick={() => setShowProfile((v) => !v)}
-              title="Профил — показва се в записите като автор на калкулацията"
-              className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-              style={{ borderColor: userName ? ink : "#e2e6ec", color: userName ? ink : "#64748b" }}>👤 {userName || "Профил"}</button>
+    <div className="min-h-screen w-full" style={{ background: pageBg, fontFamily: uiFont }}>
+      <header className="sticky top-0 z-30 bg-white" style={{ boxShadow: "0 1px 0 #e7e9f0" }}>
+        <div className="max-w-7xl mx-auto px-4 py-2 md:py-0 md:h-16 flex flex-wrap md:flex-nowrap items-center gap-x-4 gap-y-1">
+          <button onClick={closePanels} title="Калкулатор за приблизителна цена" className="shrink-0">
+            <img src="logo-korekt.png" alt="Корект — преместване на дома и бизнеса" style={{ height: 34, width: "auto", display: "block" }} />
+          </button>
+          <nav className="order-last md:order-none w-full md:w-auto md:flex-1 min-w-0 flex items-center gap-1 overflow-x-auto -mx-2 md:mx-0" style={{ scrollbarWidth: "none" }}>
+            {navItems.map((it) => (
+              <button key={it.key} onClick={it.onClick} title={it.title || it.label}
+                className="shrink-0 flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-[15px] transition hover:bg-slate-50"
+                style={{ color: it.active ? accent : "#374151", fontWeight: it.active ? 600 : 400 }}>
+                <NavIcon name={it.icon} />
+                <span className="whitespace-nowrap">{it.label}</span>
+              </button>
+            ))}
+          </nav>
+          <div className="shrink-0 flex items-center gap-2 ml-auto md:ml-0">
+            <button onClick={() => openPanel("profile")}
+              title={`Профил — ${userName || "задайте име"} (показва се в записите като автор на калкулацията)`}
+              className="w-10 h-10 rounded-full text-white text-sm font-semibold grid place-items-center"
+              style={{ background: showProfile ? ink : accent }}>{initials}</button>
             {adminUnlocked && (
-              <button onClick={logout} title={authSession?.email || ""}
-                className="text-xs font-medium px-2 py-2 rounded-full text-slate-400 hover:text-slate-600">
-                изход
+              <button onClick={logout} title={`Изход (${authSession?.email || ""})`}
+                className="w-9 h-9 rounded-lg grid place-items-center text-slate-500 hover:bg-slate-50">
+                <NavIcon name="logout" />
               </button>
             )}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 mb-6">
-          <button onClick={startNewCalc} title="Започни отделна калкулация с нов номер, без да пипаш текущата"
-            className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-            style={{ borderColor: "#e2e6ec", color: "#64748b" }}>➕ Нова калкулация</button>
-          <button onClick={() => guardAdmin(() => setShowLog((v) => !v))}
-            className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-            style={{ borderColor: showLog ? ink : "#e2e6ec", color: showLog ? ink : "#64748b" }}>{adminUnlocked ? "📋" : "🔒"} Записи</button>
-          <button onClick={() => guardAdmin(() => setShowOffers((v) => !v))}
-            className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-            style={{ borderColor: showOffers ? accent : "#e2e6ec", color: showOffers ? accent : "#64748b" }}>📄 Оферти</button>
-          <button onClick={() => guardAdmin(() => setShowVoice((v) => !v))}
-            className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-            style={{ borderColor: showVoice ? accent : "#e2e6ec", color: showVoice ? accent : "#64748b" }}>🎤 Разговор</button>
-          {isAdmin && (
-            <button onClick={() => guardAdmin(() => setShowSettings((v) => !v))}
-              className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-              style={{ borderColor: showSettings ? accent : "#e2e6ec", color: showSettings ? accent : "#64748b" }}>⚙ Параметри</button>
-          )}
-          {isAdmin && (
-            <button onClick={() => guardAdmin(() => setShowUsers((v) => !v))}
-              className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-              style={{ borderColor: showUsers ? ink : "#e2e6ec", color: showUsers ? ink : "#64748b" }}>👥 Потребители</button>
-          )}
-          <button onClick={() => setShowProfile((v) => !v)}
-            className="text-sm font-semibold px-3 py-2 rounded-full border transition"
-            style={{ borderColor: showProfile ? accent : "#e2e6ec", color: showProfile ? accent : "#64748b" }}>🙋 Профил</button>
+        <div style={{ height: 3, background: brandGradient }} />
+      </header>
+      <div className={`${showOffers ? "max-w-7xl" : "max-w-3xl"} mx-auto px-4 py-8`}>
+        <div className="flex items-baseline justify-between gap-3 mb-6">
+          <h1 className="text-2xl font-semibold" style={{ color: accent }}>
+            {showLog ? "Записи" : showOffers ? "Оферти" : showVoice ? "Разговор с асистента" : showSettings ? "Параметри"
+              : showUsers ? "Потребители" : showProfile ? "Профил" : "Калкулатор за приблизителна цена"}
+          </h1>
+          {userName && <span className="text-sm text-slate-500 truncate">{userName}</span>}
         </div>
 
         {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} session={authSession} onEdit={loadRecordForEditing} notify={notify} />}
@@ -4377,7 +4414,7 @@ export default function KorektCalculator() {
                       <p className="text-xs text-slate-400 mb-3">Еднопосочно. Смята се отиване и връщане за всеки курс.</p>
                       <div className="flex items-center gap-3">
                         <input type="range" min="3" max="60" value={s.landfillKm || p.landfillKm}
-                          onChange={(e) => set({ landfillKm: parseInt(e.target.value) })} className="flex-1 accent-orange-500" />
+                          onChange={(e) => set({ landfillKm: parseInt(e.target.value) })} className="flex-1 accent-blue-600" />
                         <span className="font-bold w-16 text-right" style={{ color: ink }}>{s.landfillKm || p.landfillKm} км</span>
                       </div>
                     </div>
@@ -4685,7 +4722,7 @@ export default function KorektCalculator() {
                         {!s.weFill && " — в момента не се начислява"}
                       </span>
                     </span>
-                    <input type="checkbox" checked={!!s.weFill} onChange={(e) => set({ weFill: e.target.checked })} className="w-5 h-5 accent-orange-500" />
+                    <input type="checkbox" checked={!!s.weFill} onChange={(e) => set({ weFill: e.target.checked })} className="w-5 h-5 accent-blue-600" />
                   </label>
                 )}
 
@@ -4776,7 +4813,7 @@ export default function KorektCalculator() {
                       <label className="flex items-start gap-3 rounded-xl border p-3 cursor-pointer"
                         style={{ borderColor: s.courseMode === "dayCrew" ? accent : "#e2e8f0" }}>
                         <input type="radio" name="courseMode" checked={s.courseMode === "dayCrew"}
-                          onChange={() => set({ courseMode: "dayCrew" })} className="mt-0.5 accent-orange-500" />
+                          onChange={() => set({ courseMode: "dayCrew" })} className="mt-0.5 accent-blue-600" />
                         <span>
                           <span className="text-sm font-medium block" style={{ color: ink }}>Наши хора пътуват (шофьор + {p.travelCrew})</span>
                           <span className="text-xs text-slate-500">
@@ -4787,7 +4824,7 @@ export default function KorektCalculator() {
                       <label className="flex items-start gap-3 rounded-xl border p-3 cursor-pointer"
                         style={{ borderColor: s.courseMode === "localCrew" ? accent : "#e2e8f0" }}>
                         <input type="radio" name="courseMode" checked={s.courseMode === "localCrew"}
-                          onChange={() => set({ courseMode: "localCrew" })} className="mt-0.5 accent-orange-500" />
+                          onChange={() => set({ courseMode: "localCrew" })} className="mt-0.5 accent-blue-600" />
                         <span className="flex-1">
                           <span className="text-sm font-medium block" style={{ color: ink }}>Шофьорът пътува, местен екип разтоварва</span>
                           <span className="text-xs text-slate-500">
@@ -4813,7 +4850,7 @@ export default function KorektCalculator() {
                                   {baseIsOnRoute && (
                                     <label className="flex items-center gap-2 mt-1.5 cursor-pointer">
                                       <input type="checkbox" checked={!!s.forceCar}
-                                        onChange={(e) => set({ forceCar: e.target.checked })} className="w-4 h-4 accent-orange-500" />
+                                        onChange={(e) => set({ forceCar: e.target.checked })} className="w-4 h-4 accent-blue-600" />
                                       <span className="text-xs text-slate-500">все пак пътуват с кола</span>
                                     </label>
                                   )}
@@ -4827,7 +4864,7 @@ export default function KorektCalculator() {
                       <label className="flex items-start gap-3 rounded-xl border p-3 cursor-pointer"
                         style={{ borderColor: s.courseMode === "selfUnload" ? accent : "#e2e8f0" }}>
                         <input type="radio" name="courseMode" checked={s.courseMode === "selfUnload"}
-                          onChange={() => set({ courseMode: "selfUnload" })} className="mt-0.5 accent-orange-500" />
+                          onChange={() => set({ courseMode: "selfUnload" })} className="mt-0.5 accent-blue-600" />
                         <span>
                           <span className="text-sm font-medium block" style={{ color: ink }}>Клиентът разтоварва сам</span>
                           <span className="text-xs text-slate-500">
@@ -4839,7 +4876,7 @@ export default function KorektCalculator() {
                       <label className="flex items-start gap-3 rounded-xl border p-3 cursor-pointer"
                         style={{ borderColor: s.courseMode === "hourly" ? accent : "#e2e8f0" }}>
                         <input type="radio" name="courseMode" checked={s.courseMode === "hourly"}
-                          onChange={() => set({ courseMode: "hourly" })} className="mt-0.5 accent-orange-500" />
+                          onChange={() => set({ courseMode: "hourly" })} className="mt-0.5 accent-blue-600" />
                         <span>
                           <span className="text-sm font-medium block" style={{ color: ink }}>Почасово (товарене и разтоварване)</span>
                           <span className="text-xs text-slate-500">По 1 ч товарене и 1 ч разтоварване на курс, платени на час</span>
@@ -4926,8 +4963,8 @@ export default function KorektCalculator() {
                     </div>
                     <div className="text-right">
                       <div className="text-sm opacity-80">Обем · тегло</div>
-                      <div className="text-2xl font-bold mt-1" style={{ color: accent }}>{vol.toFixed(1)} м³</div>
-                      <div className="text-sm font-semibold" style={{ color: accent }}>{weight} кг</div>
+                      <div className="text-2xl font-bold mt-1" style={{ color: "#8ab8ff" }}>{vol.toFixed(1)} м³</div>
+                      <div className="text-sm font-semibold" style={{ color: "#8ab8ff" }}>{weight} кг</div>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 mt-4">
