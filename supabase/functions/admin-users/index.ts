@@ -22,8 +22,7 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const BOOTSTRAP_ADMIN_EMAIL = "d.mehov@korekt-bg.com";
 const STAFF_EMAIL = /^[^@\s]+@korekt-bg\.com$/i;
 
-// откъдето позволяваме заявки към тази функция — сайтът се обслужва от този адрес
-// (GitHub Pages е основният хостинг вече; Netlify remains като допълнителен адрес засега)
+// откъдето позволяваме заявки към тази функция — сайтът е само на GitHub Pages (Netlify не се ползва)
 const ALLOWED_ORIGINS = new Set([
   "https://dmehov-max.github.io",
 ]);
