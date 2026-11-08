@@ -1044,8 +1044,50 @@ test("демонтаж: показва се като отделно перо в 
   ok(line, "липсва перо за разглобяване");
   eq(line.amount, Math.round(r.disManHours * P.disAsmRate));
 });
-test("опаковането е отделно перо", () => {
-  const r = calc({ qty: { mattress: 1 } });
+/* --- Кашони и чували: пълнене от нас и купени от нас --- */
+test("кашон от нас: добавя перо по цената от параметрите, само за отметнатите бройки", () => {
+  const r = calc({ qty: { boxM: 20, clothesBag: 4 }, buyBox: { boxM: 15, clothesBag: true } });
+  const k = r.lines.find((l) => l.label.startsWith("Кашон среден от нас"));
+  const ч = r.lines.find((l) => l.label.startsWith("Чувал с дрехи от нас"));
+  ok(k && ч, "липсват перата за кашони/чували от нас");
+  eq(k.amount, Math.round(15 * P.boxPrices.boxM * 100) / 100);
+  eq(ч.amount, Math.round(4 * P.boxPrices.clothesBag * 100) / 100);
+});
+test("кашон от нас: без отметка няма перо", () => {
+  const r = calc({ qty: { boxM: 20 } });
+  ok(!r.lines.find((l) => l.label.includes("от нас")));
+});
+test("пълнене от нас: минути на кашон/чувал → човекочаса", () => {
+  const r = calc({ qty: { boxM: 6, clothesBag: 4 }, fill: { boxM: true, clothesBag: 2 } });
+  const exp = (6 * P.fillMinPerBox + 2 * P.fillMinPerBag) / 60;
+  ok(Math.abs(r.boxFillManHours - exp) < 1e-9, `очаквано ${exp}, получено ${r.boxFillManHours}`);
+});
+test("пълнене на много кашони излиза извън минимума и се таксува като опаковане", () => {
+  const без = calc({ qty: { boxM: 40 } });
+  const с = calc({ qty: { boxM: 40 }, fill: { boxM: true } });
+  const line = с.lines.find((l) => l.label.startsWith("Опаковане и пълнене на кашони"));
+  ok(line && line.amount > 0, "липсва перо за пълнене");
+  ok(с.total > без.total);
+});
+test("пълнене на 2 кашона се побира в минимума от 2 ч", () => {
+  const без = calc({ qty: { boxM: 2 } });
+  const с = calc({ qty: { boxM: 2 }, fill: { boxM: true } });
+  eq(с.total, без.total);
+});
+
+test("опаковане на 1 вещ се побира в минимума от 2 ч — без отделно перо и без по-скъп камион", () => {
+  const с = calc({ qty: { sofa2: 1, books: 5, clothesBag: 5 }, protect: { sofa2: 1 } }); // като калкулация №161
+  ok(!с.lines.find((l) => l.label.startsWith("Опаковане")), "дребното опаковане не трябва да е отделно перо");
+  const tr = (r) => r.lines.find((l) => l.label.startsWith("Транспорт")).amount;
+  eq(tr(с), 2 * P.truckRate, "камионът остава на минимума 2 ч");
+});
+test("много опаковане излиза извън минимума и се таксува по часовата ставка", () => {
+  const r = calc({ qty: { wardrobe3: 3, sofa3: 2, bedDouble: 2, fridge: 1, washer: 1, dresser: 3 } });
+  const line = r.lines.find((l) => l.label.startsWith("Опаковане"));
+  ok(line && line.amount > 0, "голямото опаковане трябва да е отделно перо");
+});
+test("опаковането е отделно перо (при ръчни часове минимумът не го поема)", () => {
+  const r = calc({ qty: { mattress: 1 }, hoursOverride: 3 });
   const line = r.lines.find((l) => l.label.startsWith("Опаковане"));
   ok(line, "липсва перо за опаковане");
   // часовете в перото са закръглени нагоре до половин час преди таксуване

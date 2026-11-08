@@ -99,6 +99,16 @@ const DEFAULTS = {
   wrapMPerManHour: 40,    // метри опаковане на човекочас (10 м ≈ 15 мин)
   protectPricePerM: 0.5,  // велпапе / аеропласт — €/линеен метър, БЕЗ ДДС (сайтът показва 0.60 € с ДДС)
   protectMPerManHour: 25, // метри твърда защита на човекочас
+  // кашони/чували, купени от нас — €/бр. БЕЗ ДДС (сайтът показва с ДДС; korekt-bg.com/magazin, 08.11.2026)
+  boxPrices: {
+    boxS: 1.58,       // Петпластов кашон 55/35/35 с дръжки — 1.90 € с ДДС
+    boxM: 1.79,       // Петпластов кашон 60/40/40 — 2.15 € с ДДС
+    boxL: 2.5,        // Петпластов кашон 60/40/60 — 3.00 € с ДДС
+    books: 1.25,      // Петпластов кашон 40/30/30 — 1.50 € с ДДС
+    clothesBag: 0.4,  // Сезалов чувал — 0.48 € с ДДС
+  },
+  fillMinPerBox: 10,      // мин. труд за пълнене на 1 кашон от нашите хора (опаковане на дребни вещи)
+  fillMinPerBag: 5,       // мин. труд за пълнене на 1 чувал
 
   minPrice: { local: 80, international: 450 }, // междуградското НЯМА минимум — цената е по километри
 
@@ -193,7 +203,7 @@ const CATALOG = [
     { id: "boxM", label: "Кашон среден", m3: 0.1, kg: 12, kind: "box" },
     { id: "boxL", label: "Кашон голям", m3: 0.15, kg: 18, kind: "box" },
     { id: "books", label: "Кашон с книги", m3: 0.06, kg: 25, kind: "box" },
-    { id: "clothesBag", label: "Чувал с дрехи", m3: 0.08, kg: 6, kind: "box" },
+    { id: "clothesBag", label: "Чувал с дрехи", m3: 0.08, kg: 6, kind: "box", bag: true },
     { id: "suitcase", label: "Куфар", m3: 0.1, kg: 15, kind: "small" },
     { id: "bike", label: "Велосипед", m3: 0.4, kg: 12, wrap: 6, protect: 4, kind: "small" },
     { id: "art", label: "Огледало / картина", m3: 0.15, kg: 5, wrap: 3, wrapReq: true, protect: 4, protectReq: true, kind: "small" },
@@ -1117,6 +1127,21 @@ function computePrice(s, p) {
   const protectMeters = protectMetersFor(s.qty, s.protect, s.selfPack);
   const protectManHours = protectMeters / n(p.protectMPerManHour || 25);
 
+  // кашони и чували: отметки под всяка вещ — „пълнене от нас“ (s.fill, труд) и
+  // „кашон/чувал от нас“ (s.buyBox, материал по цената от магазина). Стойността е true за
+  // всички бройки или число за част от тях — както разглобяването (pickCount)
+  let boxFillManHours = 0;
+  const boxBuy = []; // { label, cnt, price }
+  for (const [id, cnt] of Object.entries(s.qty || {})) {
+    const it = ITEM_INDEX[id];
+    if (!it || it.kind !== "box" || !(cnt > 0)) continue;
+    const fillN = pickCount((s.fill || {})[id], cnt);
+    if (fillN) boxFillManHours += (fillN * n(it.bag ? p.fillMinPerBag : p.fillMinPerBox)) / 60;
+    const buyN = pickCount((s.buyBox || {})[id], cnt);
+    const price = n((p.boxPrices || {})[id]);
+    if (buyN && price > 0) boxBuy.push({ label: it.label, cnt: buyN, price });
+  }
+
   // ИЗХВЪРЛЯНЕ: разстояние до сметището, пълнене на чували, тонаж
   const isDisposal = s.service === "disposal";
   const sacks = countKind(s.qty, "sack");
@@ -1143,6 +1168,7 @@ function computePrice(s, p) {
   const minCrewH = n(p.minCrewHours || 2);
   const loadClock = Math.max(n(p.loadHours) * trips, minCrewH);      // мин. 2 ч на изпратена бригада
   const unloadClock = Math.max(n(p.unloadHours) * trips, minCrewH);
+  let localMinSlack = 0; // градско: незаетото време до минимума — в него влиза дребното опаковане
   if (isCourse) {
     handlingClock = loadClock + unloadClock;
   } else {
@@ -1164,12 +1190,23 @@ function computePrice(s, p) {
     const unloadCarryClock = legClock(vol / 2, dropoffNoElevFloors);
 
     handlingClock = loadCarryClock + unloadCarryClock + driveHours;
+    // свободното време до минимума се мери БЕЗ стълбите — те се таксуват отделно като перо и не
+    // бива да изяждат минимума (иначе опаковането на 5-и етаж би оскъпило камиона, а на партер не)
+    const flatClock = legClock(vol / 2, 0) + legClock(vol / 2, 0) + driveHours;
+    localMinSlack = Math.max(0, n(p.minLocalHours) - flatClock);
     if (handlingClock < n(p.minLocalHours)) handlingClock = n(p.minLocalHours); // мин 2 ч
   }
   // ръчна промяна на часовете на курса (напр. служителят знае реалния престой) — заменя изчисленото
   const autoHandlingClock = handlingClock;
   const hoursManual = Number(s.hoursOverride) > 0;
   if (hoursManual) handlingClock = Number(s.hoursOverride);
+  // Опаковането на 1–2 вещи (10–15 мин) се побира в платения минимум от 2 ч — бригадата и
+  // камионът и без това са там. Доплаща се (като труд и като престой на камиона) само
+  // опаковането, което излиза извън минимума.
+  const packManHoursAll = wrapManHours + protectManHours + boxFillManHours; // вкл. пълнене на кашони/чували
+  const packAbsorbedClock = !isCourse && !usesFieldCrew && !isDisposal && !hoursManual && crew > 0
+    ? Math.min(packManHoursAll / crew, localMinSlack) : 0;
+  const packAbsorbedManHours = packAbsorbedClock * crew;
   // при курс с пътуваща бригада вторият човек се плаща за РЕАЛНИТЕ часове (път + работа) × часова ставка,
   // без таван — 10 часа = 10 × ставката, 12 часа = 12 × ставката и т.н.
   const dayTotalH = handlingClock + driveHours;
@@ -1370,9 +1407,10 @@ function computePrice(s, p) {
   }
 
   // 3) ОПАКОВАНЕ — човекочаса
-  if (wrapManHours + protectManHours) {
-    const h = roundHalf(wrapManHours + protectManHours);
-    add(`Опаковане — ${h.toFixed(1)} чч × ${workerRate} ${p.currency}/ч`, h * workerRate);
+  const packChargedManHours = packManHoursAll - packAbsorbedManHours;
+  if (packChargedManHours > 1e-6) {
+    const h = roundHalf(packChargedManHours);
+    add(`Опаковане${boxFillManHours ? " и пълнене на кашони" : ""} — ${h.toFixed(1)} чч × ${workerRate} ${p.currency}/ч`, h * workerRate);
   }
 
   // 3.5) НОСЕНЕ НА ДЪЛГО РАЗСТОЯНИЕ до/от камиона — реално добавено време, не само такса
@@ -1420,8 +1458,9 @@ function computePrice(s, p) {
   // екипът реално отделя толкова допълнително време, не само плаща толкова допълнително
   const stairsManHours = workerRate > 0 ? stairs / workerRate : 0;
 
-  const manHours = handlingManHours + disManHours + wrapManHours + protectManHours + fillManHours + carryManHours + stairsManHours;
-  const clockHours = handlingClock + fillClockElapsed + disHours + carryHoursTot + (crew ? (wrapManHours + protectManHours + stairsManHours) / crew : wrapManHours + protectManHours + stairsManHours); // общ престой на обекта — информативно (Очаквано време, бригада)
+  // опаковането, побрало се в минимума, вече е в handlingManHours/handlingClock — не се брои втори път
+  const manHours = handlingManHours + disManHours + wrapManHours + protectManHours + boxFillManHours - packAbsorbedManHours + fillManHours + carryManHours + stairsManHours;
+  const clockHours = handlingClock + fillClockElapsed + disHours + carryHoursTot + (crew ? (packManHoursAll + stairsManHours) / crew : packManHoursAll + stairsManHours) - packAbsorbedClock; // общ престой на обекта — информативно (Очаквано време, бригада)
   // часовете, по които се таксува КАМИОНЪТ при градско (виж truckCostBasis) — БЕЗ стълбите:
   // те вече се начисляват директно като перо "Стълби без асансьор" (парична такса на етаж
   // на вещ); ако същото забавяне се качи и в часовете на транспорта, се получава двойно
@@ -1487,6 +1526,11 @@ function computePrice(s, p) {
     add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(4)} ${p.currency}/м`, fee, true);
     extraCostTotal += fee;
   }
+  for (const b of boxBuy) {
+    const fee = b.cnt * b.price;
+    add(`${b.label} от нас — ${b.cnt} бр. × ${b.price} ${p.currency}`, fee, true);
+    extraCostTotal += fee;
+  }
 
   // отклонение (буфер) — прилага се ПРЕДИ прага за минимум, за да е минималната цена,
   // която въвеждаш в Параметри, наистина минимумът, който клиентът вижда (а не мин×буфер)
@@ -1527,7 +1571,7 @@ function computePrice(s, p) {
   const margin = total - totalCost;
   const marginPercent = total > 0 ? (margin / total) * 100 : 0;
 
-  return { total: Math.round(total), lines,
+  return { total: Math.round(total), lines, boxFillManHours, boxBuy,
     costCity, workerCostRate, workerRate, deviationFactor, deviationManual, floorsStdTot, floorsOvrTot, laborCost: Math.round(laborCost), truckCost: Math.round(truckCost),
     totalCost: Math.round(totalCost), margin: Math.round(margin), marginPercent, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, autoHandlingClock, hoursManual, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours };
 }
@@ -1825,6 +1869,7 @@ function mergeParams(saved) {
     crewTiers: saved.crewTiers || d.crewTiers,
     partnerTrucks: saved.partnerTrucks || d.partnerTrucks,
     bgDistances: { ...d.bgDistances, ...(saved.bgDistances || {}) },
+    boxPrices: { ...d.boxPrices, ...(saved.boxPrices || {}) },
     euDistances: { ...d.euDistances, ...(saved.euDistances || {}) },
   }, d);
 }
@@ -2151,7 +2196,10 @@ function Stepper({ value, onChange }) {
 // изобщо — вещ, добавена през търсачката, нямаше как да се маркира за разглобяване и пр.)
 function ItemRow({ it, s, p, setQty, setField, itemDetailsOpen, toggleItemDetails, floorsStdTot, floorsOvrTot, showGroup }) {
   const cnt = s.qty[it.id] || 0;
-  const hasDetails = it.dis || it.asm || it.wrap || it.protect || floorsStdTot > 0 || floorsOvrTot > 0;
+  const isBox = it.kind === "box";
+  const hasDetails = it.dis || it.asm || it.wrap || it.protect || isBox || floorsStdTot > 0 || floorsOvrTot > 0;
+  const boxPrice = isBox ? n((p.boxPrices || {})[it.id]) : 0;
+  const fillMin = isBox ? n(it.bag ? p.fillMinPerBag : p.fillMinPerBox) : 0;
   const detailsOpen = itemDetailsOpen[it.id] !== false;
   return (
     <div className="py-3">
@@ -2203,6 +2251,16 @@ function ItemRow({ it, s, p, setQty, setField, itemDetailsOpen, toggleItemDetail
             <OptionToggle label="📦 стреч" cnt={cnt} value={s.wrap[it.id] ?? wrapDefault(it)}
               onChange={(v) => setField("wrap", it.id, v)}
               detail={(n) => `${it.wrap * n} м`} />
+          )}
+          {isBox && (
+            <OptionToggle label={`🧺 пълнене от нас`} cnt={cnt} value={(s.fill || {})[it.id]}
+              onChange={(v) => setField("fill", it.id, v)}
+              detail={(k) => `+${((k * fillMin) / 60).toFixed(1)} чч`} />
+          )}
+          {isBox && boxPrice > 0 && (
+            <OptionToggle label={`🛒 ${it.bag ? "чувал" : "кашон"} от нас`} cnt={cnt} value={(s.buyBox || {})[it.id]}
+              onChange={(v) => setField("buyBox", it.id, v)}
+              detail={(k) => `${k} × ${boxPrice} ${p.currency} = ${(k * boxPrice).toFixed(2)} ${p.currency}`} />
           )}
         </div>
       )}
@@ -2515,6 +2573,12 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify, sessi
           <Num label="Скорост опаковане" value={p.wrapMPerManHour} step={10} onChange={(v) => upd({ wrapMPerManHour: v })} suffix="м/чч" />
           <Num label="Велпапе / автопласт" value={p.protectPricePerM} step={0.05} onChange={(v) => upd({ protectPricePerM: v })} suffix="€/м" />
           <Num label="Скорост велпапе" value={p.protectMPerManHour} step={5} onChange={(v) => upd({ protectMPerManHour: v })} suffix="м/чч" />
+          <Num label="Пълнене на кашон" value={p.fillMinPerBox} step={1} onChange={(v) => upd({ fillMinPerBox: v })} suffix="мин" />
+          <Num label="Пълнене на чувал" value={p.fillMinPerBag} step={1} onChange={(v) => upd({ fillMinPerBag: v })} suffix="мин" />
+          {[["boxS", "Кашон малък"], ["boxM", "Кашон среден"], ["boxL", "Кашон голям"], ["books", "Кашон за книги"], ["clothesBag", "Чувал"]].map(([id, label]) => (
+            <Num key={id} label={`${label} (без ДДС)`} value={(p.boxPrices || {})[id]} step={0.05}
+              onChange={(v) => upd({ boxPrices: { ...(p.boxPrices || {}), [id]: v } })} suffix="€" />
+          ))}
           <Num label="Праг междуградско" value={p.intercityThresholdKm} step={5} onChange={(v) => upd({ intercityThresholdKm: v })} suffix="км" />
           <Num label="Товарене/курс" value={p.loadHours} step={0.5} onChange={(v) => upd({ loadHours: v })} suffix="ч" />
           <Num label="Разтоварване/курс" value={p.unloadHours} step={0.5} onChange={(v) => upd({ unloadHours: v })} suffix="ч" />
@@ -3418,7 +3482,7 @@ function ProfilePanel({ session, userName, onSaved, notify, p }) {
 // начално състояние на калкулацията (стъпка 1) — извадено извън компонента, за да служи и като
 // база при сливане с възстановена чернова (schema-safe, ако по-късно добавим ново поле)
 const INITIAL_S = {
-  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, deviationOverride: 0, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {}, floorFeeOff: {},
+  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, deviationOverride: 0, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {}, floorFeeOff: {}, fill: {}, buyBox: {},
   pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   extras: { packing: false, materials: false, disassembly: false },
