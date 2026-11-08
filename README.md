@@ -72,24 +72,12 @@ Supabase таблото — иначе НИКОЙ, включително вие
 1. **Създай потребители.** Supabase Dashboard → Authentication → Users →
    „Add user" → имейл + парола за всеки колега, на които трябва достъп.
    (Auto Confirm User: да, за да не чакат имейл за потвърждение.)
-2. **Заключи четенето на `calculations`.** SQL Editor → изпълни:
-
-   ```sql
-   -- маха стари отворени политики, ако има такива с широко "true" условие
-   -- (провери имената в Database → Policies и коригирай тук, ако се различават)
-   drop policy if exists "Enable read access for all users" on calculations;
-
-   -- SELECT само за логнати (екипа) — това е реалната защита на контакти/марж
-   create policy "select_authenticated_only" on calculations
-     for select using (auth.role() = 'authenticated');
-
-   -- INSERT/UPDATE остават отворени за анонимни — нужно е на живия калкулатор,
-   -- за да пази чернова, докато клиентът пише, преди изобщо да е влязъл някой
-   create policy "insert_anon_ok" on calculations
-     for insert with check (true);
-   create policy "update_anon_ok" on calculations
-     for update using (true);
-   ```
+2. **Заключи `calculations`.** Направено на 08.11.2026 с
+   `supabase/migrations/20261108_lock_calculations.sql`: таблицата се чете,
+   пише и трие само от `authenticated` (логнат колега); `anon` няма никакъв
+   достъп. Калкулаторът праща JWT-а на сесията при всеки запис. Гласовият
+   асистент пише с anon ключа само през RPC `save_voice_calc(p_id, p_status,
+   p_data)`, която приема единствено id `calc:voice-...` и връща `calc_number`.
 
 3. Готово — след push-а колегите влизат през 🔒 бутоните с имейл+парола.
 
