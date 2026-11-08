@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-SKHhv5GQc6Fx9I8lv9Oor38uBrYZmAOee2uZdZw6ngo='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-tw4A4ieQ0umxZ4tBj64cIwzOpFqVsZvNE3Q+e751TDU='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -6339,7 +6339,17 @@ function RecordDetail({
     style: {
       color: ink
     }
-  }, r.otherCost, " ", p?.currency)), /*#__PURE__*/React.createElement("div", {
+  }, r.otherCost, " ", p?.currency)), r.materialsCost == null && r.otherCost == null && Math.round(r.totalCost - (r.laborCost || 0) - (r.truckCost || 0)) > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500"
+  }, "Материали и други разходи"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, Math.round(r.totalCost - (r.laborCost || 0) - (r.truckCost || 0)), " ", p?.currency)), r.materialsCost == null && r.otherCost == null && r.formState?.buyBox && Object.values(r.formState.buyBox).some(Boolean) && /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-slate-500"
+  }, "Стар запис: кашоните са с пълната цена в себестойността. „Редактирай“ го преизчислява с марж на кашоните."), /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between gap-3 font-semibold pt-1.5 mt-1 border-t border-[#f3ddbd]"
   }, /*#__PURE__*/React.createElement("span", {
     style: {

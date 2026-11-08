@@ -3141,6 +3141,17 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
                   <span style={{ color: ink }}>{r.otherCost} {p?.currency}</span>
                 </div>
               )}
+              {/* записи отпреди 08.11.2026 нямат отделни materialsCost/otherCost — показваме разликата,
+                  за да се събират редовете до „Себестойност общо“ (кашоните там са с пълната цена) */}
+              {r.materialsCost == null && r.otherCost == null && Math.round(r.totalCost - (r.laborCost || 0) - (r.truckCost || 0)) > 0 && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-500">Материали и други разходи</span>
+                  <span style={{ color: ink }}>{Math.round(r.totalCost - (r.laborCost || 0) - (r.truckCost || 0))} {p?.currency}</span>
+                </div>
+              )}
+              {r.materialsCost == null && r.otherCost == null && (r.formState?.buyBox && Object.values(r.formState.buyBox).some(Boolean)) && (
+                <p className="text-xs text-slate-500">Стар запис: кашоните са с пълната цена в себестойността. „Редактирай“ го преизчислява с марж на кашоните.</p>
+              )}
               <div className="flex justify-between gap-3 font-semibold pt-1.5 mt-1 border-t border-[#f3ddbd]">
                 <span style={{ color: ink }}>Себестойност общо</span>
                 <span style={{ color: ink }}>{r.totalCost} {p?.currency}</span>
