@@ -3439,6 +3439,132 @@ function UsersPanel({ session, notify, p }) {
   );
 }
 
+// панел "🎤 Разговор" — гласовият асистент (папка korekt-glasov-asistent, agent.py) през LiveKit.
+// Пропускът идва от Supabase функцията livekit-token (само за логнати колеги); асистентът
+// влиза сам във всяка нова стая. Библиотеката livekit-client се зарежда чак при първия разговор.
+const LIVEKIT_CLIENT_SRC = "https://cdn.jsdelivr.net/npm/livekit-client@2.22.4/dist/livekit-client.umd.js";
+function loadScriptOnce(src) {
+  if (!loadScriptOnce.cache) loadScriptOnce.cache = {};
+  if (!loadScriptOnce.cache[src]) {
+    loadScriptOnce.cache[src] = new Promise((resolve, reject) => {
+      const el = document.createElement("script");
+      el.src = src; el.async = true;
+      el.onload = resolve;
+      el.onerror = () => { delete loadScriptOnce.cache[src]; reject(new Error("Библиотеката за разговор не се зареди. Проверете интернета.")); };
+      document.head.appendChild(el);
+    });
+  }
+  return loadScriptOnce.cache[src];
+}
+function VoicePanel({ session, p }) {
+  const [state, setState] = useState("idle"); // idle | connecting | live
+  const [agentHere, setAgentHere] = useState(false);
+  const [err, setErr] = useState(null);
+  const [lines, setLines] = useState([]); // { id, who, text }
+  const roomRef = useRef(null);
+  const audioRef = useRef(null);
+  const waitRef = useRef(null);
+
+  const stop = () => {
+    clearTimeout(waitRef.current);
+    if (roomRef.current) roomRef.current.disconnect();
+    roomRef.current = null;
+    if (audioRef.current) audioRef.current.innerHTML = "";
+    setAgentHere(false);
+    setState("idle");
+  };
+  useEffect(() => () => { clearTimeout(waitRef.current); if (roomRef.current) roomRef.current.disconnect(); }, []);
+
+  const start = async () => {
+    setErr(null); setLines([]); setState("connecting");
+    try {
+      await loadScriptOnce(LIVEKIT_CLIENT_SRC);
+      const LK = window.LivekitClient;
+      const res = await fetch(`${p.supabaseUrl}/functions/v1/livekit-token`, {
+        method: "POST",
+        headers: { apikey: p.supabaseKey, Authorization: `Bearer ${session?.access_token || p.supabaseKey}`, "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Сървърът не даде достъп до разговора.");
+
+      const room = new LK.Room({ adaptiveStream: true });
+      roomRef.current = room;
+      room.on(LK.RoomEvent.TrackSubscribed, (track) => {
+        if (track.kind === "audio" && audioRef.current) audioRef.current.appendChild(track.attach());
+      });
+      room.on(LK.RoomEvent.ParticipantConnected, () => { setAgentHere(true); clearTimeout(waitRef.current); });
+      room.on(LK.RoomEvent.Disconnected, () => { roomRef.current = null; setAgentHere(false); setState("idle"); });
+      // текстът на разговора (какво чу асистентът и какво каза) идва като поток по сегменти
+      room.registerTextStreamHandler("lk.transcription", async (reader, info) => {
+        const id = reader.info.attributes?.["lk.segment_id"] || reader.info.id;
+        const who = info.identity === room.localParticipant.identity ? "Вие" : "Асистент";
+        let text = "";
+        for await (const chunk of reader) {
+          text += chunk;
+          const t = text;
+          setLines((prev) => {
+            const i = prev.findIndex((l) => l.id === id);
+            if (i === -1) return [...prev, { id, who, text: t }].slice(-40);
+            const next = prev.slice(); next[i] = { id, who, text: t }; return next;
+          });
+        }
+      });
+      await room.connect(data.url, data.token);
+      await room.localParticipant.setMicrophoneEnabled(true);
+      if (room.remoteParticipants.size > 0) setAgentHere(true);
+      setState("live");
+      waitRef.current = setTimeout(() => {
+        if (roomRef.current && roomRef.current.remoteParticipants.size === 0) {
+          setErr("Асистентът не се включи. Пуснат ли е на компютъра (start-livekit.bat)?");
+        }
+      }, 15000);
+    } catch (e) {
+      stop();
+      setErr(e.message || String(e));
+    }
+  };
+
+  return (
+    <div className="rounded-2xl p-5 mb-4 bg-white border border-slate-200">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <div className="text-sm font-semibold" style={{ color: ink }}>🎤 Разговор с гласовия асистент</div>
+        {state === "live" && (
+          <span className="text-xs font-semibold" style={{ color: agentHere ? "#16a34a" : "#94a3b8" }}>
+            {agentHere ? "● на линия" : "чака асистента…"}
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-slate-500 mb-4">
+        Говорете като клиент по телефона — асистентът пита за заданието и казва ориентировъчна цена
+        по същите правила като калкулатора. Най-добре със слушалки.
+      </p>
+      {state === "live" ? (
+        <button onClick={stop} className="w-full rounded-xl py-3 font-semibold text-white" style={{ background: "#dc2626" }}>
+          ⏹ Край на разговора
+        </button>
+      ) : (
+        <button onClick={start} disabled={state === "connecting"}
+          className="w-full rounded-xl py-3 font-semibold text-white disabled:opacity-60" style={{ background: accent }}>
+          {state === "connecting" ? "Свързване…" : "🎤 Започни разговор"}
+        </button>
+      )}
+      {err && <p className="text-xs mt-3" style={{ color: "#dc2626" }}>{err}</p>}
+      {lines.length > 0 && (
+        <div className="mt-4 space-y-2 max-h-80 overflow-y-auto">
+          {lines.map((l) => (
+            <div key={l.id} className={`text-sm rounded-xl px-3 py-2 ${l.who === "Вие" ? "bg-slate-100 ml-8" : "mr-8"}`}
+              style={l.who === "Вие" ? { color: ink } : { background: "#fff7ed", color: ink }}>
+              <span className="text-[11px] font-semibold text-slate-400 block">{l.who}</span>{l.text}
+            </div>
+          ))}
+        </div>
+      )}
+      <div ref={audioRef} style={{ display: "none" }} />
+    </div>
+  );
+}
+
 // панел "Профил" — всеки логнат колега си задава показваното име тук, еднократно; записва
 // се в user_metadata на неговия Supabase акаунт (не само в браузъра), затова важи и на друго
 // устройство/браузър, без да пита пак "Кой сте Вие?"
@@ -3603,7 +3729,7 @@ export default function KorektCalculator() {
   const logout = () => {
     setAuthSession(null);
     saveAuthSession(null);
-    setShowLog(false); setShowSettings(false); setShowMargin(false); setShowUsers(false); setShowOffers(false);
+    setShowLog(false); setShowSettings(false); setShowMargin(false); setShowUsers(false); setShowOffers(false); setShowVoice(false);
   };
   // опреснява сесията малко преди да изтече, вместо да чака 401 от базата
   useEffect(() => {
@@ -3801,6 +3927,7 @@ export default function KorektCalculator() {
   // "Оферти" — формата за оферти към клиента (oferti.html) вградена като раздел;
   // пази се в таблица offers в Supabase, виж supabase/offers.sql
   const [showOffers, setShowOffers] = useState(false);
+  const [showVoice, setShowVoice] = useState(false); // "🎤 Разговор" — гласовият асистент през LiveKit
   const [offersFrameKey, setOffersFrameKey] = useState(0); // смяна → iframe-ът се презарежда и поема нова калкулация
   // „Направи оферта“ от стъпка „Цена“: оставя калкулацията в localStorage (същият
   // origin като oferti.html) и отваря раздела; формата я превръща в нова оферта
@@ -4049,7 +4176,7 @@ export default function KorektCalculator() {
 
   // докато е отворен Записи/Параметри/Потребители/Профил, калкулаторът отдолу се крие —
   // иначе е монтиран под панела и се вижда едновременно с него (объркващо, виж чернова + цена)
-  const anyPanelOpen = showLog || showSettings || showUsers || showProfile || showOffers;
+  const anyPanelOpen = showLog || showSettings || showUsers || showProfile || showOffers || showVoice;
 
   return (
     <div className="min-h-screen w-full" style={{ background: "#f6f7f9", fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -4082,6 +4209,9 @@ export default function KorektCalculator() {
           <button onClick={() => guardAdmin(() => setShowOffers((v) => !v))}
             className="text-sm font-semibold px-3 py-2 rounded-full border transition"
             style={{ borderColor: showOffers ? accent : "#e2e6ec", color: showOffers ? accent : "#64748b" }}>📄 Оферти</button>
+          <button onClick={() => guardAdmin(() => setShowVoice((v) => !v))}
+            className="text-sm font-semibold px-3 py-2 rounded-full border transition"
+            style={{ borderColor: showVoice ? accent : "#e2e6ec", color: showVoice ? accent : "#64748b" }}>🎤 Разговор</button>
           {isAdmin && (
             <button onClick={() => guardAdmin(() => setShowSettings((v) => !v))}
               className="text-sm font-semibold px-3 py-2 rounded-full border transition"
@@ -4106,6 +4236,7 @@ export default function KorektCalculator() {
         )}
         {isAdmin && showUsers && <UsersPanel session={authSession} notify={notify} p={p} />}
         {showProfile && <ProfilePanel session={authSession} userName={userName} onSaved={applyUserName} notify={notify} p={p} />}
+        {showVoice && <VoicePanel session={authSession} p={p} />}
         {showOffers && (
           <div className="rounded-2xl overflow-hidden mb-4 bg-white border border-slate-200">
             <iframe key={offersFrameKey} src="oferti.html" title="Оферти за клиенти"
