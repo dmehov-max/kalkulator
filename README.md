@@ -2,19 +2,28 @@
 
 Пошагов калкулатор за хамалски/преместващи услуги: списък с вещи → кубатура → часове и курсове → цена.
 
-## Живи адреси
+## Жив адрес
 
-И двата се обновяват автоматично при всеки push към `main`:
+**https://dmehov-max.github.io/kalkulator/** (GitHub Pages) — обновява се автоматично при всеки push към `main`.
+Netlify (korekt-kalkulator.netlify.app) вече не се ползва.
 
-- **https://korekt-kalkulator.netlify.app/** — основен адрес (Netlify). Ако спре да се обновява с "production deployments paused" — сметката е изчерпала операционните кредити на плана; сайтът остава онлайн със старата версия, докато не се upgrade-не или изчака следващия billing цикъл.
-- **https://dmehov-max.github.io/kalkulator/** — резервен адрес (GitHub Pages), включен на 2026-07-30 точно заради горния случай. Работи независимо от Netlify.
+## Сигурност
+
+Виж **[SECURITY.md](SECURITY.md)** — какво е защитено, как се проверява и какво се настройва ръчно.
+
+```bash
+node security.test.mjs          # проверка на кода
+node security.test.mjs --live   # + атака отвън срещу живата система
+```
 
 ## Файлове
 
 | Файл | Какво е |
 |---|---|
 | `korekt-calculator.jsx` | Целият калкулатор (React, единичен файл) |
-| `korekt-calculator.test.mjs` | Тестове на ценовия двигател (161 бр.) |
+| `korekt-calculator.test.mjs` | Тестове на ценовия двигател |
+| `security.test.mjs` | Тестове за сигурност (виж SECURITY.md) |
+| `vendor/` | Библиотеки с фиксирана версия (React, Tailwind, LiveKit), виж vendor/README.md |
 | `korekt-calculator-promt.md` | Спецификация на всички ценови правила |
 | `korekt-calculator.html` / `index.html` | Самостоятелна версия за качване на сайт |
 | `korekt-calculator.template.html` | Шаблон за компилацията |
@@ -104,11 +113,8 @@ create trigger enforce_signup_domain
   for each row execute function reject_foreign_domain_signup();
 ```
 
-**Известно ограничение:** таблицата `calc_params` (ценовите параметри,
-включително вътрешните себестойност/марж полета) остава четима с анонимния
-ключ, защото самият калкулатор я тегли при всяко зареждане, за да покаже
-живите цени на клиента. Разделянето на публична/вътрешна конфигурация в
-отделни таблици е следваща стъпка, ако трябва да се затвори и това.
+**От 08.11.2026** всички правила за достъп са в `supabase/migrations/20261108_harden_security.sql`
+(SQL-ът по-горе е исторически). Виж SECURITY.md.
 
 ## Компилация за сайта
 

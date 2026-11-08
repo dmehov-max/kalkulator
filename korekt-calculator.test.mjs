@@ -28,7 +28,7 @@ const engineSrc =
   haversineKm, normHood, findHood, cityCenter, estimateKm, crewFor, ownTruck,
   fleetFor, tripsFor, bestTruck, computePrice, totalWeight, findCity, protectMetersFor, BASES, nearestBase, baseOnRoute, mergeParams, buildRecord, toCSV, disHoursFor, wrapMetersFor, CITIES, estimateKmAny, pointFor,
   saveCalc, loadCalcs, saveParams, loadParams, CALC_PREFIX, PARAMS_KEY, fetchParamsFromSupabase, pushParamsToSupabase, pushCalcToSupabase, fetchCalcsFromSupabase, fetchCatalogItemsFromSupabase, pushCatalogItemToSupabase, applyExtraCatalogItems, nextCalcNumber, CALC_COUNTER_KEY, fetchRealDistanceKm, routesCache, ROUTES_CACHE_KEY, roundHalf, sanitizeNumericParams,
-  storageSet, storageGet, storageList, getStorageMode, hasStorage, isValidEmail, isValidPhone, isAllowedSignupEmail,
+  storageSet, storageGet, storageList, getStorageMode, hasStorage, isValidEmail, isValidPhone, isAllowedSignupEmail, isAdminSession,
   parseItemList, parseItemListLine, matchCatalogItem };\n`;
 
 const tmp = path.join(os.tmpdir(), `korekt-engine-${Date.now()}.mjs`);
@@ -2099,9 +2099,10 @@ test("параметри: mergeParams чисти стари повредени �
   eq(p.minPrice.local, E.DEFAULTS.minPrice.local);
   eq(p.minPrice.international, E.DEFAULTS.minPrice.international);
 });
+const SESSION = { access_token: "user-jwt", email: "kolega@korekt-bg.com" };
 testAsync("настройки: теглят се от Supabase, ако е зададена връзка", async () => {
   globalThis.fetch = async () => ({ ok: true, json: async () => ([{ value: { workerRate: 24 } }]) });
-  const got = await E.fetchParamsFromSupabase("https://x.supabase.co", "key");
+  const got = await E.fetchParamsFromSupabase("https://x.supabase.co", "key", SESSION);
   eq(got.workerRate, 24, "ставка от базата:");
   eq(got.truckRate, E.DEFAULTS.truckRate, "липсващите полета падат към по подразбиране:");
   delete globalThis.fetch;
@@ -2177,11 +2178,54 @@ testAsync("калкулации: мрежова грешка при изтегл
 
 testAsync("каталог от базата: изтегляне на артикули, добавени от колеги", async () => {
   globalThis.fetch = async () => ({ ok: true, json: async () => ([{ id: "cat:1", group_name: "Спалня", label: "Тест", m3: 0.3, kg: 10 }]) });
-  const rows = await E.fetchCatalogItemsFromSupabase("https://x.supabase.co", "key");
+  const rows = await E.fetchCatalogItemsFromSupabase("https://x.supabase.co", "key", SESSION);
   eq(rows.length, 1);
   eq(rows[0].label, "Тест");
   delete globalThis.fetch;
   eq((await E.fetchCatalogItemsFromSupabase("", "")).length, 0, "без връзка — празен списък:");
+});
+// --- Сигурност: достъпът до общата база минава само със сесията на влязъл колега ---
+testAsync("сигурност: без вход параметрите и каталогът не се теглят изобщо", async () => {
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; return { ok: true, json: async () => ([{ value: { workerRate: 99 } }]) }; };
+  eq(await E.fetchParamsFromSupabase("https://x.supabase.co", "key"), null);
+  eq((await E.fetchCatalogItemsFromSupabase("https://x.supabase.co", "key")).length, 0);
+  eq(await E.pushParamsToSupabase({ workerRate: 1 }, "https://x.supabase.co", "key"), false);
+  eq(await E.pushCatalogItemToSupabase({ id: "cat:x", label: "х", m3: 1, kg: 1 }, "https://x.supabase.co", "key"), false);
+  eq(calls, 0, "заявки без сесия:");
+  delete globalThis.fetch;
+});
+testAsync("сигурност: заявките носят токена на колегата, не анонимния ключ", async () => {
+  const auths = [];
+  globalThis.fetch = async (url, opts) => { auths.push(opts.headers.Authorization); return { ok: true, json: async () => ([{ value: {} }]) }; };
+  await E.fetchParamsFromSupabase("https://x.supabase.co", "anon-key", SESSION);
+  await E.fetchCatalogItemsFromSupabase("https://x.supabase.co", "anon-key", SESSION);
+  await E.pushParamsToSupabase({}, "https://x.supabase.co", "anon-key", SESSION);
+  await E.pushCatalogItemToSupabase({ id: "cat:x", label: "х", m3: 1, kg: 1 }, "https://x.supabase.co", "anon-key", SESSION);
+  await E.fetchCalcsFromSupabase("https://x.supabase.co", "anon-key", SESSION);
+  await E.pushCalcToSupabase({ id: "calc:1", total: 1 }, "https://x.supabase.co", "anon-key", true, true, SESSION);
+  eq(auths.length, 6);
+  ok(auths.every((a) => a === "Bearer user-jwt"), "всяка заявка трябва да е с Bearer user-jwt: " + auths.join(", "));
+  delete globalThis.fetch;
+});
+test("сигурност: адресът и ключът на базата не могат да се подменят от запазени параметри", () => {
+  const p = E.mergeParams({ supabaseUrl: "https://attacker.example", supabaseKey: "evil", workerRate: 21 });
+  eq(p.supabaseUrl, E.DEFAULTS.supabaseUrl);
+  eq(p.supabaseKey, E.DEFAULTS.supabaseKey);
+  eq(p.workerRate, 21, "останалите параметри си се прилагат:");
+});
+testAsync("сигурност: в общата база не се записват адресът и ключът на базата", async () => {
+  let body = null;
+  globalThis.fetch = async (url, opts) => { body = JSON.parse(opts.body); return { ok: true }; };
+  await E.pushParamsToSupabase({ workerRate: 20, supabaseUrl: "u", supabaseKey: "k" }, "https://x.supabase.co", "key", SESSION);
+  ok(!("supabaseUrl" in body.value) && !("supabaseKey" in body.value), "value: " + JSON.stringify(body.value));
+  eq(body.value.workerRate, 20);
+  delete globalThis.fetch;
+});
+test("сигурност: администратор е само bootstrap имейлът или app_metadata.role=admin", () => {
+  ok(!E.isAdminSession(null), "без сесия:");
+  ok(!E.isAdminSession({ email: "kolega@korekt-bg.com", role: "employee" }), "служител:");
+  ok(E.isAdminSession({ email: "kolega@korekt-bg.com", role: "admin" }), "роля admin:");
 });
 testAsync("каталог от базата: изпращане изисква ID", async () => {
   eq(await E.pushCatalogItemToSupabase({ label: "х", m3: 1, kg: 1 }, "https://x.supabase.co", "key"), false);

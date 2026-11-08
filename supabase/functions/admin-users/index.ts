@@ -20,12 +20,12 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 // пази в синхрон с PARAMS_EDITOR_EMAIL в korekt-calculator.jsx — единственият администратор,
 // който не може да бъде свален (bootstrap, за да няма риск от заключване навън)
 const BOOTSTRAP_ADMIN_EMAIL = "d.mehov@korekt-bg.com";
+const STAFF_EMAIL = /^[^@\s]+@korekt-bg\.com$/i;
 
 // откъдето позволяваме заявки към тази функция — сайтът се обслужва от този адрес
 // (GitHub Pages е основният хостинг вече; Netlify remains като допълнителен адрес засега)
 const ALLOWED_ORIGINS = new Set([
   "https://dmehov-max.github.io",
-  "https://korekt-kalkulator.netlify.app",
 ]);
 
 function corsHeaders(origin: string) {
@@ -54,6 +54,8 @@ async function callerInfo(accessToken: string | null): Promise<{ email: string; 
     if (!res.ok) return null;
     const data = await res.json().catch(() => null);
     if (!data?.email) return null;
+    // само потвърден служебен акаунт (и базата отказва други домейни — виж миграция 20261108_harden_security)
+    if (!STAFF_EMAIL.test(data.email) || !(data.email_confirmed_at || data.confirmed_at)) return null;
     return { email: data.email, role: data.app_metadata?.role || "employee" };
   } catch {
     return null;

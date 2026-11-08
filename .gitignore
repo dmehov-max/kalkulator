@@ -1,3 +1,4 @@
 node_modules/
 calc*.json
 supabase/.temp/
+.claude/

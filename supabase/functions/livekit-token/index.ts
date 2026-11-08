@@ -10,10 +10,10 @@
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const STAFF_EMAIL = /^[^@\s]+@korekt-bg\.com$/i;
 
 const ALLOWED_ORIGINS = new Set([
   "https://dmehov-max.github.io",
-  "https://korekt-kalkulator.netlify.app",
   "http://127.0.0.1:8765", // локален тест
 ]);
 
@@ -41,7 +41,9 @@ async function callerEmail(accessToken: string): Promise<string | null> {
     });
     if (!res.ok) return null;
     const data = await res.json().catch(() => null);
-    return data?.email || null;
+    // само потвърден служебен акаунт (и базата отказва други домейни — виж миграция 20261108_harden_security)
+    if (!data?.email || !STAFF_EMAIL.test(data.email) || !(data.email_confirmed_at || data.confirmed_at)) return null;
+    return data.email;
   } catch {
     return null;
   }

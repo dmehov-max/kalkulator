@@ -1,0 +1,6 @@
+{
+  "react.production.min.js": "d949f1c3687aedadcedac85261865f29b17cd273997e7f6b2bfc53b2f9d4c4dd",
+  "react-dom.production.min.js": "35f4f974f4b2bcd44da73963347f8952e341f83909e4498227d4e26b98f66f0d",
+  "tailwind-play-3.4.17.js": "176e894661aa9cdc9a5cba6c720044cbbf7b8bd80d1c9a142a7c24b1b6c50d15",
+  "livekit-client.umd.js": "26d33bc6acdfd1402d1e960f3ec0f129a67a81ab6b6f9f77f63ee51009ce7519"
+}

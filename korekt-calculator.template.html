@@ -5,9 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<script src="https://cdn.tailwindcss.com"></script>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<meta http-equiv="Content-Security-Policy" content="/*__CSP__*/">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<script>
+/* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
+   frame-ancestors, затова страницата сама отказва да работи в рамка на друг адрес. */
+if (window.top !== window.self) { document.documentElement.style.display = "none"; window.top.location = window.self.location.href; }
+</script>
+<!-- Библиотеките са копие в папка vendor/ с фиксирана версия (не от чужд CDN при всяко зареждане),
+     виж vendor/README.md. Целостта им се проверява от build.mjs и security.test.mjs. -->
+<script src="vendor/tailwind-play-3.4.17.js"></script>
+<script src="vendor/react.production.min.js"></script>
+<script src="vendor/react-dom.production.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style> body { margin:0; font-family:'Fira Sans',system-ui,sans-serif; } </style>

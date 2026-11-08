@@ -5,9 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<script src="https://cdn.tailwindcss.com"></script>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-B4luduWqyi7jUbgHkJgu6oXR05YGPwWCLC0VQSTV/l8='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<script>
+/* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
+   frame-ancestors, затова страницата сама отказва да работи в рамка на друг адрес. */
+if (window.top !== window.self) { document.documentElement.style.display = "none"; window.top.location = window.self.location.href; }
+</script>
+<!-- Библиотеките са копие в папка vendor/ с фиксирана версия (не от чужд CDN при всяко зареждане),
+     виж vendor/README.md. Целостта им се проверява от build.mjs и security.test.mjs. -->
+<script src="vendor/tailwind-play-3.4.17.js" integrity="sha384-igm5BeiBt36UU4gqwWS7imYmelpTsZlQ45FZf+XBn9MuJbn4nQr7yx1yFydocC/K"></script>
+<script src="vendor/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z"></script>
+<script src="vendor/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style> body { margin:0; font-family:'Fira Sans',system-ui,sans-serif; } </style>
@@ -3872,7 +3881,11 @@ function mergeParams(saved) {
     euDistances: {
       ...d.euDistances,
       ...(saved.euDistances || {})
-    }
+    },
+    // адресът и ключът на базата идват САМО от кода, никога от запазени/изтеглени параметри:
+    // иначе подменен ред в calc_params може да пренасочи входа (паролите) и записите към чужд сървър
+    supabaseUrl: d.supabaseUrl,
+    supabaseKey: d.supabaseKey
   }, d);
 }
 async function loadParams() {
@@ -3893,11 +3906,15 @@ function supabaseHeaders(key, extra) {
   };
 }
 
-// session (по избор): ако е подаден, заявката минава с JWT-а на логнатия потребител
-// вместо анонимния ключ — нужно е, ако/когато в Supabase се сложи RLS политика,
-// ограничаваща writes върху calc_params до конкретен имейл (виж README)
+// RLS (supabase/migrations/20261108_harden_security.sql): calc_params се чете само от
+// екипа и се пише само от администратор — затова и четенето, и записът носят сесията
 async function pushParamsToSupabase(p, url, key, session) {
-  if (!url || !key) return false;
+  if (!url || !key || !session?.access_token) return false;
+  const {
+    supabaseUrl,
+    supabaseKey,
+    ...value
+  } = p || {};
   try {
     const res = await fetch(`${url}/rest/v1/calc_params?on_conflict=id`, {
       method: "POST",
@@ -3907,7 +3924,7 @@ async function pushParamsToSupabase(p, url, key, session) {
       }),
       body: JSON.stringify({
         id: "pricing",
-        value: p
+        value
       })
     });
     return res.ok;
@@ -3915,11 +3932,11 @@ async function pushParamsToSupabase(p, url, key, session) {
     return false;
   }
 }
-async function fetchParamsFromSupabase(url, key) {
-  if (!url || !key) return null;
+async function fetchParamsFromSupabase(url, key, session) {
+  if (!url || !key || !session?.access_token) return null;
   try {
     const res = await fetch(`${url}/rest/v1/calc_params?id=eq.pricing&select=value`, {
-      headers: supabaseHeaders(key)
+      headers: authHeaders(session, key)
     });
     if (!res.ok) return null;
     const rows = await res.json();
@@ -4108,11 +4125,11 @@ async function fetchCalcsFromSupabase(url, key, session) {
 }
 
 // --- Артикули, добавени от колеги (споделен каталог в Supabase) ---
-async function fetchCatalogItemsFromSupabase(url, key) {
-  if (!url || !key) return [];
+async function fetchCatalogItemsFromSupabase(url, key, session) {
+  if (!url || !key || !session?.access_token) return [];
   try {
     const res = await fetch(`${url}/rest/v1/catalog_items?select=id,group_name,label,m3,kg&order=created_at.asc`, {
-      headers: supabaseHeaders(key)
+      headers: authHeaders(session, key)
     });
     if (!res.ok) return [];
     return await res.json();
@@ -4120,12 +4137,12 @@ async function fetchCatalogItemsFromSupabase(url, key) {
     return [];
   }
 }
-async function pushCatalogItemToSupabase(item, url, key) {
-  if (!url || !key || !item.id) return false;
+async function pushCatalogItemToSupabase(item, url, key, session) {
+  if (!url || !key || !item.id || !session?.access_token) return false;
   try {
     const res = await fetch(`${url}/rest/v1/catalog_items?on_conflict=id`, {
       method: "POST",
-      headers: supabaseHeaders(key, {
+      headers: authHeaders(session, key, {
         "Content-Type": "application/json",
         Prefer: "resolution=merge-duplicates,return=minimal"
       }),
@@ -4202,6 +4219,16 @@ function toCSV(rows) {
   const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const body = rows.map(r => [r.calcNumber ?? "", r.requestNumber || "", new Date(r.createdAt).toLocaleString("bg-BG"), r.service, r.city || r.destination || "", r.from || "", r.to || "", r.km, r.volumeM3, r.trips, r.crew, r.hours, r.total, r.margin ?? "", r.marginPercent ?? "", r.contact?.name || "", r.contact?.phone || "", r.contact?.email || "", r.status, r.actual?.hours ?? "", r.actual?.price ?? "", r.actual?.note || ""].map(esc).join(","));
   return [head.map(esc).join(","), ...body].join("\n");
+}
+
+// роля "администратор": bootstrap имейлът е администратор винаги (дори ако app_metadata.role
+// липсва/сгреши — за да няма как екипът да се заключи навън от Параметри/Потребители), а
+// останалите стават администратори само през app_metadata.role = "admin" (зададено от панела
+// "Потребители", виж setRole в supabase/functions/admin-users/index.ts). Всички останали са
+// "служител" — виждат калкулатора и своите записи, но не и Параметри/Потребители.
+const PARAMS_EDITOR_EMAIL = "d.mehov@korekt-bg.com";
+function isAdminSession(session) {
+  return !!session && ((session.email || "").trim().toLowerCase() === PARAMS_EDITOR_EMAIL || session.role === "admin");
 }
 
 /* ===== END ENGINE (по-горе всичко е чиста логика — тества се) ===== */
@@ -4588,16 +4615,6 @@ function Section({
   }, open ? "–" : "+")), open && /*#__PURE__*/React.createElement("div", {
     className: "mt-1 pb-1"
   }, children));
-}
-
-// роля "администратор": bootstrap имейлът е администратор винаги (дори ако app_metadata.role
-// липсва/сгреши — за да няма как екипът да се заключи навън от Параметри/Потребители), а
-// останалите стават администратори само през app_metadata.role = "admin" (зададено от панела
-// "Потребители", виж setRole в supabase/functions/admin-users/index.ts). Всички останали са
-// "служител" — виждат калкулатора и своите записи, но не и Параметри/Потребители.
-const PARAMS_EDITOR_EMAIL = "d.mehov@korekt-bg.com";
-function isAdminSession(session) {
-  return !!session && ((session.email || "").trim().toLowerCase() === PARAMS_EDITOR_EMAIL || session.role === "admin");
 }
 function SettingsPanel({
   p,
@@ -5489,32 +5506,7 @@ function SettingsPanel({
       });
     },
     className: "text-[11px] font-medium px-2 py-1 rounded-full border border-slate-200 text-slate-600"
-  }, "Изчисти запомнените"))), /*#__PURE__*/React.createElement(Section, {
-    title: "Supabase база данни"
-  }, /*#__PURE__*/React.createElement("label", {
-    className: "block"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "text-[11px] text-slate-500"
-  }, "Supabase URL (оставете празно, за да не се изпраща)"), /*#__PURE__*/React.createElement("input", {
-    value: p.supabaseUrl || "",
-    onChange: e => upd({
-      supabaseUrl: e.target.value
-    }),
-    placeholder: "https://xxxxx.supabase.co",
-    className: "w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1"
-  })), /*#__PURE__*/React.createElement("label", {
-    className: "block mt-2"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "text-[11px] text-slate-500"
-  }, "Supabase anon ключ"), /*#__PURE__*/React.createElement("input", {
-    value: p.supabaseKey || "",
-    onChange: e => upd({
-      supabaseKey: e.target.value
-    }),
-    placeholder: "eyJhbGci...",
-    type: "password",
-    className: "w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1"
-  }))), /*#__PURE__*/React.createElement("div", {
+  }, "Изчисти запомнените"))), /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap items-center gap-2 mt-4"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: exportParams,
@@ -5627,6 +5619,7 @@ function AddressBlock({
 function AddCatalogItem({
   group,
   p,
+  session,
   onAdded
 }) {
   const [open, setOpen] = useState(false);
@@ -5654,7 +5647,7 @@ function AddCatalogItem({
       m3: item.m3,
       kg: item.kg
     }]);
-    await pushCatalogItemToSupabase(item, p.supabaseUrl, p.supabaseKey);
+    await pushCatalogItemToSupabase(item, p.supabaseUrl, p.supabaseKey, session);
     setSaving(false);
     setLabel("");
     setM3("");
@@ -6584,7 +6577,7 @@ function UsersPanel({
 // панел "🎤 Разговор" — гласовият асистент (папка korekt-glasov-asistent, agent.py) през LiveKit.
 // Пропускът идва от Supabase функцията livekit-token (само за логнати колеги); асистентът
 // влиза сам във всяка нова стая. Библиотеката livekit-client се зарежда чак при първия разговор.
-const LIVEKIT_CLIENT_SRC = "https://cdn.jsdelivr.net/npm/livekit-client@2.22.4/dist/livekit-client.umd.js";
+const LIVEKIT_CLIENT_SRC = "vendor/livekit-client.umd.js"; // копие на livekit-client@2.22.4, виж vendor/README.md
 function loadScriptOnce(src) {
   if (!loadScriptOnce.cache) loadScriptOnce.cache = {};
   if (!loadScriptOnce.cache[src]) {
@@ -7334,22 +7327,34 @@ function KorektCalculator() {
       if (alive) forceRedraw(x => x + 1);
       const local = await loadParams();
       if (alive && local) setP(local);
-      const cfg = local || DEFAULTS;
-      if (cfg.supabaseUrl && cfg.supabaseKey) {
-        const remote = await fetchParamsFromSupabase(cfg.supabaseUrl, cfg.supabaseKey);
-        if (alive && remote) setP(remote);
-        const extraItems = await fetchCatalogItemsFromSupabase(cfg.supabaseUrl, cfg.supabaseKey);
-        if (alive && extraItems.length) {
-          applyExtraCatalogItems(extraItems);
-          forceRedraw(x => x + 1);
-        }
-      }
       if (alive) setParamsLoaded(true);
     })();
     return () => {
       alive = false;
     };
   }, []);
+
+  // живите параметри и споделеният каталог са само за екипа (RLS) — теглят се след вход
+  // и при всяка смяна на акаунта, със сесията на влезлия
+  const sessionToken = authSession?.access_token || null;
+  const [remoteParamsReady, setRemoteParamsReady] = useState(false);
+  useEffect(() => {
+    if (!sessionToken) return;
+    let alive = true;
+    (async () => {
+      const remote = await fetchParamsFromSupabase(DEFAULTS.supabaseUrl, DEFAULTS.supabaseKey, authRef.current);
+      if (alive && remote) setP(remote);
+      const extraItems = await fetchCatalogItemsFromSupabase(DEFAULTS.supabaseUrl, DEFAULTS.supabaseKey, authRef.current);
+      if (alive && extraItems.length) {
+        applyExtraCatalogItems(extraItems);
+        forceRedraw(x => x + 1);
+      }
+      if (alive) setRemoteParamsReady(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [sessionToken]);
   useEffect(() => {
     if (!paramsLoaded) return;
     setParamSave("saving");
@@ -7362,8 +7367,11 @@ function KorektCalculator() {
         // и в екрана — иначе полето остава да изглежда празно, докато реално пазим друго число
         if (JSON.stringify(clean) !== JSON.stringify(p)) setP(clean);
         const okLocal = await saveParams(clean);
-        const hasRemoteConfig = !!(clean.supabaseUrl && clean.supabaseKey);
-        let okRemote = await pushParamsToSupabase(clean, clean.supabaseUrl, clean.supabaseKey, authSession);
+        // в общата база пише само администратор и само след като е изтеглил живите параметри —
+        // иначе стари локални стойности биха презаписали общите при вход
+        const hasRemoteConfig = isAdminSession(authSession) && remoteParamsReady;
+        let okRemote = false;
+        if (hasRemoteConfig) okRemote = await pushParamsToSupabase(clean, clean.supabaseUrl, clean.supabaseKey, authSession);
         if (!okRemote && hasRemoteConfig && !cancelled) {
           // споделената база не отговори (напр. заспал проект/503) — един автоматичен повторен опит
           await new Promise(r => setTimeout(r, 4000));
@@ -7380,7 +7388,7 @@ function KorektCalculator() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [p, paramsLoaded, authSession]);
+  }, [p, paramsLoaded, authSession, remoteParamsReady]);
 
   // при възстановена чернова пазим СЪЩИЯ ключ/номер на записа, вместо да създаваме нов —
   // иначе презареждане на страницата трупа дубликати (№2, №3...) за една и съща заявка
@@ -8593,6 +8601,7 @@ function KorektCalculator() {
     })), /*#__PURE__*/React.createElement(AddCatalogItem, {
       group: grp.group,
       p: p,
+      session: authSession,
       onAdded: id => {
         setQty(id, 1);
         forceRedraw(x => x + 1);

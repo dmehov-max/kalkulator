@@ -1,0 +1,6 @@
+# CSP в index.html пази хешове на вградените скриптове, а vendor/ — SHA-256 на библиотеките.
+# Смяна на края на редовете (CRLF) при commit/checkout би ги развалила, затова: LF и точни байтове.
+*.html text eol=lf
+*.jsx  text eol=lf
+*.mjs  text eol=lf
+vendor/** -text

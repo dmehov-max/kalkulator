@@ -1870,6 +1870,10 @@ function mergeParams(saved) {
     bgDistances: { ...d.bgDistances, ...(saved.bgDistances || {}) },
     boxPrices: { ...d.boxPrices, ...(saved.boxPrices || {}) },
     euDistances: { ...d.euDistances, ...(saved.euDistances || {}) },
+    // адресът и ключът на базата идват САМО от кода, никога от запазени/изтеглени параметри:
+    // иначе подменен ред в calc_params може да пренасочи входа (паролите) и записите към чужд сървър
+    supabaseUrl: d.supabaseUrl,
+    supabaseKey: d.supabaseKey,
   }, d);
 }
 
@@ -1885,25 +1889,25 @@ function supabaseHeaders(key, extra) {
   return { apikey: key, Authorization: `Bearer ${key}`, ...extra };
 }
 
-// session (по избор): ако е подаден, заявката минава с JWT-а на логнатия потребител
-// вместо анонимния ключ — нужно е, ако/когато в Supabase се сложи RLS политика,
-// ограничаваща writes върху calc_params до конкретен имейл (виж README)
+// RLS (supabase/migrations/20261108_harden_security.sql): calc_params се чете само от
+// екипа и се пише само от администратор — затова и четенето, и записът носят сесията
 async function pushParamsToSupabase(p, url, key, session) {
-  if (!url || !key) return false;
+  if (!url || !key || !session?.access_token) return false;
+  const { supabaseUrl, supabaseKey, ...value } = p || {};
   try {
     const res = await fetch(`${url}/rest/v1/calc_params?on_conflict=id`, {
       method: "POST",
       headers: authHeaders(session, key, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
-      body: JSON.stringify({ id: "pricing", value: p }),
+      body: JSON.stringify({ id: "pricing", value }),
     });
     return res.ok;
   } catch (e) { return false; }
 }
 
-async function fetchParamsFromSupabase(url, key) {
-  if (!url || !key) return null;
+async function fetchParamsFromSupabase(url, key, session) {
+  if (!url || !key || !session?.access_token) return null;
   try {
-    const res = await fetch(`${url}/rest/v1/calc_params?id=eq.pricing&select=value`, { headers: supabaseHeaders(key) });
+    const res = await fetch(`${url}/rest/v1/calc_params?id=eq.pricing&select=value`, { headers: authHeaders(session, key) });
     if (!res.ok) return null;
     const rows = await res.json();
     return rows && rows[0] ? mergeParams(rows[0].value) : null;
@@ -2036,21 +2040,21 @@ async function fetchCalcsFromSupabase(url, key, session) {
 }
 
 // --- Артикули, добавени от колеги (споделен каталог в Supabase) ---
-async function fetchCatalogItemsFromSupabase(url, key) {
-  if (!url || !key) return [];
+async function fetchCatalogItemsFromSupabase(url, key, session) {
+  if (!url || !key || !session?.access_token) return [];
   try {
-    const res = await fetch(`${url}/rest/v1/catalog_items?select=id,group_name,label,m3,kg&order=created_at.asc`, { headers: supabaseHeaders(key) });
+    const res = await fetch(`${url}/rest/v1/catalog_items?select=id,group_name,label,m3,kg&order=created_at.asc`, { headers: authHeaders(session, key) });
     if (!res.ok) return [];
     return await res.json();
   } catch (e) { return []; }
 }
 
-async function pushCatalogItemToSupabase(item, url, key) {
-  if (!url || !key || !item.id) return false;
+async function pushCatalogItemToSupabase(item, url, key, session) {
+  if (!url || !key || !item.id || !session?.access_token) return false;
   try {
     const res = await fetch(`${url}/rest/v1/catalog_items?on_conflict=id`, {
       method: "POST",
-      headers: supabaseHeaders(key, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
+      headers: authHeaders(session, key, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" }),
       body: JSON.stringify({ id: item.id, group_name: item.group, label: item.label, m3: item.m3, kg: item.kg }),
     });
     return res.ok;
@@ -2116,6 +2120,16 @@ function toCSV(rows) {
     r.actual?.hours ?? "", r.actual?.price ?? "", r.actual?.note || "",
   ].map(esc).join(","));
   return [head.map(esc).join(","), ...body].join("\n");
+}
+
+// роля "администратор": bootstrap имейлът е администратор винаги (дори ако app_metadata.role
+// липсва/сгреши — за да няма как екипът да се заключи навън от Параметри/Потребители), а
+// останалите стават администратори само през app_metadata.role = "admin" (зададено от панела
+// "Потребители", виж setRole в supabase/functions/admin-users/index.ts). Всички останали са
+// "служител" — виждат калкулатора и своите записи, но не и Параметри/Потребители.
+const PARAMS_EDITOR_EMAIL = "d.mehov@korekt-bg.com";
+function isAdminSession(session) {
+  return !!session && ((session.email || "").trim().toLowerCase() === PARAMS_EDITOR_EMAIL || session.role === "admin");
 }
 
 /* ===== END ENGINE (по-горе всичко е чиста логика — тества се) ===== */
@@ -2404,15 +2418,6 @@ function Section({ title, children }) {
   );
 }
 
-// роля "администратор": bootstrap имейлът е администратор винаги (дори ако app_metadata.role
-// липсва/сгреши — за да няма как екипът да се заключи навън от Параметри/Потребители), а
-// останалите стават администратори само през app_metadata.role = "admin" (зададено от панела
-// "Потребители", виж setRole в supabase/functions/admin-users/index.ts). Всички останали са
-// "служител" — виждат калкулатора и своите записи, но не и Параметри/Потребители.
-const PARAMS_EDITOR_EMAIL = "d.mehov@korekt-bg.com";
-function isAdminSession(session) {
-  return !!session && ((session.email || "").trim().toLowerCase() === PARAMS_EDITOR_EMAIL || session.role === "admin");
-}
 function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify, session }) {
   const upd = (patch) => setP({ ...p, ...patch });
   const syncedAt = syncedAtMs ? new Date(syncedAtMs).toLocaleTimeString("bg-BG", { hour: "2-digit", minute: "2-digit" }) : null;
@@ -2692,20 +2697,6 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify, sessi
         </div>
       </Section>
 
-      <Section title="Supabase база данни">
-        <label className="block">
-          <span className="text-[11px] text-slate-500">Supabase URL (оставете празно, за да не се изпраща)</span>
-          <input value={p.supabaseUrl || ""} onChange={(e) => upd({ supabaseUrl: e.target.value })}
-            placeholder="https://xxxxx.supabase.co"
-            className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
-        </label>
-        <label className="block mt-2">
-          <span className="text-[11px] text-slate-500">Supabase anon ключ</span>
-          <input value={p.supabaseKey || ""} onChange={(e) => upd({ supabaseKey: e.target.value })}
-            placeholder="eyJhbGci..." type="password"
-            className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm mt-1" />
-        </label>
-      </Section>
 
       <div className="flex flex-wrap items-center gap-2 mt-4">
         <button onClick={exportParams} className="text-xs font-semibold px-3 py-1.5 rounded-full text-white" style={{ background: ink }}>
@@ -2777,7 +2768,7 @@ function AddressBlock({ title, data, onChange }) {
 }
 
 // малка форма за добавяне на артикул, който липсва в каталога — вижда се от всички колеги
-function AddCatalogItem({ group, p, onAdded }) {
+function AddCatalogItem({ group, p, session, onAdded }) {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState("");
   const [m3, setM3] = useState("");
@@ -2792,7 +2783,7 @@ function AddCatalogItem({ group, p, onAdded }) {
     const id = `custom:${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const item = { id, group, label: label.trim(), m3: m3n, kg: kgn };
     applyExtraCatalogItems([{ id, group_name: group, label: item.label, m3: item.m3, kg: item.kg }]);
-    await pushCatalogItemToSupabase(item, p.supabaseUrl, p.supabaseKey);
+    await pushCatalogItemToSupabase(item, p.supabaseUrl, p.supabaseKey, session);
     setSaving(false);
     setLabel(""); setM3(""); setKg(""); setOpen(false);
     onAdded(id);
@@ -3493,7 +3484,7 @@ function UsersPanel({ session, notify, p }) {
 // панел "🎤 Разговор" — гласовият асистент (папка korekt-glasov-asistent, agent.py) през LiveKit.
 // Пропускът идва от Supabase функцията livekit-token (само за логнати колеги); асистентът
 // влиза сам във всяка нова стая. Библиотеката livekit-client се зарежда чак при първия разговор.
-const LIVEKIT_CLIENT_SRC = "https://cdn.jsdelivr.net/npm/livekit-client@2.22.4/dist/livekit-client.umd.js";
+const LIVEKIT_CLIENT_SRC = "vendor/livekit-client.umd.js"; // копие на livekit-client@2.22.4, виж vendor/README.md
 function loadScriptOnce(src) {
   if (!loadScriptOnce.cache) loadScriptOnce.cache = {};
   if (!loadScriptOnce.cache[src]) {
@@ -3956,17 +3947,27 @@ export default function KorektCalculator() {
       if (alive) forceRedraw((x) => x + 1);
       const local = await loadParams();
       if (alive && local) setP(local);
-      const cfg = local || DEFAULTS;
-      if (cfg.supabaseUrl && cfg.supabaseKey) {
-        const remote = await fetchParamsFromSupabase(cfg.supabaseUrl, cfg.supabaseKey);
-        if (alive && remote) setP(remote);
-        const extraItems = await fetchCatalogItemsFromSupabase(cfg.supabaseUrl, cfg.supabaseKey);
-        if (alive && extraItems.length) { applyExtraCatalogItems(extraItems); forceRedraw((x) => x + 1); }
-      }
       if (alive) setParamsLoaded(true);
     })();
     return () => { alive = false; };
   }, []);
+
+  // живите параметри и споделеният каталог са само за екипа (RLS) — теглят се след вход
+  // и при всяка смяна на акаунта, със сесията на влезлия
+  const sessionToken = authSession?.access_token || null;
+  const [remoteParamsReady, setRemoteParamsReady] = useState(false);
+  useEffect(() => {
+    if (!sessionToken) return;
+    let alive = true;
+    (async () => {
+      const remote = await fetchParamsFromSupabase(DEFAULTS.supabaseUrl, DEFAULTS.supabaseKey, authRef.current);
+      if (alive && remote) setP(remote);
+      const extraItems = await fetchCatalogItemsFromSupabase(DEFAULTS.supabaseUrl, DEFAULTS.supabaseKey, authRef.current);
+      if (alive && extraItems.length) { applyExtraCatalogItems(extraItems); forceRedraw((x) => x + 1); }
+      if (alive) setRemoteParamsReady(true);
+    })();
+    return () => { alive = false; };
+  }, [sessionToken]);
 
   useEffect(() => {
     if (!paramsLoaded) return;
@@ -3980,8 +3981,11 @@ export default function KorektCalculator() {
         // и в екрана — иначе полето остава да изглежда празно, докато реално пазим друго число
         if (JSON.stringify(clean) !== JSON.stringify(p)) setP(clean);
         const okLocal = await saveParams(clean);
-        const hasRemoteConfig = !!(clean.supabaseUrl && clean.supabaseKey);
-        let okRemote = await pushParamsToSupabase(clean, clean.supabaseUrl, clean.supabaseKey, authSession);
+        // в общата база пише само администратор и само след като е изтеглил живите параметри —
+        // иначе стари локални стойности биха презаписали общите при вход
+        const hasRemoteConfig = isAdminSession(authSession) && remoteParamsReady;
+        let okRemote = false;
+        if (hasRemoteConfig) okRemote = await pushParamsToSupabase(clean, clean.supabaseUrl, clean.supabaseKey, authSession);
         if (!okRemote && hasRemoteConfig && !cancelled) {
           // споделената база не отговори (напр. заспал проект/503) — един автоматичен повторен опит
           await new Promise((r) => setTimeout(r, 4000));
@@ -3997,7 +4001,7 @@ export default function KorektCalculator() {
       })();
     }, 600);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [p, paramsLoaded, authSession]);
+  }, [p, paramsLoaded, authSession, remoteParamsReady]);
 
   // при възстановена чернова пазим СЪЩИЯ ключ/номер на записа, вместо да създаваме нов —
   // иначе презареждане на страницата трупа дубликати (№2, №3...) за една и съща заявка
@@ -4816,7 +4820,7 @@ export default function KorektCalculator() {
                                   itemDetailsOpen={itemDetailsOpen} toggleItemDetails={toggleItemDetails}
                                   floorsStdTot={floorsStdTot} floorsOvrTot={floorsOvrTot} />
                               ))}
-                              <AddCatalogItem group={grp.group} p={p}
+                              <AddCatalogItem group={grp.group} p={p} session={authSession}
                                 onAdded={(id) => { setQty(id, 1); forceRedraw((x) => x + 1); }} />
                             </div>
                           )}

@@ -767,6 +767,7 @@ $("btnAsk").onclick = () => openAct("ask");
 if (window.KOREKT_PREVIEW) {
   window.addEventListener("message", e => {
     const d = e.data;
+    if (e.source !== parent || e.origin !== location.origin) return; // само от админ панела над прегледа
     if (!d || d.type !== "korekt-offer" || !d.offer) return;
     Object.keys(OFFER).forEach(k => delete OFFER[k]);
     Object.assign(OFFER, d.offer);
