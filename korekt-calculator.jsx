@@ -109,6 +109,7 @@ const DEFAULTS = {
   },
   fillMinPerBox: 10,      // мин. труд за пълнене на 1 кашон от нашите хора (опаковане на дребни вещи)
   fillMinPerBag: 5,       // мин. труд за пълнене на 1 чувал
+  boxMarginPct: 30,       // марж на кашоните/чувалите от нас — себестойността е (100 − 30)% от продажната цена
 
   minPrice: { local: 80, international: 450 }, // междуградското НЯМА минимум — цената е по километри
 
@@ -162,6 +163,10 @@ const CATALOG = [
     { id: "shelf", label: "Библиотека / етажерка", m3: 0.8, kg: 35, dis: 0.3, asm: 0.9, wrap: 8, wrapReq: true, protect: 6 },
     { id: "rug", label: "Килим", m3: 0.2, kg: 12, wrap: 4, protect: 3, kind: "small" },
     { id: "lamp", label: "Лампа (подова/трапезна)", m3: 0.08, kg: 4, wrap: 4, protect: 3, kind: "small" },
+    { id: "wallUnit", label: "Холна секция / стена", m3: 2.0, kg: 120, dis: 1.0, asm: 2.0, wrap: 12, wrapReq: true, protect: 10 },
+    { id: "shoeCabinet", label: "Шкаф за обувки", m3: 0.3, kg: 20, wrap: 5, wrapReq: true, protect: 3 },
+    { id: "hallStand", label: "Закачалка / антре", m3: 0.4, kg: 25, dis: 0.3, asm: 0.6, wrap: 5, wrapReq: true, protect: 4 },
+    { id: "barStool", label: "Бар стол", m3: 0.15, kg: 6, wrap: 3, wrapReq: true, protect: 2, kind: "small" },
   ]},
   { group: "Спалня", for: "home", items: [
     { id: "bedSingle", label: "Единично легло", m3: 1.0, kg: 40, dis: 0.4, asm: 0.9, wrap: 8, wrapReq: true, protect: 6 },
@@ -172,6 +177,16 @@ const CATALOG = [
     { id: "dresser", label: "Скрин / шкаф", m3: 0.6, kg: 40, dis: 0.3, asm: 0.9, wrap: 8, wrapReq: true, protect: 5 },
     { id: "nightstand", label: "Нощно шкафче", m3: 0.2, kg: 12, wrap: 4, wrapReq: true, protect: 3, kind: "small" },
     { id: "desk", label: "Бюро", m3: 0.6, kg: 30, dis: 0.3, asm: 0.9, wrap: 8, wrapReq: true, protect: 5 },
+    { id: "wardrobe1", label: "Гардероб 1-крилен", m3: 0.7, kg: 40, dis: 0.4, asm: 1.0, wrap: 6, wrapReq: true, protect: 5 },
+    { id: "wardrobe4", label: "Гардероб 4-крилен / плъзгащ", m3: 2.4, kg: 150, dis: 2.0, asm: 4.0, wrap: 14, wrapReq: true, kind: "oversized", protect: 14 },
+    { id: "bunkBed", label: "Двуетажно легло", m3: 1.5, kg: 60, dis: 0.6, asm: 1.2, wrap: 10, wrapReq: true, protect: 8 },
+    { id: "babyBed", label: "Детско легло / креватче", m3: 0.6, kg: 25, dis: 0.3, asm: 0.6, wrap: 6, wrapReq: true, protect: 4 },
+    { id: "vanity", label: "Тоалетка (с огледало)", m3: 0.4, kg: 25, dis: 0.2, asm: 0.4, wrap: 6, wrapReq: true, protect: 4, protectReq: true },
+  ]},
+  { group: "Кухня и баня", for: "home", items: [
+    { id: "kitchenLower", label: "Кухненски шкаф долен", m3: 0.4, kg: 25, dis: 0.2, asm: 0.4, wrap: 5, wrapReq: true, protect: 3 },
+    { id: "kitchenUpper", label: "Кухненски шкаф горен", m3: 0.2, kg: 12, dis: 0.2, asm: 0.4, wrap: 4, wrapReq: true, protect: 3 },
+    { id: "bathCabinet", label: "Шкаф за баня", m3: 0.2, kg: 12, wrap: 4, wrapReq: true, protect: 3, kind: "small" },
   ]},
   { group: "Офис", for: "office", items: [
     { id: "officeDesk", label: "Офис бюро", m3: 0.5, kg: 25, dis: 0.2, asm: 0.5, wrap: 6, wrapReq: true, protect: 4 },
@@ -191,12 +206,17 @@ const CATALOG = [
     { id: "freezer", label: "Фризер", m3: 0.5, kg: 50, wrap: 9, wrapReq: true, kind: "appliance", protect: 7 },
     { id: "washer", label: "Пералня", m3: 0.4, kg: 70, wrap: 8, wrapReq: true, kind: "appliance", protect: 6 },
     { id: "dishwasher", label: "Съдомиялна", m3: 0.4, kg: 45, wrap: 8, wrapReq: true, kind: "appliance", protect: 6 },
+    { id: "dryer", label: "Сушилня", m3: 0.4, kg: 45, wrap: 8, wrapReq: true, kind: "appliance", protect: 6 },
+    { id: "ovenBuiltIn", label: "Фурна за вграждане", m3: 0.15, kg: 35, wrap: 5, wrapReq: true, kind: "appliance", protect: 4 },
     { id: "stove", label: "Готварска печка", m3: 0.4, kg: 45, wrap: 8, wrapReq: true, kind: "appliance", protect: 6 },
     { id: "fridgeSxS", label: "Хладилник двуврат (side-by-side)", m3: 1.2, kg: 120, wrap: 16, wrapReq: true, kind: "appliance_heavy", minCrew: 4, protect: 14 },
     { id: "washerMiele", label: "Пералня Miele", m3: 0.4, kg: 85, wrap: 8, wrapReq: true, kind: "appliance_heavy", protect: 6 },
     { id: "microwave", label: "Микровълнова", m3: 0.1, kg: 15, wrap: 3, wrapReq: true, protect: 2, kind: "small" },
     { id: "ac", label: "Климатик (двете тела)", m3: 0.3, kg: 35, wrap: 4, wrapReq: true, protect: 4, kind: "small" },
     { id: "boiler", label: "Бойлер", m3: 0.3, kg: 30, wrap: 4, wrapReq: true, protect: 4, kind: "small" },
+    { id: "hood", label: "Абсорбатор", m3: 0.1, kg: 10, wrap: 3, wrapReq: true, protect: 2, kind: "small" },
+    { id: "tvLarge", label: "Телевизор голям (над 55\")", m3: 0.3, kg: 25, dis: 0.2, asm: 0.4, wrap: 6, wrapReq: true, protect: 6, protectReq: true },
+    { id: "computer", label: "Компютър / монитор", m3: 0.1, kg: 10, wrap: 3, wrapReq: true, protect: 3, kind: "small" },
   ]},
   { group: "Кашони и дребни", for: "all", items: [
     { id: "boxS", label: "Кашон малък", m3: 0.06, kg: 8, kind: "box" },
@@ -207,6 +227,14 @@ const CATALOG = [
     { id: "suitcase", label: "Куфар", m3: 0.1, kg: 15, kind: "small" },
     { id: "bike", label: "Велосипед", m3: 0.4, kg: 12, wrap: 6, protect: 4, kind: "small" },
     { id: "art", label: "Огледало / картина", m3: 0.15, kg: 5, wrap: 3, wrapReq: true, protect: 4, protectReq: true, kind: "small" },
+    { id: "plant", label: "Голямо растение / саксия", m3: 0.2, kg: 20, wrap: 3, protect: 2, kind: "small" },
+    { id: "stroller", label: "Детска количка", m3: 0.3, kg: 12, wrap: 4, protect: 2, kind: "small" },
+    { id: "sewing", label: "Шевна машина", m3: 0.1, kg: 12, wrap: 3, wrapReq: true, protect: 2, kind: "small" },
+  ]},
+  { group: "Двор и тераса", for: "home", items: [
+    { id: "gardenTable", label: "Градинска маса", m3: 0.5, kg: 20, dis: 0.2, asm: 0.3, wrap: 5, protect: 3 },
+    { id: "gardenChair", label: "Градински стол", m3: 0.15, kg: 4, wrap: 2, protect: 2, kind: "small" },
+    { id: "bbq", label: "Скара / барбекю", m3: 0.4, kg: 30, wrap: 5, protect: 3 },
   ]},
   { group: "Отпадък за изхвърляне", for: "all", items: [
     { id: "sackHouse", label: "Чувал битов отпадък", m3: 0.1, kg: 15, kind: "sack" },
@@ -1230,6 +1258,7 @@ function computePrice(s, p) {
   // чували, такса сметище) — начисляват се на клиента почти на себестойност, но без тях
   // маржът в панел "Марж" излизаше завишен, все едно е чиста печалба
   let extraCostTotal = 0;
+  let materialsCost = 0; // част от extraCostTotal: стреч, велпапе, кашони — отделен ред „Материали“ в марж панела
 
   let handlingManHours;
   if (dayCrewMode) {
@@ -1519,17 +1548,19 @@ function computePrice(s, p) {
   if (protectMeters) {
     const fee = protectMeters * n(p.protectPricePerM);
     add(`Велпапе / автопласт — ${protectMeters} м × ${n(p.protectPricePerM)} ${p.currency}/м`, fee, true);
-    extraCostTotal += fee;
+    extraCostTotal += fee; materialsCost += fee;
   }
   if (rolls) {
     const fee = rolls * n(p.stretchRollPrice);
     add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(4)} ${p.currency}/м`, fee, true);
-    extraCostTotal += fee;
+    extraCostTotal += fee; materialsCost += fee;
   }
   for (const b of boxBuy) {
     const fee = b.cnt * b.price;
     add(`${b.label} от нас — ${b.cnt} бр. × ${b.price} ${p.currency}`, fee, true);
-    extraCostTotal += fee;
+    // кашоните се продават с марж (по подразбиране 30%) — в себестойността влиза само покупната им цена
+    const cost = fee * (1 - Math.min(100, Math.max(0, n(p.boxMarginPct ?? 30))) / 100);
+    extraCostTotal += cost; materialsCost += cost;
   }
 
   // отклонение (буфер) — прилага се ПРЕДИ прага за минимум, за да е минималната цена,
@@ -1572,6 +1603,7 @@ function computePrice(s, p) {
   const marginPercent = total > 0 ? (margin / total) * 100 : 0;
 
   return { total: Math.round(total), lines, boxFillManHours, boxBuy,
+    materialsCost: Math.round(materialsCost * 100) / 100, otherCost: Math.round((extraCostTotal - materialsCost) * 100) / 100,
     costCity, workerCostRate, workerRate, deviationFactor, deviationManual, floorsStdTot, floorsOvrTot, laborCost: Math.round(laborCost), truckCost: Math.round(truckCost),
     totalCost: Math.round(totalCost), margin: Math.round(margin), marginPercent, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, autoHandlingClock, hoursManual, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours };
 }
@@ -1960,6 +1992,8 @@ function buildRecord(s, p, r, id, calcNumber, createdBy) {
     workerCostRate: r.workerCostRate,
     laborCost: r.laborCost,
     truckCost: r.truckCost,
+    materialsCost: r.materialsCost,
+    otherCost: r.otherCost,
     totalCost: r.totalCost,
     margin: r.margin,
     marginPercent: +r.marginPercent.toFixed(1),
@@ -2603,6 +2637,7 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify, sessi
           <Num label="Скорост велпапе" value={p.protectMPerManHour} step={5} onChange={(v) => upd({ protectMPerManHour: v })} suffix="м/чч" />
           <Num label="Пълнене на кашон" value={p.fillMinPerBox} step={1} onChange={(v) => upd({ fillMinPerBox: v })} suffix="мин" />
           <Num label="Пълнене на чувал" value={p.fillMinPerBag} step={1} onChange={(v) => upd({ fillMinPerBag: v })} suffix="мин" />
+          <Num label="Марж на кашоните" value={p.boxMarginPct} step={5} onChange={(v) => upd({ boxMarginPct: v })} suffix="%" />
           {[["boxS", "Кашон малък"], ["boxM", "Кашон среден"], ["boxL", "Кашон голям"], ["books", "Кашон за книги"], ["clothesBag", "Чувал"]].map(([id, label]) => (
             <Num key={id} label={`${label} (без ДДС)`} value={(p.boxPrices || {})[id]} step={0.05}
               onChange={(v) => upd({ boxPrices: { ...(p.boxPrices || {}), [id]: v } })} suffix="€" />
@@ -2951,8 +2986,8 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
           </div>
           <div className="grid grid-cols-2 gap-2 mt-4">
             {[
-              ["Време труд", `${(r.manHours || 0).toFixed(1)} чч`],
-              ["Бригада · общо на обекта", `${r.crew} души · ${(r.hours || 0).toFixed(1)} ч`],
+              ["Време за изпълнение", `≈ ${(r.hours || 0).toFixed(1)} ч`],
+              ["Бригада", `${r.crew} души`],
               ["Курсове", `${r.trips || 0}`],
               ["Дни за изпълнение", `${r.workDays || 1} ${r.workDays === 1 ? "ден" : "дни"}`],
             ].map(([k, v]) => (
@@ -2961,6 +2996,10 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
                 <div className="font-bold text-sm">{v}</div>
               </div>
             ))}
+          </div>
+          {/* човекочасовете са основата на цената за труд — не продължителност, затова отделно и по-дребно */}
+          <div className="text-xs opacity-70 mt-2">
+            Платен труд: {(r.manHours || 0).toFixed(1)} човекочаса
           </div>
           <div className="text-xs opacity-70 mt-3">
             {new Date(r.createdAt).toLocaleString("bg-BG")} · статус: {r.status || "калкулация"}{r.createdBy ? ` · от ${r.createdBy}` : ""}
@@ -3090,6 +3129,18 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
                 <span className="text-slate-500">Камион</span>
                 <span style={{ color: ink }}>{r.truckCost} {p?.currency}</span>
               </div>
+              {r.materialsCost > 0 && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-500">Материали (кашони, стреч, велпапе)</span>
+                  <span style={{ color: ink }}>{r.materialsCost} {p?.currency}</span>
+                </div>
+              )}
+              {r.otherCost > 0 && (
+                <div className="flex justify-between gap-3">
+                  <span className="text-slate-500">Кола и такси</span>
+                  <span style={{ color: ink }}>{r.otherCost} {p?.currency}</span>
+                </div>
+              )}
               <div className="flex justify-between gap-3 font-semibold pt-1.5 mt-1 border-t border-[#f3ddbd]">
                 <span style={{ color: ink }}>Себестойност общо</span>
                 <span style={{ color: ink }}>{r.totalCost} {p?.currency}</span>
@@ -5094,8 +5145,8 @@ export default function KorektCalculator() {
                   </div>
                   <div className="grid grid-cols-2 gap-2 mt-4">
                     {[
-                      ["Време труд", `${manHours.toFixed(1)} чч`],
-                      ["Бригада · общо на обекта", `${isDisposal ? disposalTotalCrew : crew} души${crewByProtocol ? " (протокол)" : ""} · ${clockHours.toFixed(1)} ч`],
+                      ["Време за изпълнение", `≈ ${clockHours.toFixed(1)} ч`],
+                      ["Бригада", `${isDisposal ? disposalTotalCrew : crew} души${crewByProtocol ? " (протокол)" : ""}`],
                       ["Курсове", `${trips}`],
                       ["Дни за изпълнение", `${workDays} ${workDays === 1 ? "ден" : "дни"}${workDays > 1 ? ` (макс. ${p.dayHours} ч/ден)` : ""}`],
                     ].map(([k, v]) => (
@@ -5104,6 +5155,10 @@ export default function KorektCalculator() {
                         <div className="font-bold text-sm">{v}</div>
                       </div>
                     ))}
+                  </div>
+                  {/* човекочасовете са основата на цената за труд — не продължителност, затова отделно и по-дребно */}
+                  <div className="text-xs opacity-70 mt-2">
+                    Платен труд: {manHours.toFixed(1)} човекочаса
                   </div>
                   <div className="mt-2 rounded-xl px-3 py-2 text-sm" style={{ background: "rgba(255,255,255,0.08)" }}>
                     🚚 {chosen?.name} · {isDisposal
@@ -5292,6 +5347,18 @@ export default function KorektCalculator() {
                         <span className="text-slate-500">Камион</span>
                         <span style={{ color: ink }}>{truckCost} {p.currency}</span>
                       </div>
+                      {r.materialsCost > 0 && (
+                        <div className="flex justify-between gap-3">
+                          <span className="text-slate-500">Материали (кашони, стреч, велпапе)</span>
+                          <span style={{ color: ink }}>{r.materialsCost} {p.currency}</span>
+                        </div>
+                      )}
+                      {r.otherCost > 0 && (
+                        <div className="flex justify-between gap-3">
+                          <span className="text-slate-500">Кола и такси</span>
+                          <span style={{ color: ink }}>{r.otherCost} {p.currency}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between gap-3 font-semibold pt-1.5 mt-1 border-t border-[#f3ddbd]">
                         <span style={{ color: ink }}>Себестойност общо</span>
                         <span style={{ color: ink }}>{totalCost} {p.currency}</span>

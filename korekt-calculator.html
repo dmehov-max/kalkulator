@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-B4luduWqyi7jUbgHkJgu6oXR05YGPwWCLC0VQSTV/l8='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-SKHhv5GQc6Fx9I8lv9Oor38uBrYZmAOee2uZdZw6ngo='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -255,6 +255,8 @@ const DEFAULTS = {
   // мин. труд за пълнене на 1 кашон от нашите хора (опаковане на дребни вещи)
   fillMinPerBag: 5,
   // мин. труд за пълнене на 1 чувал
+  boxMarginPct: 30,
+  // марж на кашоните/чувалите от нас — себестойността е (100 − 30)% от продажната цена
 
   minPrice: {
     local: 80,
@@ -472,6 +474,43 @@ const CATALOG = [{
     wrap: 4,
     protect: 3,
     kind: "small"
+  }, {
+    id: "wallUnit",
+    label: "Холна секция / стена",
+    m3: 2.0,
+    kg: 120,
+    dis: 1.0,
+    asm: 2.0,
+    wrap: 12,
+    wrapReq: true,
+    protect: 10
+  }, {
+    id: "shoeCabinet",
+    label: "Шкаф за обувки",
+    m3: 0.3,
+    kg: 20,
+    wrap: 5,
+    wrapReq: true,
+    protect: 3
+  }, {
+    id: "hallStand",
+    label: "Закачалка / антре",
+    m3: 0.4,
+    kg: 25,
+    dis: 0.3,
+    asm: 0.6,
+    wrap: 5,
+    wrapReq: true,
+    protect: 4
+  }, {
+    id: "barStool",
+    label: "Бар стол",
+    m3: 0.15,
+    kg: 6,
+    wrap: 3,
+    wrapReq: true,
+    protect: 2,
+    kind: "small"
   }]
 }, {
   group: "Спалня",
@@ -553,6 +592,91 @@ const CATALOG = [{
     wrap: 8,
     wrapReq: true,
     protect: 5
+  }, {
+    id: "wardrobe1",
+    label: "Гардероб 1-крилен",
+    m3: 0.7,
+    kg: 40,
+    dis: 0.4,
+    asm: 1.0,
+    wrap: 6,
+    wrapReq: true,
+    protect: 5
+  }, {
+    id: "wardrobe4",
+    label: "Гардероб 4-крилен / плъзгащ",
+    m3: 2.4,
+    kg: 150,
+    dis: 2.0,
+    asm: 4.0,
+    wrap: 14,
+    wrapReq: true,
+    kind: "oversized",
+    protect: 14
+  }, {
+    id: "bunkBed",
+    label: "Двуетажно легло",
+    m3: 1.5,
+    kg: 60,
+    dis: 0.6,
+    asm: 1.2,
+    wrap: 10,
+    wrapReq: true,
+    protect: 8
+  }, {
+    id: "babyBed",
+    label: "Детско легло / креватче",
+    m3: 0.6,
+    kg: 25,
+    dis: 0.3,
+    asm: 0.6,
+    wrap: 6,
+    wrapReq: true,
+    protect: 4
+  }, {
+    id: "vanity",
+    label: "Тоалетка (с огледало)",
+    m3: 0.4,
+    kg: 25,
+    dis: 0.2,
+    asm: 0.4,
+    wrap: 6,
+    wrapReq: true,
+    protect: 4,
+    protectReq: true
+  }]
+}, {
+  group: "Кухня и баня",
+  for: "home",
+  items: [{
+    id: "kitchenLower",
+    label: "Кухненски шкаф долен",
+    m3: 0.4,
+    kg: 25,
+    dis: 0.2,
+    asm: 0.4,
+    wrap: 5,
+    wrapReq: true,
+    protect: 3
+  }, {
+    id: "kitchenUpper",
+    label: "Кухненски шкаф горен",
+    m3: 0.2,
+    kg: 12,
+    dis: 0.2,
+    asm: 0.4,
+    wrap: 4,
+    wrapReq: true,
+    protect: 3
+  }, {
+    id: "bathCabinet",
+    label: "Шкаф за баня",
+    m3: 0.2,
+    kg: 12,
+    wrap: 4,
+    wrapReq: true,
+    protect: 3,
+    kind: "small"
   }]
 }, {
   group: "Офис",
@@ -697,6 +821,24 @@ const CATALOG = [{
     kind: "appliance",
     protect: 6
   }, {
+    id: "dryer",
+    label: "Сушилня",
+    m3: 0.4,
+    kg: 45,
+    wrap: 8,
+    wrapReq: true,
+    kind: "appliance",
+    protect: 6
+  }, {
+    id: "ovenBuiltIn",
+    label: "Фурна за вграждане",
+    m3: 0.15,
+    kg: 35,
+    wrap: 5,
+    wrapReq: true,
+    kind: "appliance",
+    protect: 4
+  }, {
     id: "stove",
     label: "Готварска печка",
     m3: 0.4,
@@ -750,6 +892,35 @@ const CATALOG = [{
     wrap: 4,
     wrapReq: true,
     protect: 4,
+    kind: "small"
+  }, {
+    id: "hood",
+    label: "Абсорбатор",
+    m3: 0.1,
+    kg: 10,
+    wrap: 3,
+    wrapReq: true,
+    protect: 2,
+    kind: "small"
+  }, {
+    id: "tvLarge",
+    label: "Телевизор голям (над 55\")",
+    m3: 0.3,
+    kg: 25,
+    dis: 0.2,
+    asm: 0.4,
+    wrap: 6,
+    wrapReq: true,
+    protect: 6,
+    protectReq: true
+  }, {
+    id: "computer",
+    label: "Компютър / монитор",
+    m3: 0.1,
+    kg: 10,
+    wrap: 3,
+    wrapReq: true,
+    protect: 3,
     kind: "small"
   }]
 }, {
@@ -810,6 +981,59 @@ const CATALOG = [{
     protect: 4,
     protectReq: true,
     kind: "small"
+  }, {
+    id: "plant",
+    label: "Голямо растение / саксия",
+    m3: 0.2,
+    kg: 20,
+    wrap: 3,
+    protect: 2,
+    kind: "small"
+  }, {
+    id: "stroller",
+    label: "Детска количка",
+    m3: 0.3,
+    kg: 12,
+    wrap: 4,
+    protect: 2,
+    kind: "small"
+  }, {
+    id: "sewing",
+    label: "Шевна машина",
+    m3: 0.1,
+    kg: 12,
+    wrap: 3,
+    wrapReq: true,
+    protect: 2,
+    kind: "small"
+  }]
+}, {
+  group: "Двор и тераса",
+  for: "home",
+  items: [{
+    id: "gardenTable",
+    label: "Градинска маса",
+    m3: 0.5,
+    kg: 20,
+    dis: 0.2,
+    asm: 0.3,
+    wrap: 5,
+    protect: 3
+  }, {
+    id: "gardenChair",
+    label: "Градински стол",
+    m3: 0.15,
+    kg: 4,
+    wrap: 2,
+    protect: 2,
+    kind: "small"
+  }, {
+    id: "bbq",
+    label: "Скара / барбекю",
+    m3: 0.4,
+    kg: 30,
+    wrap: 5,
+    protect: 3
   }]
 }, {
   group: "Отпадък за изхвърляне",
@@ -3021,6 +3245,8 @@ function computePrice(s, p) {
   // чували, такса сметище) — начисляват се на клиента почти на себестойност, но без тях
   // маржът в панел "Марж" излизаше завишен, все едно е чиста печалба
   let extraCostTotal = 0;
+  let materialsCost = 0; // част от extraCostTotal: стреч, велпапе, кашони — отделен ред „Материали“ в марж панела
+
   let handlingManHours;
   if (dayCrewMode) {
     // цената към клиента е на ден/час × хора (не по-долу), но реалните човекочасове
@@ -3282,16 +3508,21 @@ function computePrice(s, p) {
     const fee = protectMeters * n(p.protectPricePerM);
     add(`Велпапе / автопласт — ${protectMeters} м × ${n(p.protectPricePerM)} ${p.currency}/м`, fee, true);
     extraCostTotal += fee;
+    materialsCost += fee;
   }
   if (rolls) {
     const fee = rolls * n(p.stretchRollPrice);
     add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(4)} ${p.currency}/м`, fee, true);
     extraCostTotal += fee;
+    materialsCost += fee;
   }
   for (const b of boxBuy) {
     const fee = b.cnt * b.price;
     add(`${b.label} от нас — ${b.cnt} бр. × ${b.price} ${p.currency}`, fee, true);
-    extraCostTotal += fee;
+    // кашоните се продават с марж (по подразбиране 30%) — в себестойността влиза само покупната им цена
+    const cost = fee * (1 - Math.min(100, Math.max(0, n(p.boxMarginPct ?? 30))) / 100);
+    extraCostTotal += cost;
+    materialsCost += cost;
   }
 
   // отклонение (буфер) — прилага се ПРЕДИ прага за минимум, за да е минималната цена,
@@ -3343,6 +3574,8 @@ function computePrice(s, p) {
     lines,
     boxFillManHours,
     boxBuy,
+    materialsCost: Math.round(materialsCost * 100) / 100,
+    otherCost: Math.round((extraCostTotal - materialsCost) * 100) / 100,
     costCity,
     workerCostRate,
     workerRate,
@@ -4003,6 +4236,8 @@ function buildRecord(s, p, r, id, calcNumber, createdBy) {
     workerCostRate: r.workerCostRate,
     laborCost: r.laborCost,
     truckCost: r.truckCost,
+    materialsCost: r.materialsCost,
+    otherCost: r.otherCost,
     totalCost: r.totalCost,
     margin: r.margin,
     marginPercent: +r.marginPercent.toFixed(1),
@@ -5187,6 +5422,14 @@ function SettingsPanel({
       fillMinPerBag: v
     }),
     suffix: "мин"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Марж на кашоните",
+    value: p.boxMarginPct,
+    step: 5,
+    onChange: v => upd({
+      boxMarginPct: v
+    }),
+    suffix: "%"
   }), [["boxS", "Кашон малък"], ["boxM", "Кашон среден"], ["boxL", "Кашон голям"], ["books", "Кашон за книги"], ["clothesBag", "Чувал"]].map(([id, label]) => /*#__PURE__*/React.createElement(Num, {
     key: id,
     label: `${label} (без ДДС)`,
@@ -5890,7 +6133,7 @@ function RecordDetail({
     }
   }, r.weightKg, " кг"))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-2 mt-4"
-  }, [["Време труд", `${(r.manHours || 0).toFixed(1)} чч`], ["Бригада · общо на обекта", `${r.crew} души · ${(r.hours || 0).toFixed(1)} ч`], ["Курсове", `${r.trips || 0}`], ["Дни за изпълнение", `${r.workDays || 1} ${r.workDays === 1 ? "ден" : "дни"}`]].map(([k, v]) => /*#__PURE__*/React.createElement("div", {
+  }, [["Време за изпълнение", `≈ ${(r.hours || 0).toFixed(1)} ч`], ["Бригада", `${r.crew} души`], ["Курсове", `${r.trips || 0}`], ["Дни за изпълнение", `${r.workDays || 1} ${r.workDays === 1 ? "ден" : "дни"}`]].map(([k, v]) => /*#__PURE__*/React.createElement("div", {
     key: k,
     className: "rounded-xl px-3 py-2",
     style: {
@@ -5901,6 +6144,8 @@ function RecordDetail({
   }, k), /*#__PURE__*/React.createElement("div", {
     className: "font-bold text-sm"
   }, v)))), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs opacity-70 mt-2"
+  }, "Платен труд: ", (r.manHours || 0).toFixed(1), " човекочаса"), /*#__PURE__*/React.createElement("div", {
     className: "text-xs opacity-70 mt-3"
   }, new Date(r.createdAt).toLocaleString("bg-BG"), " · статус: ", r.status || "калкулация", r.createdBy ? ` · от ${r.createdBy}` : "")), /*#__PURE__*/React.createElement("div", {
     className: "rounded-2xl border border-slate-200 bg-white p-5 mt-3"
@@ -6078,7 +6323,23 @@ function RecordDetail({
     style: {
       color: ink
     }
-  }, r.truckCost, " ", p?.currency)), /*#__PURE__*/React.createElement("div", {
+  }, r.truckCost, " ", p?.currency)), r.materialsCost > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500"
+  }, "Материали (кашони, стреч, велпапе)"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, r.materialsCost, " ", p?.currency)), r.otherCost > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500"
+  }, "Кола и такси"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, r.otherCost, " ", p?.currency)), /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between gap-3 font-semibold pt-1.5 mt-1 border-t border-[#f3ddbd]"
   }, /*#__PURE__*/React.createElement("span", {
     style: {
@@ -8963,7 +9224,7 @@ function KorektCalculator() {
     }
   }, weight, " кг"))), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-2 mt-4"
-  }, [["Време труд", `${manHours.toFixed(1)} чч`], ["Бригада · общо на обекта", `${isDisposal ? disposalTotalCrew : crew} души${crewByProtocol ? " (протокол)" : ""} · ${clockHours.toFixed(1)} ч`], ["Курсове", `${trips}`], ["Дни за изпълнение", `${workDays} ${workDays === 1 ? "ден" : "дни"}${workDays > 1 ? ` (макс. ${p.dayHours} ч/ден)` : ""}`]].map(([k, v]) => /*#__PURE__*/React.createElement("div", {
+  }, [["Време за изпълнение", `≈ ${clockHours.toFixed(1)} ч`], ["Бригада", `${isDisposal ? disposalTotalCrew : crew} души${crewByProtocol ? " (протокол)" : ""}`], ["Курсове", `${trips}`], ["Дни за изпълнение", `${workDays} ${workDays === 1 ? "ден" : "дни"}${workDays > 1 ? ` (макс. ${p.dayHours} ч/ден)` : ""}`]].map(([k, v]) => /*#__PURE__*/React.createElement("div", {
     key: k,
     className: "rounded-xl px-3 py-2",
     style: {
@@ -8974,6 +9235,8 @@ function KorektCalculator() {
   }, k), /*#__PURE__*/React.createElement("div", {
     className: "font-bold text-sm"
   }, v)))), /*#__PURE__*/React.createElement("div", {
+    className: "text-xs opacity-70 mt-2"
+  }, "Платен труд: ", manHours.toFixed(1), " човекочаса"), /*#__PURE__*/React.createElement("div", {
     className: "mt-2 rounded-xl px-3 py-2 text-sm",
     style: {
       background: "rgba(255,255,255,0.08)"
@@ -9199,7 +9462,23 @@ function KorektCalculator() {
     style: {
       color: ink
     }
-  }, truckCost, " ", p.currency)), /*#__PURE__*/React.createElement("div", {
+  }, truckCost, " ", p.currency)), r.materialsCost > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500"
+  }, "Материали (кашони, стреч, велпапе)"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, r.materialsCost, " ", p.currency)), r.otherCost > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500"
+  }, "Кола и такси"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, r.otherCost, " ", p.currency)), /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between gap-3 font-semibold pt-1.5 mt-1 border-t border-[#f3ddbd]"
   }, /*#__PURE__*/React.createElement("span", {
     style: {

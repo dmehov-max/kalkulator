@@ -1053,6 +1053,22 @@ test("кашон от нас: добавя перо по цената от па�
   eq(k.amount, Math.round(15 * P.boxPrices.boxM * 100) / 100);
   eq(ч.amount, Math.round(4 * P.boxPrices.clothesBag * 100) / 100);
 });
+test("кашон от нас: в себестойността влиза покупната цена (марж 30% по подразбиране)", () => {
+  const без = calc({ qty: { boxM: 20 } });
+  const с = calc({ qty: { boxM: 20 }, buyBox: { boxM: true } });
+  const продажба = 20 * P.boxPrices.boxM;
+  ok(Math.abs(с.materialsCost - без.materialsCost - продажба * (1 - P.boxMarginPct / 100)) < 0.02,
+    `материали: очаквано +${(продажба * 0.7).toFixed(2)}, получено +${(с.materialsCost - без.materialsCost).toFixed(2)}`);
+});
+test("кашон от нас: маржът расте с ~30% от продажната цена на кашоните", () => {
+  const без = calc({ qty: { boxM: 20 } });
+  const с = calc({ qty: { boxM: 20 }, buyBox: { boxM: true } });
+  ok(с.totalCost - без.totalCost < 20 * P.boxPrices.boxM, "кашоните не бива да влизат в себестойността с пълната цена");
+});
+test("каталог: има сушилня, съдомиялна и новите групи", () => {
+  ok(E.ITEM_INDEX.dryer && E.ITEM_INDEX.dishwasher, "липсва сушилня или съдомиялна");
+  ok(E.CATALOG.some((g) => g.group === "Кухня и баня") && E.CATALOG.some((g) => g.group === "Двор и тераса"));
+});
 test("кашон от нас: без отметка няма перо", () => {
   const r = calc({ qty: { boxM: 20 } });
   ok(!r.lines.find((l) => l.label.includes("от нас")));
