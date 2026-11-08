@@ -3011,7 +3011,35 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
                 <span className="text-right" style={{ color: ink }}>{[r.contact.name, r.contact.phone, r.contact.email].filter(Boolean).join(" · ")}</span>
               </div>
             )}
+            {r.source && (
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">Източник</span>
+                <span className="text-right" style={{ color: ink }}>{r.source}</span>
+              </div>
+            )}
           </div>
+
+          {r.notes && (
+            <p className="mt-3 text-sm rounded-xl px-3 py-2 bg-slate-50 whitespace-pre-line" style={{ color: ink }}>{r.notes}</p>
+          )}
+
+          {/* разговорът с гласовия асистент — дословно, само за екипа */}
+          {Array.isArray(r.transcript) && r.transcript.length > 0 && (
+            <details className="mt-4 rounded-xl border border-slate-200">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-semibold" style={{ color: ink }}>
+                🎤 Разговор с клиента ({r.transcript.length} реплики)
+              </summary>
+              <div className="px-3 pb-3 space-y-1.5 max-h-96 overflow-y-auto">
+                {r.transcript.map((t, i) => (
+                  <div key={i} className="text-sm">
+                    <span className="text-[11px] text-slate-400 mr-2">{t.at}</span>
+                    <span className="font-semibold" style={{ color: t.who === "клиент" ? ink : accent }}>{t.who === "клиент" ? "Клиент" : "Асистент"}:</span>{" "}
+                    <span style={{ color: ink }}>{t.text}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
 
           {r.items?.length > 0 && (
             <>
@@ -3975,6 +4003,16 @@ export default function KorektCalculator() {
   // иначе презареждане на страницата трупа дубликати (№2, №3...) за една и съща заявка
   const recordKey = useRef(initialDraft?.recordKey || null);
   const recordNumber = useRef(initialDraft?.recordNumber || null); // поредният номер на тази калкулация (генерира се веднъж)
+  const carryRef = useRef(null); // данни от зареден запис, които не са във формата (виж loadRecordForEditing)
+  const withCarry = (rec) => {
+    const c = carryRef.current;
+    if (!c) return rec;
+    if (c.transcript) rec.transcript = c.transcript;
+    if (c.notes) rec.notes = c.notes;
+    if (c.source) rec.source = c.source;
+    if (!rec.contact && c.contact) rec.contact = c.contact;
+    return rec;
+  };
   const pushedRef = useRef(!!initialDraft?.pushed); // дали вече е създаден ред в Supabase — след това само PATCH (update), не upsert
   const [calcNumberState, setCalcNumberState] = useState(initialDraft?.recordNumber || null); // за показване в резултата
 
@@ -3984,6 +4022,9 @@ export default function KorektCalculator() {
   const loadRecordForEditing = (rec) => {
     if (!rec?.formState) { notify("Този запис е отпреди тази функция — няма запазено пълно състояние.", "error"); return; }
     setS({ ...INITIAL_S, ...rec.formState });
+    // неща извън формата (разговор с гласовия асистент, бележка, източник, контакт) —
+    // пренасят се при всяко презаписване на записа и в офертата, иначе редакцията ги трие
+    carryRef.current = { transcript: rec.transcript || null, notes: rec.notes || null, source: rec.source || null, contact: rec.contact || null };
     recordKey.current = rec.key || null;
     recordNumber.current = rec.calcNumber ?? null;
     pushedRef.current = !!rec.key; // вече съществува ред в Supabase — следващият autosave трябва да е PATCH, не нов POST
@@ -4002,6 +4043,7 @@ export default function KorektCalculator() {
     setStep(0);
     recordKey.current = null;
     recordNumber.current = null;
+    carryRef.current = null;
     pushedRef.current = false;
     setCalcNumberState(null);
     clearDraftLS(authSession?.email);
@@ -4043,6 +4085,10 @@ export default function KorektCalculator() {
       from: rec.from, to: rec.to, pickup: rec.pickup, dropoff: rec.dropoff,
       km: rec.km, volumeM3: rec.volumeM3, weightKg: rec.weightKg, truck: rec.truck,
       items: rec.items.map((i) => ({ label: i.label, qty: i.qty })),
+      // вътрешно за офертата (клиентът не го вижда): разговорът с гласовия асистент и бележката
+      transcript: carryRef.current?.transcript || null,
+      notes: carryRef.current?.notes || null,
+      clientName: carryRef.current?.contact?.name || s.name || "",
     };
     try { localStorage.setItem("korekt:offerFromCalc", JSON.stringify(payload)); } catch (e) { /* без значение */ }
     guardAdmin(() => {
@@ -4065,7 +4111,7 @@ export default function KorektCalculator() {
       nextCalcNumber().then((num) => { recordNumber.current = num; setCalcNumberState(num); });
     }
     const key = recordKey.current;
-    const rec = buildRecord(s, p, r, key, recordNumber.current, userName);
+    const rec = withCarry(buildRecord(s, p, r, key, recordNumber.current, userName));
     // само пазим въведения контакт в чернова — статус "заявка" се вдига единствено при
     // реално натиснат бутон "Изпрати заявка" (submitRequest), не от остатъчен текст в полето
     if (s.name || s.phone || s.email) {
@@ -4147,7 +4193,7 @@ export default function KorektCalculator() {
     }
     const key = recordKey.current || `${CALC_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     recordKey.current = key;
-    const rec = buildRecord(s, p, r, key, recordNumber.current, userName);
+    const rec = withCarry(buildRecord(s, p, r, key, recordNumber.current, userName));
     rec.contact = { name: s.name, phone: s.phone, email: s.email };
     rec.status = "заявка";
     setSaveState("saving");

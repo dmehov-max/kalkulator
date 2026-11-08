@@ -185,6 +185,13 @@ textarea { min-height: 54px; resize: vertical; }
     </fieldset>
 
     <fieldset>
+      <legend>Вътрешно — клиентът не го вижда</legend>
+      <label class="f">По калкулация №<input type="text" id="f-calcNumber" data-k="calcNumber" placeholder="напр. 171"></label>
+      <label class="f">Бележка за колегите<textarea id="f-internalNotes" data-k="internalNotes" placeholder="особености, желана дата, неща извън каталога"></textarea></label>
+      <label class="f">Разговор с клиента (гласов асистент)<textarea id="f-transcript" data-k="transcript" style="min-height:140px" placeholder="Попълва се сам, когато офертата е направена от калкулация на гласовия асистент."></textarea></label>
+    </fieldset>
+
+    <fieldset>
       <legend>Кой прави офертата</legend>
       <label class="f">Служител<select class="in" id="f-team"></select></label>
       <div class="photo">
@@ -277,6 +284,12 @@ function fromCalc(c) {
   o.service = c.serviceLabel || o.service; if (c.truck) o.vehicle = c.truck;
   o.inventory = (c.items || []).map(i => ({ item: i.label, qty: i.qty, note: "" }));
   o.lines = [{ name: c.serviceLabel || "Услуга", desc: c.calcNumber ? `По калкулация №${c.calcNumber}` : "", amount: c.total || "" }];
+  // вътрешни полета — не влизат в toOffer(), затова клиентът не ги вижда
+  o.calcNumber = c.calcNumber ? String(c.calcNumber) : "";
+  o.internalNotes = c.notes || "";
+  o.transcript = Array.isArray(c.transcript)
+    ? c.transcript.map(t => `${t.at || ""} ${t.who === "клиент" ? "Клиент" : "Асистент"}: ${t.text}`.trim()).join("\n")
+    : "";
   return o;
 }
 
