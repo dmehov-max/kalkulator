@@ -3486,11 +3486,54 @@ function VoicePanel({ session, p }) {
   const [agentHere, setAgentHere] = useState(false);
   const [err, setErr] = useState(null);
   const [lines, setLines] = useState([]); // { id, who, text }
+  const [level, setLevel] = useState(0); // сила на звука от микрофона 0–1 — показва дали браузърът изобщо ни чува
+  const [mics, setMics] = useState([]);
+  const [micId, setMicId] = useState("");
   const roomRef = useRef(null);
   const audioRef = useRef(null);
   const waitRef = useRef(null);
+  const meterRef = useRef(null);
+
+  const stopMeter = () => {
+    const m = meterRef.current;
+    if (m) { cancelAnimationFrame(m.raf); m.ctx.close().catch(() => {}); }
+    meterRef.current = null;
+    setLevel(0);
+  };
+  // мери силата на звука на това, което реално се изпраща към асистента
+  const startMeter = (room) => {
+    stopMeter();
+    const LK = window.LivekitClient;
+    const track = room.localParticipant.getTrackPublication(LK.Track.Source.Microphone)?.track?.mediaStreamTrack;
+    if (!track) return;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    ctx.createMediaStreamSource(new MediaStream([track])).connect(analyser);
+    const buf = new Float32Array(analyser.fftSize);
+    const m = { ctx, raf: 0, last: 0 };
+    const tick = (t) => {
+      analyser.getFloatTimeDomainData(buf);
+      if (t - m.last > 100) {
+        let sum = 0; for (const v of buf) sum += v * v;
+        setLevel(Math.min(1, Math.sqrt(sum / buf.length) * 6));
+        m.last = t;
+      }
+      m.raf = requestAnimationFrame(tick);
+    };
+    m.raf = requestAnimationFrame(tick);
+    meterRef.current = m;
+  };
+  const changeMic = async (id) => {
+    setMicId(id);
+    const room = roomRef.current;
+    if (!room) return;
+    try { await room.switchActiveDevice("audioinput", id); startMeter(room); }
+    catch (e) { setErr("Не успях да сменя микрофона: " + (e.message || e)); }
+  };
 
   const stop = () => {
+    stopMeter();
     clearTimeout(waitRef.current);
     if (roomRef.current) roomRef.current.disconnect();
     roomRef.current = null;
@@ -3498,7 +3541,7 @@ function VoicePanel({ session, p }) {
     setAgentHere(false);
     setState("idle");
   };
-  useEffect(() => () => { clearTimeout(waitRef.current); if (roomRef.current) roomRef.current.disconnect(); }, []);
+  useEffect(() => () => { stopMeter(); clearTimeout(waitRef.current); if (roomRef.current) roomRef.current.disconnect(); }, []);
 
   const start = async () => {
     setErr(null); setLines([]); setState("connecting");
@@ -3536,7 +3579,14 @@ function VoicePanel({ session, p }) {
         }
       });
       await room.connect(data.url, data.token);
-      await room.localParticipant.setMicrophoneEnabled(true);
+      await room.localParticipant.setMicrophoneEnabled(true, micId ? { deviceId: micId } : undefined);
+      startMeter(room);
+      try {
+        const list = await LK.Room.getLocalDevices("audioinput");
+        setMics(list.map((d) => ({ id: d.deviceId, label: d.label || "Микрофон" })));
+        const active = room.getActiveDevice("audioinput");
+        if (active) setMicId(active);
+      } catch (e) { /* списъкът е само удобство */ }
       if (room.remoteParticipants.size > 0) setAgentHere(true);
       setState("live");
       waitRef.current = setTimeout(() => {
@@ -3573,6 +3623,29 @@ function VoicePanel({ session, p }) {
           className="w-full rounded-xl py-3 font-semibold text-white disabled:opacity-60" style={{ background: accent }}>
           {state === "connecting" ? "Свързване…" : "🎤 Започни разговор"}
         </button>
+      )}
+      {state === "live" && (
+        <div className="mt-4 rounded-xl border border-slate-200 p-3 space-y-2">
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500 shrink-0 w-24">Вашият звук</span>
+            <div className="flex-1 h-2.5 rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-100"
+                style={{ width: `${Math.round(level * 100)}%`, background: level > 0.08 ? "#16a34a" : "#94a3b8" }} />
+            </div>
+          </div>
+          {mics.length > 0 && (
+            <label className="flex items-center gap-3">
+              <span className="text-xs text-slate-500 shrink-0 w-24">Микрофон</span>
+              <select value={micId} onChange={(e) => changeMic(e.target.value)}
+                className="flex-1 min-w-0 text-sm rounded-lg border border-slate-200 px-2 py-1.5 bg-white">
+                {mics.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            </label>
+          )}
+          <p className="text-[11px] text-slate-400">
+            Когато говорите, лентата трябва да става зелена. Ако не мърда, изберете друг микрофон.
+          </p>
+        </div>
       )}
       {err && <p className="text-xs mt-3" style={{ color: "#dc2626" }}>{err}</p>}
       {lines.length > 0 && (
