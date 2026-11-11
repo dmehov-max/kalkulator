@@ -2869,6 +2869,62 @@ function recordRouteLabel(r) {
   return `Межд.: ${r.destination || ""}`;
 }
 
+// текст за поле „Забележка“ на поръчка в pro (и Description в ERP) — кол центърът го копира
+// с един бутон, вместо да преписва калкулацията на ръка. Работи и за стари записи от „Записи“.
+function proNoteText(r, currency = "€") {
+  const fs = r.formState || {};
+  const lift = (a) => (!a ? "" : a.elevator ? (a.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор") : "без асансьор");
+  const place = (a, b) => (!a ? null : [b, a.floor === 0 ? "партер" : `${a.floor} ет.`, lift(a), a.carryDistanceM > 0 ? `${a.carryDistanceM} м до камиона` : ""].filter(Boolean).join(", "));
+  const c = r.contact || {};
+  const lines = [];
+  const d = r.createdAt ? new Date(r.createdAt).toLocaleDateString("bg-BG") : "";
+  lines.push(`Калкулация №${r.calcNumber ?? "—"} от калкулатора${d ? ` (${d})` : ""}${r.requestNumber ? ` · запитване ${r.requestNumber}` : ""}`);
+  if (c.name || c.phone || c.email) lines.push(`Клиент: ${[c.name, c.phone, c.email].filter(Boolean).join(", ")}`);
+  lines.push(`Услуга: ${SERVICE_LABELS[r.service] || r.service || ""}`);
+  lines.push(`Маршрут: ${recordRouteLabel(r)}${r.km ? ` (${r.km} км)` : ""}`);
+  const pu = place(r.pickup, fs.pickup?.building), dr = place(r.dropoff, fs.dropoff?.building);
+  if (pu) lines.push(`Товарене: ${pu}`);
+  if (dr && !["labour", "assembly", "trd"].includes(r.service)) lines.push(`Разтоварване: ${dr}`);
+  if (r.items?.length) {
+    lines.push(`Вещи (${r.volumeM3} м³, ${r.weightKg} кг): ${r.items.map((i) => `${i.qty} × ${i.label}`).join("; ")}`);
+  }
+  if (r.disassembly?.length) lines.push(`Разглобяване: ${r.disassembly.join(", ")}`);
+  if (r.assembly?.length) lines.push(`Сглобяване: ${r.assembly.join(", ")}`);
+  const org = [`бригада ${r.crew} души`, r.trips ? `${r.trips} курс${r.trips === 1 ? "" : "а"}` : "", r.truck || "", r.hours ? `≈ ${(+r.hours).toFixed(1)} ч` : "", r.workDays > 1 ? `${r.workDays} дни` : "", r.courseMode || ""].filter(Boolean);
+  lines.push(`Организация: ${org.join(", ")}`);
+  const total = Number(r.total) || 0;
+  lines.push(`Цена: ${total} ${currency} без ДДС / ${Math.round(total * 1.2)} ${currency} с ДДС (ориентировъчна)`);
+  if (r.notes) lines.push(`Бележка: ${r.notes}`);
+  return lines.join("\n");
+}
+
+// полетата за клиента — кол центърът ги попълва в началото на разговора (стъпка „Услуга“)
+// и може да ги допише в края (стъпка „Цена“); едно и също състояние s.name/s.phone/...
+function ClientFields({ s, set, compact }) {
+  const cls = `rounded-xl border border-slate-200 px-3 ${compact ? "py-2" : "py-3"} text-sm w-full`;
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      <input placeholder="Име на клиента" value={s.name} onChange={(e) => set({ name: e.target.value })} className={cls} />
+      <input placeholder="Телефон" type="tel" inputMode="tel" value={s.phone} onChange={(e) => set({ phone: e.target.value })} className={cls} />
+      <input placeholder="Имейл (по желание)" type="email" inputMode="email" value={s.email} onChange={(e) => set({ email: e.target.value })} className={cls} />
+      <input placeholder="№ запитване / поръчка в pro (по желание)" value={s.requestNumber} onChange={(e) => set({ requestNumber: e.target.value })} className={cls} />
+    </div>
+  );
+}
+
+// копира текст в клипборда; при отказ (стар браузър, iframe) — през скрито текстово поле
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* пробваме долу */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch (e) { return false; }
+}
+
 // улавя реалните числа след завършена поръчка — за калибриране на калкулатора.
 // Δ спрямо прогнозата излиза веднага, докато пишеш (не само след запис), за да личи
 // разминаването на момента. Записва се в record.actual — без да пипа status/данните.
@@ -2959,6 +3015,11 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
               </div>
             ) : <span />}
             <div className="flex items-center gap-3">
+              <button onClick={async () => notify?.((await copyText(proNoteText(r, p?.currency))) ? "Копирано — поставете го в „Забележка“ на поръчката в pro." : "Не успях да копирам — маркирайте текста ръчно.", "info")}
+                className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "#fff", color: ink }}
+                title="Копира калкулацията като текст за поле „Забележка“ в pro и Description в ERP">
+                📋 За Pro
+              </button>
               {onEdit && (
                 r.formState ? (
                   <button onClick={() => onEdit(r)} className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: accent, color: ink }}>
@@ -4275,9 +4336,17 @@ export default function KorektCalculator() {
     setSaveState(ok ? "saved" : getStorageMode() === "none" ? "unavailable" : "error");
     if (ok) clearDraftLS(authSession?.email); // заявката е потвърдена — чернова вече не е нужна
     notify(ok
-      ? "Заявката е записана. Ще се свържем с Вас."
-      : "Заявката не можа да се запише автоматично. Моля, обадете се на " + p.phone + ".",
+      ? `Калкулация №${recordNumber.current ?? ""} е записана като заявка. Копирайте я за pro с „📋 Копирай за pro“.`
+      : "Заявката не можа да се запише — проверете връзката и опитайте пак.",
       ok ? "success" : "error");
+  };
+
+  // текстът за „Забележка“ в pro — от същия запис, който отива в Записи
+  const copyForPro = async () => {
+    const rec = withCarry(buildRecord(s, p, r, recordKey.current, recordNumber.current, userName));
+    if (s.name || s.phone || s.email) rec.contact = { name: s.name, phone: s.phone, email: s.email };
+    const ok = await copyText(proNoteText(rec, p.currency));
+    notify(ok ? "Копирано — поставете го в „Забележка“ на поръчката в pro." : "Не успях да копирам — опитайте пак.", ok ? "success" : "error");
   };
 
   const canNext =
@@ -4484,6 +4553,10 @@ export default function KorektCalculator() {
             {/* STEP 0 */}
             {step === 0 && (
               <div className="space-y-3">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="text-sm font-semibold mb-2" style={{ color: ink }}>👤 Клиент</div>
+                  <ClientFields s={s} set={set} compact />
+                </div>
                 <h2 className="text-xl font-bold" style={{ color: ink }}>Какъв тип услуга Ви трябва?</h2>
                 {[
                   { id: "local", t: "Градско преместване", d: `В рамките на града и близките села (до ${p.intercityThresholdKm} км)`, m: p.minPrice.local },
@@ -5383,19 +5456,20 @@ export default function KorektCalculator() {
                 )}
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <div className="text-sm font-semibold mb-1" style={{ color: ink }}>Заявете потвърждение</div>
+                  <div className="text-sm font-semibold mb-1" style={{ color: ink }}>👤 Клиент и прехвърляне в pro</div>
                   <p className="text-xs text-slate-400 mb-3">
-                    Данните се записват автоматично, докато пишете — бутонът само потвърждава заявката.
+                    Данните се записват автоматично към калкулацията, докато пишете.
                     {saveState === "saving" && <span> · записва се…</span>}
                     {saveState === "saved" && <span style={{ color: accent }}> · запазено ✓</span>}
                   </p>
-                  <div className="grid gap-3">
-                    <input placeholder="Име" value={s.name} onChange={(e) => set({ name: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
-                    <input placeholder="Телефон" type="tel" inputMode="tel" value={s.phone} onChange={(e) => set({ phone: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
-                    <input placeholder="Имейл" type="email" inputMode="email" value={s.email} onChange={(e) => set({ email: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
-                    <input placeholder="Номер на заявка (по желание)" value={s.requestNumber} onChange={(e) => set({ requestNumber: e.target.value })} className="rounded-xl border border-slate-200 px-4 py-3 text-sm" />
+                  <ClientFields s={s} set={set} />
+                  <div className="grid gap-2 sm:grid-cols-2 mt-3">
+                    <button onClick={copyForPro}
+                      className="rounded-xl py-3 font-semibold" style={{ background: "#fff", color: ink, border: `1px solid ${ink}` }}
+                      title="Копира калкулацията като текст за „Забележка“ в pro и Description в ERP">📋 Копирай за pro</button>
                     <button onClick={submitRequest}
-                      className="rounded-xl py-3 font-semibold text-white" style={{ background: accent }}>Изпрати заявка</button>
+                      className="rounded-xl py-3 font-semibold text-white" style={{ background: accent }}
+                      title="Маркира калкулацията със статус „заявка“ в Записи">✅ Запиши като заявка</button>
                   </div>
                 </div>
               </div>
