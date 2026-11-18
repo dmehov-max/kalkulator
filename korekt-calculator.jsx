@@ -1149,7 +1149,11 @@ function computePrice(s, p) {
   const wrapMeters = wrapMetersFor(s.qty, s.wrap, s.selfPack);
   const wrapManHours = wrapMeters / n(p.wrapMPerManHour || 40);
   const wrapHours = wrapManHours; // човекочаса за опаковане
-  const rolls = wrapMeters > 0 ? wrapMeters / n(p.stretchRollM || 20) : 0; // дробна част се таксува пропорционално
+  const autoRolls = wrapMeters > 0 ? wrapMeters / n(p.stretchRollM || 20) : 0; // дробна част се таксува пропорционално
+  // ръчно за тази калкулация: брой цели ролки (напр. черен стреч за международно) и цена на ролка
+  const rollsManual = n(s.stretchRollsManual || 0) > 0;
+  const rolls = rollsManual ? n(s.stretchRollsManual) : autoRolls;
+  const rollPrice = rollsManual && n(s.stretchRollPriceManual || 0) > 0 ? n(s.stretchRollPriceManual) : n(p.stretchRollPrice);
 
   // велпапе / автопласт за огледала, картини, стъкла
   const protectMeters = protectMetersFor(s.qty, s.protect, s.selfPack);
@@ -1485,7 +1489,14 @@ function computePrice(s, p) {
   const stairs = floorsStdTot * perFloorStd + floorsOvrTot * perFloorOvr;
   // превръща таксата за стълби в реални човекочасове по стандартната работническа ставка —
   // екипът реално отделя толкова допълнително време, не само плаща толкова допълнително
-  const stairsManHours = workerRate > 0 ? stairs / workerRate : 0;
+  const stairsManHoursAll = workerRate > 0 ? stairs / workerRate : 0;
+  // Стълбите при дребна задача влизат в платения минимум от 2 ч (решение 18.11.2026): бригадата
+  // и без това е платена за 2 ч, а реалната работа е под час. Опаковането заема свободното
+  // време първо, стълбите — каквото остане; доплаща се само частта извън минимума.
+  const stairsAbsorbedManHours = !isCourse && !usesFieldCrew && !isDisposal && !hoursManual && crew > 0
+    ? Math.min(stairsManHoursAll, Math.max(0, localMinSlack - packAbsorbedClock) * crew) : 0;
+  const stairsManHours = stairsManHoursAll - stairsAbsorbedManHours;   // таксуваната част
+  const stairsCharged = stairsManHoursAll > 0 ? stairs * (stairsManHours / stairsManHoursAll) : 0;
 
   // опаковането, побрало се в минимума, вече е в handlingManHours/handlingClock — не се брои втори път
   const manHours = handlingManHours + disManHours + wrapManHours + protectManHours + boxFillManHours - packAbsorbedManHours + fillManHours + carryManHours + stairsManHours;
@@ -1497,6 +1508,9 @@ function computePrice(s, p) {
   const truckClockHours = clockHours - (crew ? stairsManHours / crew : stairsManHours);
   // над 10 часа на ден не се работи — толкова дни реално са нужни за изпълнение
   const workDays = Math.max(1, Math.ceil(clockHours / n(p.dayHours || 10)));
+  // задачата се побира изцяло в минимума (градско, без ръчни часове, нищо извън 2-та часа)
+  const onLocalMinimum = !isCourse && !usesFieldCrew && !isDisposal && !hoursManual && crew > 0
+    && localMinSlack > 0 && clockHours <= n(p.minLocalHours) + 1e-9;
 
   // спец. обработка
   Object.entries(s.qty).forEach(([id, cnt]) => {
@@ -1504,7 +1518,7 @@ function computePrice(s, p) {
     if (it?.surcharge && cnt > 0) add(`${it.label} — спец. обработка ×${cnt}`, it.surcharge * cnt);
   });
 
-  if (stairs) {
+  if (stairsCharged > 1e-6) {
     const parts = [];
     if (floorsStdTot && boxes) parts.push(`${boxes} каш.`);
     if (floorsStdTot && appNormal) parts.push(`${appNormal} уред`);
@@ -1515,7 +1529,9 @@ function computePrice(s, p) {
     const floorParts = [];
     if (floorsStd(s.pickup)) floorParts.push(`${s.pickupHood || s.pickupCity || "товарене"}: ${floorsStd(s.pickup)} ет.`);
     if (!skipDropoffFloors && floorsStd(s.dropoff)) floorParts.push(`${s.dropoffHood || s.dropoffCity || "разтоварване"}: ${floorsStd(s.dropoff)} ет.`);
-    add(`Стълби без асансьор${parts.length ? " · " + parts.join(", ") : ""}${floorParts.length ? " (" + floorParts.join(", ") + ")" : ""}`, stairs);
+    add(`Стълби без асансьор${parts.length ? " · " + parts.join(", ") : ""}${floorParts.length ? " (" + floorParts.join(", ") + ")" : ""}${stairsAbsorbedManHours > 1e-6 ? " — частта извън минимума" : ""}`, stairsCharged);
+  } else if (stairs) {
+    lines.push({ label: `Стълби без асансьор — влизат в минимума от ${n(p.minLocalHours)} ч`, amount: 0 });
   }
 
   // ТРАНСПОРТ (перо) — само за времето, в което камионът реално участва.
@@ -1551,9 +1567,16 @@ function computePrice(s, p) {
     extraCostTotal += fee; materialsCost += fee;
   }
   if (rolls) {
-    const fee = rolls * n(p.stretchRollPrice);
-    add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(4)} ${p.currency}/м`, fee, true);
-    extraCostTotal += fee; materialsCost += fee;
+    const fee = rolls * rollPrice;
+    if (rollsManual) {
+      add(`Стреч фолио — ${rolls} ${rolls === 1 ? "ролка" : "ролки"} × ${rollPrice} ${p.currency}`, fee, true);
+      // себестойността е по покупната цена на ролка (Параметри), разликата до цената за клиента е марж
+      const cost = rolls * n(p.stretchRollPrice);
+      extraCostTotal += cost; materialsCost += cost;
+    } else {
+      add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(4)} ${p.currency}/м`, fee, true);
+      extraCostTotal += fee; materialsCost += fee;
+    }
   }
   for (const b of boxBuy) {
     const fee = b.cnt * b.price;
@@ -1568,7 +1591,8 @@ function computePrice(s, p) {
   // може да се коригира и ръчно за конкретната калкулация (s.deviationOverride), напр. при
   // нетипична поръчка — 0 означава "ползвай стойността от ⚙ Параметри"
   const deviationManual = Number(s.deviationOverride) > 0;
-  const deviationFactor = deviationManual ? n(s.deviationOverride) : (n(p.deviationFactor || 1) || 1);
+  // задача изцяло в минимума: без буфер — резервът вече е в самия минимум (реалната работа е под 2 ч)
+  const deviationFactor = deviationManual ? n(s.deviationOverride) : onLocalMinimum ? 1 : (n(p.deviationFactor || 1) || 1);
   if (deviationFactor !== 1) {
     // информативен ред — реалната (изчислената) цена преди буфера, само за показване,
     // не пипа total; веднага след него идва самото отклонение, а общата сума е накрая
@@ -3846,7 +3870,7 @@ function ProfilePanel({ session, userName, onSaved, notify, p }) {
 // начално състояние на калкулацията (стъпка 1) — извадено извън компонента, за да служи и като
 // база при сливане с възстановена чернова (schema-safe, ако по-късно добавим ново поле)
 const INITIAL_S = {
-  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, deviationOverride: 0, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {}, floorFeeOff: {}, fill: {}, buyBox: {},
+  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, deviationOverride: 0, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {}, floorFeeOff: {}, fill: {}, buyBox: {}, stretchRollsManual: 0, stretchRollPriceManual: 0,
   pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   extras: { packing: false, materials: false, disassembly: false },
@@ -5175,7 +5199,24 @@ export default function KorektCalculator() {
                     Матраците и техниката се опаковат задължително със стреч фолио. Огледалата, картините и телевизорите — с велпапе или автопласт.
                     За останалите вещи отметнете „📦 стреч" или „🛡 велпапе" при вещта.
                   </p>
-                  {wrapMeters > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 mt-3 text-xs" style={{ color: ink }}>
+                    <span className="font-medium">Ролки стреч ръчно:</span>
+                    <input type="number" min="0" step="1" placeholder="авт." value={s.stretchRollsManual || ""}
+                      onChange={(e) => set({ stretchRollsManual: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+                      className="w-16 rounded-lg border border-slate-200 px-2 py-1 text-right" />
+                    <span>бр. ×</span>
+                    <input type="number" min="0" step="0.5" placeholder={String(p.stretchRollPrice)} value={s.stretchRollPriceManual || ""}
+                      onChange={(e) => set({ stretchRollPriceManual: Math.max(0, Number(e.target.value) || 0) })}
+                      className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-right" />
+                    <span>{p.currency} без ДДС</span>
+                    <span className="text-slate-400">— празно = по метрите от отметките</span>
+                  </div>
+                  {s.stretchRollsManual > 0 && (
+                    <div className="text-xs mt-1" style={{ color: accent }}>
+                      Таксуват се {s.stretchRollsManual} ролки × {s.stretchRollPriceManual || p.stretchRollPrice} {p.currency} вместо {wrapMeters} м по метри.
+                    </div>
+                  )}
+                  {wrapMeters > 0 && !(s.stretchRollsManual > 0) && (
                     <div className="text-xs mt-2" style={{ color: ink }}>
                       Стреч: <b>{wrapMeters} м</b> × {(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(4)} {p.currency}/м
                       {" ≈ "}<b>{(rolls * n(p.stretchRollPrice)).toFixed(2)} {p.currency}</b>

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-9wYe647Yj5GHBt6s6mYDNIUO7lCTttu0Va3XCYF8Ktk='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-OINvtQRgllN2wyHRZ/HxYSiIUhXcawOUzaX8/KRASL8='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -3140,7 +3140,11 @@ function computePrice(s, p) {
   const wrapMeters = wrapMetersFor(s.qty, s.wrap, s.selfPack);
   const wrapManHours = wrapMeters / n(p.wrapMPerManHour || 40);
   const wrapHours = wrapManHours; // човекочаса за опаковане
-  const rolls = wrapMeters > 0 ? wrapMeters / n(p.stretchRollM || 20) : 0; // дробна част се таксува пропорционално
+  const autoRolls = wrapMeters > 0 ? wrapMeters / n(p.stretchRollM || 20) : 0; // дробна част се таксува пропорционално
+  // ръчно за тази калкулация: брой цели ролки (напр. черен стреч за международно) и цена на ролка
+  const rollsManual = n(s.stretchRollsManual || 0) > 0;
+  const rolls = rollsManual ? n(s.stretchRollsManual) : autoRolls;
+  const rollPrice = rollsManual && n(s.stretchRollPriceManual || 0) > 0 ? n(s.stretchRollPriceManual) : n(p.stretchRollPrice);
 
   // велпапе / автопласт за огледала, картини, стъкла
   const protectMeters = protectMetersFor(s.qty, s.protect, s.selfPack);
@@ -3446,7 +3450,13 @@ function computePrice(s, p) {
   const stairs = floorsStdTot * perFloorStd + floorsOvrTot * perFloorOvr;
   // превръща таксата за стълби в реални човекочасове по стандартната работническа ставка —
   // екипът реално отделя толкова допълнително време, не само плаща толкова допълнително
-  const stairsManHours = workerRate > 0 ? stairs / workerRate : 0;
+  const stairsManHoursAll = workerRate > 0 ? stairs / workerRate : 0;
+  // Стълбите при дребна задача влизат в платения минимум от 2 ч (решение 18.11.2026): бригадата
+  // и без това е платена за 2 ч, а реалната работа е под час. Опаковането заема свободното
+  // време първо, стълбите — каквото остане; доплаща се само частта извън минимума.
+  const stairsAbsorbedManHours = !isCourse && !usesFieldCrew && !isDisposal && !hoursManual && crew > 0 ? Math.min(stairsManHoursAll, Math.max(0, localMinSlack - packAbsorbedClock) * crew) : 0;
+  const stairsManHours = stairsManHoursAll - stairsAbsorbedManHours; // таксуваната част
+  const stairsCharged = stairsManHoursAll > 0 ? stairs * (stairsManHours / stairsManHoursAll) : 0;
 
   // опаковането, побрало се в минимума, вече е в handlingManHours/handlingClock — не се брои втори път
   const manHours = handlingManHours + disManHours + wrapManHours + protectManHours + boxFillManHours - packAbsorbedManHours + fillManHours + carryManHours + stairsManHours;
@@ -3458,13 +3468,15 @@ function computePrice(s, p) {
   const truckClockHours = clockHours - (crew ? stairsManHours / crew : stairsManHours);
   // над 10 часа на ден не се работи — толкова дни реално са нужни за изпълнение
   const workDays = Math.max(1, Math.ceil(clockHours / n(p.dayHours || 10)));
+  // задачата се побира изцяло в минимума (градско, без ръчни часове, нищо извън 2-та часа)
+  const onLocalMinimum = !isCourse && !usesFieldCrew && !isDisposal && !hoursManual && crew > 0 && localMinSlack > 0 && clockHours <= n(p.minLocalHours) + 1e-9;
 
   // спец. обработка
   Object.entries(s.qty).forEach(([id, cnt]) => {
     const it = ITEM_INDEX[id];
     if (it?.surcharge && cnt > 0) add(`${it.label} — спец. обработка ×${cnt}`, it.surcharge * cnt);
   });
-  if (stairs) {
+  if (stairsCharged > 1e-6) {
     const parts = [];
     if (floorsStdTot && boxes) parts.push(`${boxes} каш.`);
     if (floorsStdTot && appNormal) parts.push(`${appNormal} уред`);
@@ -3475,7 +3487,12 @@ function computePrice(s, p) {
     const floorParts = [];
     if (floorsStd(s.pickup)) floorParts.push(`${s.pickupHood || s.pickupCity || "товарене"}: ${floorsStd(s.pickup)} ет.`);
     if (!skipDropoffFloors && floorsStd(s.dropoff)) floorParts.push(`${s.dropoffHood || s.dropoffCity || "разтоварване"}: ${floorsStd(s.dropoff)} ет.`);
-    add(`Стълби без асансьор${parts.length ? " · " + parts.join(", ") : ""}${floorParts.length ? " (" + floorParts.join(", ") + ")" : ""}`, stairs);
+    add(`Стълби без асансьор${parts.length ? " · " + parts.join(", ") : ""}${floorParts.length ? " (" + floorParts.join(", ") + ")" : ""}${stairsAbsorbedManHours > 1e-6 ? " — частта извън минимума" : ""}`, stairsCharged);
+  } else if (stairs) {
+    lines.push({
+      label: `Стълби без асансьор — влизат в минимума от ${n(p.minLocalHours)} ч`,
+      amount: 0
+    });
   }
 
   // ТРАНСПОРТ (перо) — само за времето, в което камионът реално участва.
@@ -3511,10 +3528,18 @@ function computePrice(s, p) {
     materialsCost += fee;
   }
   if (rolls) {
-    const fee = rolls * n(p.stretchRollPrice);
-    add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(4)} ${p.currency}/м`, fee, true);
-    extraCostTotal += fee;
-    materialsCost += fee;
+    const fee = rolls * rollPrice;
+    if (rollsManual) {
+      add(`Стреч фолио — ${rolls} ${rolls === 1 ? "ролка" : "ролки"} × ${rollPrice} ${p.currency}`, fee, true);
+      // себестойността е по покупната цена на ролка (Параметри), разликата до цената за клиента е марж
+      const cost = rolls * n(p.stretchRollPrice);
+      extraCostTotal += cost;
+      materialsCost += cost;
+    } else {
+      add(`Стреч фолио — ${wrapMeters} м × ${(n(p.stretchRollPrice) / n(p.stretchRollM || 1)).toFixed(4)} ${p.currency}/м`, fee, true);
+      extraCostTotal += fee;
+      materialsCost += fee;
+    }
   }
   for (const b of boxBuy) {
     const fee = b.cnt * b.price;
@@ -3530,7 +3555,8 @@ function computePrice(s, p) {
   // може да се коригира и ръчно за конкретната калкулация (s.deviationOverride), напр. при
   // нетипична поръчка — 0 означава "ползвай стойността от ⚙ Параметри"
   const deviationManual = Number(s.deviationOverride) > 0;
-  const deviationFactor = deviationManual ? n(s.deviationOverride) : n(p.deviationFactor || 1) || 1;
+  // задача изцяло в минимума: без буфер — резервът вече е в самия минимум (реалната работа е под 2 ч)
+  const deviationFactor = deviationManual ? n(s.deviationOverride) : onLocalMinimum ? 1 : n(p.deviationFactor || 1) || 1;
   if (deviationFactor !== 1) {
     // информативен ред — реалната (изчислената) цена преди буфера, само за показване,
     // не пипа total; веднага след него идва самото отклонение, а общата сума е накрая
@@ -7310,6 +7336,8 @@ const INITIAL_S = {
   floorFeeOff: {},
   fill: {},
   buyBox: {},
+  stretchRollsManual: 0,
+  stretchRollPriceManual: 0,
   pickup: {
     building: "Апартамент",
     floor: 0,
@@ -9298,7 +9326,41 @@ function KorektCalculator() {
     }
   }, "Опаковане"), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-slate-400"
-  }, "Матраците и техниката се опаковат задължително със стреч фолио. Огледалата, картините и телевизорите — с велпапе или автопласт. За останалите вещи отметнете „📦 стреч\" или „🛡 велпапе\" при вещта."), wrapMeters > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "Матраците и техниката се опаковат задължително със стреч фолио. Огледалата, картините и телевизорите — с велпапе или автопласт. За останалите вещи отметнете „📦 стреч\" или „🛡 велпапе\" при вещта."), /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap items-center gap-2 mt-3 text-xs",
+    style: {
+      color: ink
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "font-medium"
+  }, "Ролки стреч ръчно:"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: "0",
+    step: "1",
+    placeholder: "авт.",
+    value: s.stretchRollsManual || "",
+    onChange: e => set({
+      stretchRollsManual: Math.max(0, Math.round(Number(e.target.value) || 0))
+    }),
+    className: "w-16 rounded-lg border border-slate-200 px-2 py-1 text-right"
+  }), /*#__PURE__*/React.createElement("span", null, "бр. ×"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: "0",
+    step: "0.5",
+    placeholder: String(p.stretchRollPrice),
+    value: s.stretchRollPriceManual || "",
+    onChange: e => set({
+      stretchRollPriceManual: Math.max(0, Number(e.target.value) || 0)
+    }),
+    className: "w-20 rounded-lg border border-slate-200 px-2 py-1 text-right"
+  }), /*#__PURE__*/React.createElement("span", null, p.currency, " без ДДС"), /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-400"
+  }, "— празно = по метрите от отметките")), s.stretchRollsManual > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "text-xs mt-1",
+    style: {
+      color: accent
+    }
+  }, "Таксуват се ", s.stretchRollsManual, " ролки × ", s.stretchRollPriceManual || p.stretchRollPrice, " ", p.currency, " вместо ", wrapMeters, " м по метри."), wrapMeters > 0 && !(s.stretchRollsManual > 0) && /*#__PURE__*/React.createElement("div", {
     className: "text-xs mt-2",
     style: {
       color: ink

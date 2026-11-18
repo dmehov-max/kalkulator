@@ -728,15 +728,15 @@ test("запис: пази метрите велпапе", () => {
 const stairAmount = (r) => (r.lines.find((l) => l.label.startsWith("Стълби"))?.amount ?? 0);
 
 test("стълби: кашони по 0.30 €/етаж", () => {
-  const r = calc({ qty: { boxM: 10 }, pickup: addr(3, false) });
+  const r = calc({ hoursOverride: 2, qty: { boxM: 10 }, pickup: addr(3, false) });
   eq(stairAmount(r), Math.round(3 * 10 * P.boxPerFloor));
 });
 test("стълби: нормален уред по 3 €/етаж", () => {
-  const r = calc({ qty: { washer: 1 }, pickup: addr(2, false) });
+  const r = calc({ hoursOverride: 2, qty: { washer: 1 }, pickup: addr(2, false) });
   eq(stairAmount(r), 2 * P.appliancePerFloor);
 });
 test("стълби: нестандартен уред по 5 €/етаж", () => {
-  const r = calc({ qty: { washerMiele: 1 }, pickup: addr(2, false) });
+  const r = calc({ hoursOverride: 2, qty: { washerMiele: 1 }, pickup: addr(2, false) });
   eq(stairAmount(r), 2 * P.heavyAppliancePerFloor);
 });
 test("стълби: начисляват се и на двата адреса", () => {
@@ -753,7 +753,7 @@ test("стълби: пътнически асансьор освобождава
   eq(stairAmount(r), 0);
 });
 test("едрогабаритни: диван 3-ка се таксува ДОРИ при пътнически асансьор", () => {
-  const r = calc({ qty: { sofa3: 1 }, pickup: addr(3, true, "passenger") });
+  const r = calc({ hoursOverride: 2, qty: { sofa3: 1 }, pickup: addr(3, true, "passenger") });
   // едрогабаритните са мебели (не "спец. уред") — мебелна ставка, не по-скъпата за уреди
   eq(stairAmount(r), 3 * P.furniturePerFloor);
 });
@@ -766,11 +766,11 @@ test("стълби: партер не се таксува", () => {
   eq(stairAmount(r), 0);
 });
 test("стълби: обикновена мебел (гардероб, без категория) по €/етаж на мебел", () => {
-  const r = calc({ qty: { wardrobe2: 1 }, pickup: addr(2, false) });
+  const r = calc({ hoursOverride: 2, qty: { wardrobe2: 1 }, pickup: addr(2, false) });
   eq(stairAmount(r), 2 * P.furniturePerFloor);
 });
 test("стълби: диван 2-местен (без категория) НЕ е освободен от такса", () => {
-  const r = calc({ qty: { sofa2: 2 }, pickup: addr(5, false), dropoff: addr(5, false) });
+  const r = calc({ hoursOverride: 2, qty: { sofa2: 2 }, pickup: addr(5, false), dropoff: addr(5, false) });
   ok(stairAmount(r) > 0, "мебелите без категория трябва да се таксуват на етаж");
   eq(stairAmount(r), 2 /* адреса */ * 5 /* етажа */ * 2 /* дивана */ * P.furniturePerFloor);
 });
@@ -953,7 +953,7 @@ test("часове: ръчна стойност работи и при курс 
 });
 /* --- Отклонение (буфер) върху крайната цена --- */
 test("отклонение: прилага се като последна стъпка върху всичко", () => {
-  const r = calc({ qty: { boxM: 5 }, pickupHood: "Център", dropoffHood: "Младост" });
+  const r = calc({ hoursOverride: 2, qty: { boxM: 5 }, pickupHood: "Център", dropoffHood: "Младост" });
   const line = r.lines.find((l) => l.label.startsWith("Отклонение"));
   ok(line, "липсва перо за отклонението");
   const преди = r.total - line.amount;
@@ -961,7 +961,7 @@ test("отклонение: прилага се като последна стъ
 });
 test("отклонение: важи за всеки тип услуга", () => {
   for (const o of [
-    { qty: { boxM: 5 } },
+    { hoursOverride: 2, qty: { boxM: 5 } },
     { service: "disposal", city: "Варна", qty: { sackHouse: 10 } },
     { service: "labour", city: "София", qty: { boxL: 10 } },
     { service: "assembly", city: "София", manualHours: 3 },
@@ -971,7 +971,7 @@ test("отклонение: важи за всеки тип услуга", () =>
   }
 });
 test("отклонение: коефициентът се управлява от параметрите", () => {
-  const r10 = calc({ qty: { boxM: 5 }, pickupHood: "Център", dropoffHood: "Младост" }, { ...P, deviationFactor: 1.10 });
+  const r10 = calc({ hoursOverride: 2, qty: { boxM: 5 }, pickupHood: "Център", dropoffHood: "Младост" }, { ...P, deviationFactor: 1.10 });
   const line = r10.lines.find((l) => l.label.startsWith("Отклонение"));
   ok(line.label.includes("+10%"), `етикетът трябва да показва 10%: ${line.label}`);
 });
@@ -1176,8 +1176,8 @@ test("марж: камионът се смята по същите часове 
 });
 test("ъглов диван: 2 части — стълбите се смятат за всяка част", () => {
   eq(E.ITEM_INDEX.sofaL.pieces, 2);
-  const one = calc({ qty: { sofaL: 1 }, pickup: addr(3) });
-  const two3 = calc({ qty: { sofa3: 2 }, pickup: addr(3) });
+  const one = calc({ hoursOverride: 2, qty: { sofaL: 1 }, pickup: addr(3) });
+  const two3 = calc({ hoursOverride: 2, qty: { sofa3: 2 }, pickup: addr(3) });
   const stairs = (r) => r.lines.filter((l) => l.label.startsWith("Стълби")).reduce((a, l) => a + l.amount, 0);
   ok(stairs(one) > 0, "липсва такса стълби");
   near(stairs(one), stairs(two3), 0.01, "1 ъглов = 2 едрогабаритни части:");
@@ -1295,6 +1295,20 @@ test("стреч: цената на ролката се управлява от 
   const скъпо = calc({ qty: { mattress: 1 } }, { ...P, stretchRollPrice: 14 });
   const line = скъпо.lines.find((l) => l.label.startsWith("Стреч"));
   near(line.amount, скъпо.rolls * 14, 0.01);
+});
+test("стреч ръчно: 4 ролки × 10 € заместват метрите, себестойността е по покупната цена", () => {
+  const auto = calc({ qty: { mattress: 1, wardrobe3: 2 } });
+  const r = calc({ qty: { mattress: 1, wardrobe3: 2 }, stretchRollsManual: 4, stretchRollPriceManual: 10 });
+  const line = r.lines.find((l) => l.label.startsWith("Стреч"));
+  eq(r.rolls, 4);
+  near(line.amount, 40, 0.01);
+  ok(line.label.includes("4 ролки"), "етикетът не казва ролки: " + line.label);
+  near(r.materialsCost - auto.materialsCost, 4 * P.stretchRollPrice - auto.rolls * P.stretchRollPrice, 0.02, "себестойност на ролките:");
+  eq(r.wrapMeters, auto.wrapMeters, "трудът за опаковане остава по метрите:");
+});
+test("стреч ръчно: без цена — по цената от параметрите; и без отметнати вещи", () => {
+  const r = calc({ qty: { boxM: 5 }, stretchRollsManual: 2 });
+  near(r.lines.find((l) => l.label.startsWith("Стреч")).amount, 2 * P.stretchRollPrice, 0.01);
 });
 test("записът пази метри стреч и брой ролки", () => {
   const o = order({ qty: { mattress: 2, wardrobe3: 1 }, asm: { wardrobe3: true } });
@@ -2260,6 +2274,24 @@ testAsync("каталог от базата: непозната група се 
   eq(E.ITEM_INDEX["custom:test-nogroup"], undefined);
 });
 
+
+/* --- Малка задача в минимума (решение 18.11.2026) --- */
+test("минимум: стълбите на дребна задача влизат в 2-та часа и няма буфер", () => {
+  const r = calc({ qty: { fridge: 1, washer: 1 }, pickupHood: "Дървеница", dropoffHood: "Люлин", pickup: addr(3, true), dropoff: addr(3, false) });
+  eq(stairAmount(r), 0, "стълбите не се доплащат:");
+  ok(r.lines.some((l) => l.label.startsWith("Стълби") && l.label.includes("влизат в минимума")), "липсва информативният ред за стълбите");
+  ok(!r.lines.some((l) => l.label.startsWith("Отклонение")), "при задача изцяло в минимума няма буфер");
+  near(r.clockHours, P.minLocalHours, 0.01);
+});
+test("минимум: голяма задача — стълбите и буферът остават", () => {
+  const r = calc({ qty: { wardrobe2: 6, sofa3: 2, boxM: 40 }, pickup: addr(4, false), dropoff: addr(4, false) });
+  ok(stairAmount(r) > 0, "стълбите трябва да се таксуват");
+  ok(r.lines.some((l) => l.label.startsWith("Отклонение")), "буферът трябва да остане");
+});
+test("минимум: ръчно зададен буфер важи и при малка задача", () => {
+  const r = calc({ qty: { washer: 1 }, deviationOverride: 1.2 });
+  ok(r.lines.some((l) => l.label.startsWith("Отклонение")), "ръчният буфер не бива да се маха");
+});
 
 /* ---------- Синтактична проверка на целия файл (вкл. интерфейса) ---------- */
 test("файлът е синтактично валиден JSX", () => {
