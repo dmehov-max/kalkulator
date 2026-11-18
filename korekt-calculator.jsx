@@ -4330,8 +4330,8 @@ export default function KorektCalculator() {
   }, [p.supabaseUrl, p.supabaseKey]);
 
   const submitRequest = async () => {
-    if (!s.name.trim() || !s.phone.trim()) {
-      notify("Моля, попълнете поне име и телефон, за да изпратите заявка.", "error");
+    if (!s.phone.trim()) { // името може да се допише по-късно — стига телефон (Додо, 18.11.2026)
+      notify("Моля, попълнете поне телефон, за да запишете заявката.", "error");
       return;
     }
     if (!isValidPhone(s.phone)) {
