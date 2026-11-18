@@ -142,7 +142,7 @@ test("градско: транспортът се таксува за целия
 test("транспортът СЕ таксува и през часовете за разглобяване — камионът стои на обекта", () => {
   const без = calc({ qty: { wardrobe3: 1 } });
   const с = calc({ qty: { wardrobe3: 1 }, dis: { wardrobe3: true }, asm: { wardrobe3: true } });
-  const tr = (r) => r.lines.find((l) => l.label.startsWith("Транспорт")).amount;
+  const tr = (r) => r.lines.filter((l) => l.label.startsWith("Транспорт")).reduce((a, l) => a + l.amount, 0);
   ok(tr(с) > tr(без), "по-дългият престой с разглобяване/сглобяване трябва да оскъпи и транспорта:");
   ok(с.clockHours > без.clockHours, "престоят все пак е по-дълъг");
 });
@@ -1166,7 +1166,7 @@ test("стреч: не-мебели (ТВ, килим) остават по из�
   eq(E.wrapMetersFor({ tvstand: 1 }, { tvstand: true }), E.ITEM_INDEX.tvstand.wrap);
 });
 test("марж: камионът се смята по същите часове като транспорта към клиента (без стълбите)", () => {
-  const params = { ...P, truckCostPerHour: 18, truckRate: 20 };
+  const params = { ...P, truckCostPerHour: 18, truckRate: 20, truckWorkPct: 100 };
   const r = calc({ qty: { sofaL: 1, books: 30, shelf: 1 }, pickup: addr(7, true), dropoff: addr(12, true, "cargo") }, params);
   const tr = r.lines.find((l) => l.label.startsWith("Транспорт"));
   const h = tr.amount / params.truckRate;
@@ -1214,8 +1214,9 @@ test("разглобяване: часовете са реално време, �
 });
 test("разглобяване: часовете се плащат на брой работници (и на камиона, който стои по-дълго на обекта)", () => {
   const base = { boxM: 100, wardrobe3: 1 };
-  const без = calc({ qty: base });
-  const с = calc({ qty: base, dis: { wardrobe3: true }, asm: { wardrobe3: true } });
+  const П = { ...P, truckWorkPct: 100 }; // пълна ставка на камиона — иначе разликата в престоя е по намалена ставка
+  const без = calc({ qty: base }, П);
+  const с = calc({ qty: base, dis: { wardrobe3: true }, asm: { wardrobe3: true } }, П);
   const чч = (E.ITEM_INDEX.wardrobe3.dis * P.disCrew) + (E.ITEM_INDEX.wardrobe3.asm * P.asmCrew);
   ok(без.handlingClock > P.minLocalHours, "тестът трябва да е над минимума");
   near(с.manHours - без.manHours, чч, 0.01, "разлика в човекочасовете:");
@@ -2291,6 +2292,38 @@ test("минимум: голяма задача — стълбите и буфе
 test("минимум: ръчно зададен буфер важи и при малка задача", () => {
   const r = calc({ qty: { washer: 1 }, deviationOverride: 1.2 });
   ok(r.lines.some((l) => l.label.startsWith("Отклонение")), "ръчният буфер не бива да се маха");
+});
+
+/* --- Камион при разглобяване/сглобяване/опаковане (решение 18.11.2026, калк. №229) --- */
+const trLines = (r) => r.lines.filter((l) => l.label.startsWith("Транспорт"));
+const trSum = (r) => trLines(r).reduce((a, l) => a + l.amount, 0);
+const disOrder = { qty: { wardrobe3: 2, bed2: 1 }, dis: { wardrobe3: true, bed2: true }, asm: { wardrobe3: true, bed2: true } };
+test("камион при разглобяване: часовете на разглобяване/сглобяване са на 70% от ставката", () => {
+  eq(P.truckWorkPct, 70, "по подразбиране:");
+  const r = calc(disOrder);
+  const red = trLines(r).find((l) => l.label.includes("разглобяване/сглобяване/опаковане"));
+  ok(red, "липсва отделен ред за намалената ставка");
+  ok(red.label.includes("14 €/ч") && red.label.includes("(70%)"), "ставката трябва да е 14 €/ч (70% от 20): " + red.label);
+});
+test("камион при разглобяване: общите часове на камиона не се променят, само цената им", () => {
+  const пълен = calc(disOrder, { ...P, truckWorkPct: 100 });
+  const намален = calc(disOrder);
+  ok(!trLines(пълен).some((l) => l.label.includes("%")), "при 100% няма отделен ред");
+  ok(trSum(намален) < trSum(пълен), "намаленият камион е по-евтин");
+  const hours = (r) => trLines(r).reduce((a, l) => a + parseFloat(l.label.match(/— ([\d.]+) ч/)[1]), 0);
+  near(hours(намален), hours(пълен), 0.01, "същите общи часове:");
+});
+test("камион при разглобяване: без разглобяване и опаковане няма намаление", () => {
+  const r = calc({ qty: { washer: 1 } });
+  ok(!trLines(r).some((l) => l.label.includes("%")), "няма ред с намалена ставка");
+});
+test("камион при разглобяване: параметърът е 0–100% и се управлява от Параметри", () => {
+  const нула = calc(disOrder, { ...P, truckWorkPct: 0 });
+  const пълен = calc(disOrder, { ...P, truckWorkPct: 100 });
+  ok(trSum(нула) < trSum(пълен), "при 0% камионът е безплатен през разглобяването");
+  const над = calc(disOrder, { ...P, truckWorkPct: 250 });
+  near(trSum(над), trSum(пълен), 0.01, "над 100% се тълкува като 100%:");
+  eq(E.mergeParams({}).truckWorkPct, 70, "липсващ параметър → 70 (живите настройки не го съдържат):");
 });
 
 /* ---------- Синтактична проверка на целия файл (вкл. интерфейса) ---------- */

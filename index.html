@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-uyxnBWZqLhyKeG112xuiQhQn0b1SXu5ZK/+bkT6p0o4='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-j5gTOwUwgrUPVhIEe02CIPuGya6JtnC0f/QWM6QZKAI='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -94,6 +94,8 @@ const DEFAULTS = {
   // (отделно от workerCostByCity, което е вътрешната себестойност)
   truckRate: 20,
   // €/час транспорт (за градско)
+  truckWorkPct: 70,
+  // % от ставката на камиона, докато екипът разглобява/сглобява/опакова (камионът стои, не кара)
   kmRate: 0.7,
   // €/км за извънградско (собствен камион)
   roundTripFactor: 2,
@@ -3514,7 +3516,19 @@ function computePrice(s, p) {
     // таксуват отделно (перото "Стълби без асансьор" по-горе); иначе едно и също забавяне
     // би оскъпило и там, и тук.
     const h = roundHalf(truckClockHours);
-    add(`Транспорт — ${h.toFixed(1)} ч × ${n(p.truckRate)} ${p.currency}/ч`, h * n(p.truckRate));
+    // докато екипът разглобява, сглобява и опакова, камионът само стои на обекта — тези часове
+    // се таксуват по намалена ставка (p.truckWorkPct % от truckRate, решение на Додо 18.11.2026)
+    const workPct = Math.min(100, Math.max(0, n(p.truckWorkPct ?? 100)));
+    const workClock = disHours + (crew ? (packManHoursAll - packAbsorbedManHours) / crew : 0);
+    const hWork = workPct < 100 ? Math.min(h, roundHalf(workClock)) : 0;
+    const hFull = h - hWork;
+    if (hWork > 1e-6) {
+      const rWork = Math.round(n(p.truckRate) * workPct) / 100;
+      if (hFull > 1e-6) add(`Транспорт — ${hFull.toFixed(1)} ч × ${n(p.truckRate)} ${p.currency}/ч`, hFull * n(p.truckRate));
+      add(`Транспорт при разглобяване/сглобяване/опаковане — ${hWork.toFixed(1)} ч × ${rWork} ${p.currency}/ч (${workPct}%)`, hWork * rWork);
+    } else {
+      add(`Транспорт — ${h.toFixed(1)} ч × ${n(p.truckRate)} ${p.currency}/ч`, h * n(p.truckRate));
+    }
   } else {
     const rate = chosen ? chosen.kmRate : n(p.kmRate);
     if (totalKm) add(`Транспорт — ${totalKm} км × ${rate} ${p.currency}/км`, totalKm * rate);
@@ -5064,6 +5078,14 @@ function SettingsPanel({
       truckRate: v
     }),
     suffix: "€/ч"
+  }), /*#__PURE__*/React.createElement(Num, {
+    label: "Камион при разглобяване/опаковане",
+    value: p.truckWorkPct,
+    step: 5,
+    onChange: v => upd({
+      truckWorkPct: v
+    }),
+    suffix: "% от ставката"
   }), /*#__PURE__*/React.createElement(Num, {
     label: "Извънградско",
     value: p.kmRate,

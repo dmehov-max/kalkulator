@@ -23,6 +23,7 @@ const DEFAULTS = {
   workerRateByCity: [],  // [{ city:"София", rate:20 }, ...] — различна цена по градове КЪМ КЛИЕНТА
                           // (отделно от workerCostByCity, което е вътрешната себестойност)
   truckRate: 20,         // €/час транспорт (за градско)
+  truckWorkPct: 70,      // % от ставката на камиона, докато екипът разглобява/сглобява/опакова (камионът стои, не кара)
   kmRate: 0.7,           // €/км за извънградско (собствен камион)
   roundTripFactor: 2,    // курсът е двупосочен (отиване + връщане)
   intercityThresholdKm: 50, // над това (еднопосочно) = междуградски курс
@@ -1554,7 +1555,19 @@ function computePrice(s, p) {
     // таксуват отделно (перото "Стълби без асансьор" по-горе); иначе едно и също забавяне
     // би оскъпило и там, и тук.
     const h = roundHalf(truckClockHours);
-    add(`Транспорт — ${h.toFixed(1)} ч × ${n(p.truckRate)} ${p.currency}/ч`, h * n(p.truckRate));
+    // докато екипът разглобява, сглобява и опакова, камионът само стои на обекта — тези часове
+    // се таксуват по намалена ставка (p.truckWorkPct % от truckRate, решение на Додо 18.11.2026)
+    const workPct = Math.min(100, Math.max(0, n(p.truckWorkPct ?? 100)));
+    const workClock = disHours + (crew ? (packManHoursAll - packAbsorbedManHours) / crew : 0);
+    const hWork = workPct < 100 ? Math.min(h, roundHalf(workClock)) : 0;
+    const hFull = h - hWork;
+    if (hWork > 1e-6) {
+      const rWork = Math.round(n(p.truckRate) * workPct) / 100;
+      if (hFull > 1e-6) add(`Транспорт — ${hFull.toFixed(1)} ч × ${n(p.truckRate)} ${p.currency}/ч`, hFull * n(p.truckRate));
+      add(`Транспорт при разглобяване/сглобяване/опаковане — ${hWork.toFixed(1)} ч × ${rWork} ${p.currency}/ч (${workPct}%)`, hWork * rWork);
+    } else {
+      add(`Транспорт — ${h.toFixed(1)} ч × ${n(p.truckRate)} ${p.currency}/ч`, h * n(p.truckRate));
+    }
   } else {
     const rate = chosen ? chosen.kmRate : n(p.kmRate);
     if (totalKm) add(`Транспорт — ${totalKm} км × ${rate} ${p.currency}/км`, totalKm * rate);
@@ -2574,6 +2587,7 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify, sessi
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Num label="Работник (по подразбиране)" value={p.workerRate} onChange={(v) => upd({ workerRate: v })} suffix="€/ч" />
           <Num label="Транспорт (градско)" value={p.truckRate} onChange={(v) => upd({ truckRate: v })} suffix="€/ч" />
+          <Num label="Камион при разглобяване/опаковане" value={p.truckWorkPct} step={5} onChange={(v) => upd({ truckWorkPct: v })} suffix="% от ставката" />
           <Num label="Извънградско" value={p.kmRate} step={0.05} onChange={(v) => upd({ kmRate: v })} suffix="€/км" />
           <Num label="Двупосочен курс" value={p.roundTripFactor} step={0.5} onChange={(v) => upd({ roundTripFactor: v })} suffix="×" />
           <Num label="Скорост в града" value={p.citySpeed} step={5} onChange={(v) => upd({ citySpeed: v })} suffix="км/ч" />
