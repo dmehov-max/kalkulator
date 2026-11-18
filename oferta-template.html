@@ -466,6 +466,7 @@ const T = {
     subtotal: "Общо без ДДС", vat: "ДДС 20%", grand: "Общо с ДДС", priceIncl: "Цената включва",
     payEyebrow: "Схема на плащане", valid: d => `Офертата важи до <b>${d}</b>.`,
     accept: "Приемам офертата", change: "Искам промени", ask: "Имам въпрос",
+    acceptedOn: d => `Офертата е приета на ${d}`, sendError: "Не успяхме да изпратим. Моля, обадете се на 0700 1 4485.", expired: "Срокът на офертата е изтекъл. Обадете ни се на 0700 1 4485.",
     promise: "Ще получите качествено обслужване на справедлива цена. Цената не се променя, ако всичко е по задание.",
     since: "от 1999 г.", sig: "Коректността не е просто име, тя е наш стандарт.",
     actAccept: "Потвърждение на офертата", actChange: "Какво да променим?", actAsk: "Вашият въпрос",
@@ -475,7 +476,7 @@ const T = {
     agree: "Запознат/а съм с общите условия за преместване.", send: "Изпрати", cancel: "Отказ",
     placeholderChange: "Например: искаме товарене на 25 ноември; добавете още 3 м³ ...",
     placeholderAsk: "Например: може ли да вземете и велосипед?",
-    sentAccept: "Благодарим! Потвърждението е записано. Тодор ще Ви се обади, за да уточни аванса.",
+    sentAccept: "Благодарим! Потвърждението е записано. Наш колега ще Ви се обади, за да уточни подробностите.",
     sentOther: "Благодарим! Получихме съобщението Ви.",
     demoNote: "Пример: в тази версия съобщението не се изпраща. В реалната версия отива директно в ERP и при Тодор.",
     msgAccept: "Приемам оферта", msgChange: "Искане за промени по оферта", msgAsk: "Въпрос по оферта",
@@ -552,6 +553,7 @@ const T = {
     subtotal: "Total excl. VAT", vat: "VAT 20%", grand: "Total incl. VAT", priceIncl: "The price includes",
     payEyebrow: "Payment schedule", valid: d => `This quote is valid until <b>${d}</b>.`,
     accept: "Accept the quote", change: "Request changes", ask: "Ask a question",
+    acceptedOn: d => `Quote accepted on ${d}`, sendError: "We could not send this. Please call 0700 1 4485.", expired: "This quote has expired. Please call us on 0700 1 4485.",
     promise: "Quality service at a fair price. The price does not change if the job matches the brief.",
     since: "since 1999", sig: "Korekt is not just a name. It is our standard.",
     actAccept: "Confirm the quote", actChange: "What should we change?", actAsk: "Your question",
@@ -561,7 +563,7 @@ const T = {
     agree: "I have read the moving terms and conditions.", send: "Send", cancel: "Cancel",
     placeholderChange: "For example: we'd like loading on 25 November; add 3 m³ more ...",
     placeholderAsk: "For example: can you also take a bicycle?",
-    sentAccept: "Thank you! Your confirmation is recorded. Todor will call you about the advance.",
+    sentAccept: "Thank you! Your confirmation is recorded. Our colleague will call you to confirm the details.",
     sentOther: "Thank you! We received your message.",
     demoNote: "Example: this version does not send anything. In the live version it goes straight to the ERP and to Todor.",
     msgAccept: "I accept quote", msgChange: "Change request for quote", msgAsk: "Question about quote",
@@ -602,6 +604,8 @@ const T = {
 let lang = "bg";
 try { lang = localStorage.getItem("korekt-lang") || "bg"; } catch (e) {}
 const picked = new Set();
+// Жив режим (публичният линк oferta.html?t=…): приемането и съобщенията отиват в базата, не са демо
+const LIVE = window.KOREKT_LIVE || null;
 const $ = id => document.getElementById(id);
 const L = v => (v && typeof v === "object" && "bg" in v) ? v[lang] : v;
 const eur = n => new Intl.NumberFormat(lang === "bg" ? "bg-BG" : "en-GB", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
@@ -635,6 +639,7 @@ function renderPrice() {
   $("stageBox").innerHTML = !intl ? `<p class="why">${t.whyDom}</p>` : `<div class="track"><span class="${ind ? "on" : "done"}">${ind ? "1" : "✓"} · ${t.track1}</span><span class="${ind ? "" : "on"}">2 · ${t.track2}</span></div>` +
     `<p class="why">${ind ? t.whyInd : t.whyFix(date(OFFER.loadDate))}</p>`;
   $("btnAccept").textContent = ind ? t.askDates : t.accept;
+  if (OFFER.acceptedAt) { $("btnAccept").textContent = t.acceptedOn(date(String(OFFER.acceptedAt).slice(0, 10))); $("btnAccept").disabled = true; }
   $("pay").parentElement.querySelector(".eyebrow").hidden = false;
   // Само крайна цена: показваме какво включва, без суми по редове
   const items = OFFER.lines.map(l => `<li>${esc(l[lang])}<span class="q">${esc(L(l.q))}</span></li>`);
@@ -738,9 +743,25 @@ function openAct(kind, keep) {
   p.hidden = false;
   if (!keep) p.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
   $("act-cancel").onclick = () => { p.hidden = true; currentAct = null; };
-  $("act-send").onclick = () => {
+  $("act-send").onclick = async () => {
     if (kind === "accept" && !$("act-agree").checked) { $("act-agree").focus(); $("act-agree").closest("label").style.color = "var(--brand)"; return; }
     if (kind !== "accept" && !$("act-text").value.trim()) { $("act-text").focus(); return; }
+    if (LIVE) {
+      $("act-send").disabled = true;
+      try {
+        if (kind === "accept") await LIVE.accept({ grandWithVat: s.gross, netWithoutVat: s.net, addons: OFFER.addons.filter(a => picked.has(a.id)).map(a => a.id), lang, agreedTerms: true });
+        else await LIVE.message(kind, $("act-text").value.trim());
+        if (kind === "accept") {
+          OFFER.acceptedAt = new Date().toISOString(); currentAct = null; $("actPanel").hidden = true; render();
+          $("actPanel").innerHTML = `<div class="done">${t.sentAccept}</div>`; $("actPanel").hidden = false;
+          $("actPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+        } else $("act-result").innerHTML = `<div class="done">${t.sentOther}</div>`;
+      } catch (err) {
+        $("act-result").innerHTML = `<div class="done" style="background:#fdecec;color:#7a1d1d">${String(err && err.message).includes("изтекъл") ? t.expired : t.sendError}</div>`;
+        $("act-send").disabled = false;
+      }
+      return;
+    }
     $("act-result").innerHTML = `<div class="done">${kind === "accept" ? t.sentAccept : t.sentOther}</div>` + (OFFER.example ? `<p style="color:var(--muted);font-size:.84rem;margin-top:8px">${t.demoNote}</p>` : "");
     $("act-send").disabled = true;
   };

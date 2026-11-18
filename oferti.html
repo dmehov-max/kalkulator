@@ -98,6 +98,7 @@ textarea { min-height: 54px; resize: vertical; }
     <button type="button" data-pane="form" aria-pressed="true">Форма</button>
     <button type="button" data-pane="preview" aria-pressed="false">Преглед</button>
   </div>
+  <button type="button" class="tb" id="btnShare">Линк за клиента</button>
   <button type="button" class="tb" id="btnExport">Изтегли HTML</button>
   <button type="button" class="tb primary" id="btnSave">Запази</button>
 </header>
@@ -105,6 +106,7 @@ textarea { min-height: 54px; resize: vertical; }
 <div class="work" id="work" data-pane="form">
   <form class="form" id="form" autocomplete="off" onsubmit="return false">
     <div id="dbMsg"></div>
+    <div id="sharePanel"></div>
 
     <fieldset>
       <legend>Оферта</legend>
@@ -517,7 +519,7 @@ function refreshPick() {
   $("pick").innerHTML = `<option value="">Запазени оферти (${ids.length})…</option>` +
     ids.map(id => { const o = saved[id]; return `<option value="${esc(id)}" ${S && id === S.id ? "selected" : ""}>${esc(id)} · ${esc(o.fromCity)} → ${esc(o.toCity)}${o.client ? " · " + esc(o.client) : ""}</option>`; }).join("");
 }
-function load(state) { S = JSON.parse(JSON.stringify(state)); delete S.updatedAt; fillInputs(); markDirty(false); schedulePreview(); refreshPick(); }
+function load(state) { S = JSON.parse(JSON.stringify(state)); delete S.updatedAt; fillInputs(); markDirty(false); schedulePreview(); refreshPick(); if (typeof renderSharePanel === "function") renderSharePanel(S.id, S.shareToken || ""); }
 
 $("pick").onchange = () => {
   const id = $("pick").value; if (!id) return;
@@ -542,6 +544,66 @@ $("btnSave").onclick = async () => {
   } catch (err) {
     showMsg("warn", err && (err.status === 401 || err.status === 403) ? "Сесията е изтекла. Презаредете калкулатора и влезте пак." : "Не успях да запазя. Опитайте пак след малко.");
   } finally { $("btnSave").disabled = false; }
+};
+
+/* ---------- Линк за клиента: публична страница oferta.html?t=<токен> ---------- */
+const PUBLIC_BASE = location.origin + location.pathname.replace(/[^/]*$/, "") + "oferta.html";
+function newToken() {
+  const a = new Uint8Array(32); crypto.getRandomValues(a);
+  const abc = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  return Array.from(a, b => abc[b % 62]).join("");
+}
+async function sbGet(path) {
+  const res = await fetch(`${SB_URL}/rest/v1/${path}`, { headers: sbHeaders() });
+  if (!res.ok) throw Object.assign(new Error("get"), { status: res.status });
+  return res.json();
+}
+const fmtDT = (iso) => new Date(iso).toLocaleString("bg-BG", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+async function renderSharePanel(id, token) {
+  if (!token) { $("sharePanel").innerHTML = ""; return; }
+  const url = `${PUBLIC_BASE}?t=${token}`;
+  const msg = `Здравейте${S.client ? ", " + S.client : ""}! Ето Вашата оферта за преместване от Корект: ${url}
+Въпроси: 0700 1 4485`;
+  let status = "";
+  try {
+    const [o] = await sbGet(`offers?id=eq.${encodeURIComponent(id)}&select=accepted_at,shared_at`);
+    const ev = await sbGet(`offer_events?offer_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=30&select=kind,text,created_at`);
+    const views = ev.filter(e => e.kind === "view").length;
+    const msgs = ev.filter(e => e.kind === "change" || e.kind === "ask");
+    status = (o && o.accepted_at ? `<div class="msgbox ok"><b>Приета от клиента</b> на ${fmtDT(o.accepted_at)}.</div>` : "") +
+      `<div class="msgbox" style="background:#f1f5f9;color:#334155">Изпратена ${o && o.shared_at ? fmtDT(o.shared_at) : "—"} · отворена ${views ? views + " път" + (views > 1 ? "и" : "") + ", последно " + fmtDT(ev.find(e => e.kind === "view").created_at) : "още не е"}.</div>` +
+      msgs.map(m => `<div class="msgbox warn"><b>${m.kind === "change" ? "Иска промяна" : "Въпрос"}</b> (${fmtDT(m.created_at)}): ${esc(m.text || "")}</div>`).join("");
+  } catch (e) { status = ""; }
+  $("sharePanel").innerHTML = `<div class="msgbox ok" style="display:block"><b>Линк към офертата за клиента</b>
+    <input type="text" readonly value="${esc(url)}" onclick="this.select()" style="width:100%;margin:6px 0;padding:6px 8px;font:inherit">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="tb" id="shCopy">Копирай линка</button>
+      <a class="tb" style="text-decoration:none" href="mailto:?subject=${encodeURIComponent("Оферта за преместване — Корект")}&body=${encodeURIComponent(msg)}">Имейл</a>
+      <a class="tb" style="text-decoration:none" href="viber://forward?text=${encodeURIComponent(msg)}">Viber</a>
+    </div></div>` + status;
+  $("shCopy").onclick = async () => { try { await navigator.clipboard.writeText(url); $("shCopy").textContent = "Копирано ✓"; } catch (e) { $("shCopy").textContent = "Маркирайте и копирайте ръчно"; } };
+}
+$("btnShare").onclick = async () => {
+  if (!session()) { showMsg("warn", "Не сте влезли. Влезте в калкулатора и отворете „Оферти“ оттам."); return; }
+  const id = (S.id || "").trim();
+  if (!/^[A-Za-z0-9_.~:@+-]{1,60}$/.test(id)) { showMsg("warn", "Номерът може да съдържа само латински букви, цифри и тире, напр. BG-2026-0148."); $("f-id").focus(); return; }
+  if (S.kind !== "domestic" && S.stage === "fixed" && !S.loadDate) { showMsg("warn", "За точна цена въведете дата на товарене."); return; }
+  $("btnShare").disabled = true;
+  try {
+    const token = S.shareToken || newToken();
+    const doc = { ...S, id, shareToken: token, updatedAt: new Date().toISOString() };
+    await db.save(id, doc);                         // пази състоянието на формата
+    const res = await fetch(`${SB_URL}/rest/v1/offers?id=eq.${encodeURIComponent(id)}`, {   // и снимка на това, което вижда клиентът
+      method: "PATCH", headers: sbHeaders({ Prefer: "return=minimal" }),
+      body: JSON.stringify({ share_token: token, public_data: toOffer(doc), shared_at: new Date().toISOString() })
+    });
+    if (!res.ok) throw Object.assign(new Error("share"), { status: res.status });
+    saved[id] = doc; S.id = id; S.shareToken = token; markDirty(false); refreshPick();
+    showMsg("ok", "Линкът е готов. Клиентът вижда офертата така, както е запазена сега; ако я промените, натиснете пак „Линк за клиента“.");
+    await renderSharePanel(id, token);
+  } catch (err) {
+    showMsg("warn", err && (err.status === 401 || err.status === 403) ? "Сесията е изтекла. Презаредете калкулатора и влезте пак." : "Не успях да направя линка. Опитайте пак.");
+  } finally { $("btnShare").disabled = false; }
 };
 
 $("btnExport").onclick = async () => {
