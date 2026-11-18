@@ -1166,7 +1166,7 @@ test("стреч: не-мебели (ТВ, килим) остават по из�
   eq(E.wrapMetersFor({ tvstand: 1 }, { tvstand: true }), E.ITEM_INDEX.tvstand.wrap);
 });
 test("марж: камионът се смята по същите часове като транспорта към клиента (без стълбите)", () => {
-  const params = { ...P, truckCostPerHour: 18, truckRate: 20, truckWorkPct: 100 };
+  const params = { ...P, truckCostPerHour: 18, truckRate: 20, truckWorkPct: 100, truckWorkPctBig: 100 };
   const r = calc({ qty: { sofaL: 1, books: 30, shelf: 1 }, pickup: addr(7, true), dropoff: addr(12, true, "cargo") }, params);
   const tr = r.lines.find((l) => l.label.startsWith("Транспорт"));
   const h = tr.amount / params.truckRate;
@@ -1214,7 +1214,7 @@ test("разглобяване: часовете са реално време, �
 });
 test("разглобяване: часовете се плащат на брой работници (и на камиона, който стои по-дълго на обекта)", () => {
   const base = { boxM: 100, wardrobe3: 1 };
-  const П = { ...P, truckWorkPct: 100 }; // пълна ставка на камиона — иначе разликата в престоя е по намалена ставка
+  const П = { ...P, truckWorkPct: 100, truckWorkPctBig: 100 }; // пълна ставка на камиона — иначе разликата в престоя е по намалена ставка
   const без = calc({ qty: base }, П);
   const с = calc({ qty: base, dis: { wardrobe3: true }, asm: { wardrobe3: true } }, П);
   const чч = (E.ITEM_INDEX.wardrobe3.dis * P.disCrew) + (E.ITEM_INDEX.wardrobe3.asm * P.asmCrew);
@@ -2324,6 +2324,36 @@ test("камион при разглобяване: параметърът е 0�
   const над = calc(disOrder, { ...P, truckWorkPct: 250 });
   near(trSum(над), trSum(пълен), 0.01, "над 100% се тълкува като 100%:");
   eq(E.mergeParams({}).truckWorkPct, 70, "липсващ параметър → 70 (живите настройки не го съдържат):");
+});
+
+/* --- Голямо преместване: камионът не стои през разглобяването/опаковането; ръчни часове на камиона --- */
+const bigOrder = { qty: { wardrobe3: 4, sofa3: 3, bed2: 2, boxM: 60 }, dis: { wardrobe3: true, bed2: true }, asm: { wardrobe3: true, bed2: true } };
+test("голямо преместване: над 10 м³ камионът не се таксува през разглобяването/сглобяването", () => {
+  const r = calc(bigOrder);
+  ok(r.vol > P.truckWorkBigM3, "тестът трябва да е над прага, обем " + r.vol);
+  eq(P.truckWorkPctBig, 0, "по подразбиране:");
+  ok(r.lines.some((l) => l.label.includes("не се таксуват") && l.amount === 0), "липсва информативният ред");
+  const при70 = calc(bigOrder, { ...P, truckWorkPctBig: 70 });
+  ok(trSum(r) < trSum(при70), "на 0% е по-евтино от 70%");
+  ok(r.truckCost < при70.truckCost, "и себестойността на камиона е по-малка — той реално не стои там");
+});
+test("голямо преместване: под прага остава 70%", () => {
+  const r = calc(disOrder);
+  ok(r.vol <= P.truckWorkBigM3, "малка задача, обем " + r.vol);
+  ok(trLines(r).some((l) => l.label.includes("(70%)")), "малката задача остава на 70%");
+});
+test("камион: ръчни часове заменят изчислените (ред и себестойност)", () => {
+  const r = calc({ ...disOrder, truckHoursOverride: 4 }, { ...P, truckCostPerHour: 10 });
+  eq(trLines(r).length, 1, "един ред транспорт при ръчни часове");
+  eq(trLines(r)[0].amount, 4 * P.truckRate, "4 ч × ставката:");
+  ok(trLines(r)[0].label.includes("4.0 ч"), trLines(r)[0].label);
+  eq(r.truckCost, 40, "себестойност 4 ч × 10:");
+  ok(r.truckHoursManual && r.truckH === 4, "състоянието е достъпно за интерфейса");
+});
+test("камион: без ръчни часове — изчислените остават", () => {
+  const r = calc(disOrder);
+  ok(!r.truckHoursManual, "не е ръчно");
+  ok(r.autoTruckHours > 0 && r.truckH === r.autoTruckHours, "ползва изчислените часове");
 });
 
 /* ---------- Синтактична проверка на целия файл (вкл. интерфейса) ---------- */
