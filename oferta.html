@@ -1,5 +1,5 @@
 <!doctype html><html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-BegJzNP/Pi2z1WUoHhU6M7RJtBoIxIM1AwPXsomeiNs=' 'sha256-oDQF0+gdZms+dayO69eIdp9TXLdmLywGTtYtyjtAvuo='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-4dW9DKexrQbMm6wheH1boKZpho09OGQyfGHmKohKr9E=' 'sha256-aid4EgVc6wLFZBBkUSSBZ0scA8B98iNCQyQYrVqqHYA='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
 </head><body style="margin:0">
@@ -358,7 +358,7 @@ footer .sig { font-style: italic; }
 
 <footer>
   <div class="wrap">
-    <span>Корект – Преместване ООД · <span data-t="since"></span> · член на БАП · 0700 1 4485</span>
+    <span>Корект – Преместване ООД · <span data-t="since"></span> · член на БАП · 0882 944 099</span>
     <span class="sig" data-t="sig"></span>
   </div>
 </footer>
@@ -415,7 +415,7 @@ const T = {
     subtotal: "Общо без ДДС", vat: "ДДС 20%", grand: "Общо с ДДС", priceIncl: "Цената включва",
     payEyebrow: "Схема на плащане", valid: d => `Офертата важи до <b>${d}</b>.`,
     accept: "Приемам офертата", change: "Искам промени", ask: "Имам въпрос",
-    acceptedOn: d => `Офертата е приета на ${d}`, sendError: "Не успяхме да изпратим. Моля, обадете се на 0700 1 4485.", expired: "Срокът на офертата е изтекъл. Обадете ни се на 0700 1 4485.",
+    acceptedOn: d => `Офертата е приета на ${d}`, sendError: "Не успяхме да изпратим. Моля, обадете се на 0882 944 099.", expired: "Срокът на офертата е изтекъл. Обадете ни се на 0882 944 099.",
     promise: "Ще получите качествено обслужване на справедлива цена. Цената не се променя, ако всичко е по задание.",
     since: "от 1999 г.", sig: "Коректността не е просто име, тя е наш стандарт.",
     actAccept: "Потвърждение на офертата", actChange: "Какво да променим?", actAsk: "Вашият въпрос",
@@ -503,7 +503,7 @@ const T = {
     subtotal: "Total excl. VAT", vat: "VAT 20%", grand: "Total incl. VAT", priceIncl: "The price includes",
     payEyebrow: "Payment schedule", valid: d => `This quote is valid until <b>${d}</b>.`,
     accept: "Accept the quote", change: "Request changes", ask: "Ask a question",
-    acceptedOn: d => `Quote accepted on ${d}`, sendError: "We could not send this. Please call 0700 1 4485.", expired: "This quote has expired. Please call us on 0700 1 4485.",
+    acceptedOn: d => `Quote accepted on ${d}`, sendError: "We could not send this. Please call 0882 944 099.", expired: "This quote has expired. Please call us on 0882 944 099.",
     promise: "Quality service at a fair price. The price does not change if the job matches the brief.",
     since: "since 1999", sig: "Korekt is not just a name. It is our standard.",
     actAccept: "Confirm the quote", actChange: "What should we change?", actAsk: "Your question",
@@ -591,7 +591,7 @@ const T = {
     subtotal: "Итого без НДС", vat: "НДС 20%", grand: "Итого с НДС", priceIncl: "В цену входит",
     payEyebrow: "График оплаты", valid: d => `Предложение действительно до <b>${d}</b>.`,
     accept: "Принимаю предложение", change: "Хочу изменения", ask: "У меня вопрос",
-    acceptedOn: d => `Предложение принято ${d}`, sendError: "Не удалось отправить. Пожалуйста, позвоните по 0700 1 4485.", expired: "Срок предложения истёк. Позвоните нам по 0700 1 4485.",
+    acceptedOn: d => `Предложение принято ${d}`, sendError: "Не удалось отправить. Пожалуйста, позвоните по 0882 944 099.", expired: "Срок предложения истёк. Позвоните нам по 0882 944 099.",
     promise: "Качественное обслуживание по справедливой цене. Цена не меняется, если всё соответствует заданию.",
     since: "с 1999 г.", sig: "Корректность — не просто имя, а наш стандарт.",
     actAccept: "Подтверждение предложения", actChange: "Что нужно изменить?", actAsk: "Ваш вопрос",
@@ -854,7 +854,7 @@ render();
     if (!r.ok) { let m = ""; try { m = JSON.parse(txt).message || ""; } catch (e) {} throw new Error(m || "HTTP " + r.status); }
     return txt ? JSON.parse(txt) : null;
   };
-  const fail = (m) => { document.body.innerHTML = '<div style="font-family:system-ui,sans-serif;max-width:520px;margin:12vh auto;padding:0 20px;text-align:center"><h2>' + m + '</h2><p>Обадете ни се на <a href="tel:070014485">0700 1 4485</a>.</p></div>'; };
+  const fail = (m) => { document.body.innerHTML = '<div style="font-family:system-ui,sans-serif;max-width:520px;margin:12vh auto;padding:0 20px;text-align:center"><h2>' + m + '</h2><p>Обадете ни се на <a href="tel:0882944099">0882 944 099</a>.</p></div>'; };
   let res = null;
   try { res = /^[A-Za-z0-9]{24,64}$/.test(token) ? await rpc("public_offer", { p_token: token }) : null; } catch (e) { return fail("Офертата не може да се зареди в момента"); }
   if (!res || !res.offer) return fail("Офертата не е намерена или линкът е невалиден");

@@ -12,7 +12,7 @@ const LIMITS = {
 };
 const DISCOUNT_PCT = 5;
 const DISCOUNT_DAYS = 14;
-const PHONE = "0700 1 4485";
+const PHONE = "0882 944 099";
 const PHONE2 = "0888 883 237";
 const VAT = 1.2;
 const RED = "#d92027", BLUE = "#1d5fc2", INK = "#0f172a";
@@ -307,7 +307,7 @@ function KlientCalculator() {
                     {s.service === "local" ? `${s.city}: ${s.pickupHood} → ${s.dropoffHood}` : `${s.pickupCity} → ${s.dropoffCity}`} · {itemCount} вещи · около {r.vol.toFixed(1)} м³ · {r.crew} души · ≈ {r.clockHours.toFixed(1)} ч
                   </div>
                   <div className="mt-4 rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900">
-                    Цената е изчислена от изкуствен интелект на база нашия опит и е ориентировъчна. Възможни са отклонения и си запазваме правото да я променим след уточняване на заданието. За въпроси: {PHONE}.
+                    Цената е изчислена автоматично от нашия калкулатор по нашите цени и опит и е ориентировъчна. Възможни са отклонения и си запазваме правото да я променим след уточняване на заданието. За въпроси: {PHONE}.
                   </div>
                 </>
               )}

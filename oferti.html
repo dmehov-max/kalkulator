@@ -240,7 +240,7 @@ const TEAM = [
   { name: "Сузи", role: "Запитвания, София", phone: "0882 944 098" },
   { name: "Мира Буреш", role: "Клиенти и опаковки, София", phone: "0882 944 098" },
   { name: "Християн Димитров", role: "Бургас и Черноморие", phone: "0882 944 099" },
-  { name: "Мария Келбечева", role: "Пловдив", phone: "0700 1 4485" }
+  { name: "Мария Келбечева", role: "Пловдив", phone: "0882 944 099" }
 ];
 /* ---------- Обща база: Supabase, таблица offers (виж supabase/offers.sql) ----------
    Входът е този на калкулатора: сесията се чете от localStorage „korekt:authSession“. */
@@ -324,7 +324,7 @@ function blank(kind = "international") {
       ? [{ name: "Транспорт", desc: "", amount: "" }, { name: "Опаковане и товарене", desc: "", amount: "" }, { name: "Разтоварване", desc: "", amount: "" }]
       : [{ name: "Работници", desc: "", amount: "" }, { name: "Транспорт", desc: "", amount: "" }, { name: "Опаковъчни материали", desc: "", amount: "" }],
     addons: [], conditions: (intl ? GENERIC_CONDITIONS : DOMESTIC_CONDITIONS).map(c => ({ ...c })), advance: intl ? 30 : 0,
-    coName: who.name, coRole: who.role, coPhone: who.phone, coPhone2: "0700 1 4485", coEmail: "", coPhoto: who.photo === "sample" ? DEFAULT_PHOTO : ""
+    coName: who.name, coRole: who.role, coPhone: who.phone, coPhone2: "0882 944 099", coEmail: "", coPhoto: who.photo === "sample" ? DEFAULT_PHOTO : ""
   };
 }
 
@@ -465,6 +465,10 @@ document.addEventListener("click", e => {
   const kd = e.target.closest("[data-kind]");
   if (kd) {
     const k = kd.dataset.kind; if (k === S.kind) return;
+    // полетата, които още са по подразбиране за стария вид, взимат подразбиращите се за новия (условия, услуга, редове…)
+    const was = blank(S.kind), now = blank(k);
+    ["conditions", "service", "vehicle", "lines", "advance", "toCountry", "coName", "coRole", "coPhone", "coPhoto"]
+      .forEach(f => { if (JSON.stringify(S[f]) === JSON.stringify(was[f])) S[f] = now[f]; });
     S.kind = k;
     if (!saved[S.id]) S.id = nextId(k);           // нов номер с правилния префикс (BG- / INT-)
     if (k === "domestic" && !S.toCountry) S.toCountry = "България";
@@ -563,7 +567,7 @@ async function renderSharePanel(id, token) {
   if (!token) { $("sharePanel").innerHTML = ""; return; }
   const url = `${PUBLIC_BASE}?t=${token}`;
   const msg = `Здравейте${S.client ? ", " + S.client : ""}! Ето Вашата оферта за преместване от Корект: ${url}
-Въпроси: 0700 1 4485`;
+Въпроси: 0882 944 099`;
   let status = "";
   try {
     const [o] = await sbGet(`offers?id=eq.${encodeURIComponent(id)}&select=accepted_at,shared_at`);

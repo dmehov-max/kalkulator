@@ -30,7 +30,7 @@ const loader = `
     if (!r.ok) { let m = ""; try { m = JSON.parse(txt).message || ""; } catch (e) {} throw new Error(m || "HTTP " + r.status); }
     return txt ? JSON.parse(txt) : null;
   };
-  const fail = (m) => { document.body.innerHTML = '<div style="font-family:system-ui,sans-serif;max-width:520px;margin:12vh auto;padding:0 20px;text-align:center"><h2>' + m + '</h2><p>Обадете ни се на <a href="tel:070014485">0700 1 4485</a>.</p></div>'; };
+  const fail = (m) => { document.body.innerHTML = '<div style="font-family:system-ui,sans-serif;max-width:520px;margin:12vh auto;padding:0 20px;text-align:center"><h2>' + m + '</h2><p>Обадете ни се на <a href="tel:0882944099">0882 944 099</a>.</p></div>'; };
   let res = null;
   try { res = /^[A-Za-z0-9]{24,64}$/.test(token) ? await rpc("public_offer", { p_token: token }) : null; } catch (e) { return fail("Офертата не може да се зареди в момента"); }
   if (!res || !res.offer) return fail("Офертата не е намерена или линкът е невалиден");
