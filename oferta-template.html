@@ -56,6 +56,7 @@ button { font: inherit; cursor: pointer; }
 .offer-no { font-size: .8rem; color: var(--muted); }
 .lang { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
 .lang button { border: 0; background: transparent; color: var(--muted); padding: 5px 12px; font-size: .8rem; font-weight: 700; }
+.autonote { margin: 6px 0 0; font-size: .78rem; color: var(--muted); }
 .lang button[aria-pressed="true"] { background: var(--slate); color: var(--slate-ink); }
 
 /* Hero */
@@ -231,6 +232,7 @@ footer .sig { font-style: italic; }
       <div class="lang" role="group" aria-label="Език / Language">
         <button type="button" id="lang-bg" data-lang="bg" aria-pressed="true">БГ</button>
         <button type="button" id="lang-en" data-lang="en" aria-pressed="false">EN</button>
+        <button type="button" id="lang-ru" data-lang="ru" aria-pressed="false" hidden>RU</button>
       </div>
       <div class="lang stagepick" role="group" id="stagePick" hidden>
         <button type="button" id="st-ind" data-stage="indicative" aria-pressed="true">1</button>
@@ -243,6 +245,7 @@ footer .sig { font-style: italic; }
 <section class="hero">
   <div class="wrap">
     <p class="greet" id="greet"></p>
+    <p class="autonote" id="autoNote" hidden></p>
     <div class="route">
       <div><div class="city" id="fromCity"></div><div class="country" id="fromCountry"></div></div>
       <div class="mid">
@@ -509,6 +512,7 @@ const T = {
       ["В деня", "Опаковане и товарене", "Екипът опакова, разглобява мебелите и товари."],
       ["В деня", "Транспорт и разтоварване", "Внасяме, сглобяваме и подписваме протокола заедно."]
     ],
+    autoNote: "Автоматичен превод. При разлика важи българският текст.",
     preview: "Преглед на етапа"
   },
   en: {
@@ -596,7 +600,96 @@ const T = {
       ["On the day", "Packing and loading", "The crew packs, takes furniture apart and loads."],
       ["On the day", "Transport and unloading", "We carry in, assemble and sign the report together."]
     ],
+    autoNote: "Automatic translation. If anything differs, the Bulgarian text applies.",
     preview: "Preview stage"
+  },
+  ru: {
+    condEyebrow: "Условия этого предложения",
+    bapTitle: "Член Болгарской ассоциации по переездам (БАП)",
+    bapText: "Ассоциация объединяет компании по переездам, работающие по единым стандартам качества и ответственности. Список участников →",
+    offerNo: "Предложение №", greet: n => `Здравствуйте, ${n}, вот Ваше предложение по международному переезду`,
+    example: "ПРИМЕР", volume: "Объём", load: "Погрузка", delivery: "Доставка",
+    detailsEyebrow: "Задание", detailsTitle: "Что и куда перевозим",
+    fFrom: "Погрузка по адресу", fTo: "Доставка по адресу", fLoad: "Дата погрузки", fDel: "Ожидаемая доставка", fVol: "Объём и вес", fSvc: "Вид услуги", fVeh: "Транспорт", fDist: "Расстояние",
+    coordEyebrow: "Один человек от начала до конца", coordTitle: "Ваш координатор",
+    phone: "Телефон", office: "Офис", email: "Эл. почта", copy: "Копировать", copied: "Скопировано",
+    inclEyebrow: "В цене", inclTitle: "Что включено",
+    incl: [
+      ["Страховка", "Годовой полис на случай повреждения вещей во время переезда"],
+      ["Упаковка и маркировка", "Каждая коробка подписана, чтобы Вы знали, куда её нести"],
+      ["Разборка и сборка", "Разбираем мебель на месте погрузки и собираем в новом доме"],
+      ["Приёмо-передаточный акт", "Описываем вещи при погрузке и при разгрузке"],
+      ["Цена не меняется", "Если всё соответствует заданию, сумма остаётся прежней"],
+      ["Один координатор", "Следит за грузом и отвечает на Ваши вопросы"]
+    ],
+    addEyebrow: "По желанию", addTitle: "Дополнительные услуги", addLead: "Отметьте нужное. Итоговая сумма обновится сразу.",
+    stepsEyebrow: "От подтверждения до ключей", stepsTitle: "Как проходит переезд",
+    steps: [
+      ["Сейчас", "Ориентировочная цена", "Ориентир по объёму и маршруту, пока даты не определены."],
+      ["Когда выберете даты", "Точная цена", "Бронируем транспорт на Ваши даты и фиксируем цену."],
+      ["При подтверждении", "Вы подтверждаете предложение", "Машина закреплена за Вами на эти даты. Отправляем счёт на аванс."],
+      ["День погрузки", "Упаковка и погрузка", "Бригада упаковывает вещи, разбирает мебель и заполняет акт."],
+      ["2–3 дня", "Перевозка", "Машина едет по маршруту. Водитель позвонит Вам перед доставкой."],
+      ["День доставки", "Разгрузка и сборка", "Заносим, собираем и вместе подписываем акт."]
+    ],
+    infoEyebrow: "Перед подтверждением", infoTitle: "Важная информация",
+    info: [
+      ["Доплачивается за", ["Работу в выходные, праздники или вне 08:00–18:00 по Вашему желанию", "Вещи и услуги вне задания", "Подход к подъезду дальше 20 м", "Парковку и дорожные сборы на месте"]],
+      ["Не включено без письменной договорённости", ["Монтаж техники и подключение приборов", "Напольные покрытия и потолки без безопасного доступа", "Таможенное оформление вне ЕС"]],
+      ["Ограничения", ["Не перевозим деньги, украшения, документы и лекарства", "Опасные и легковоспламеняющиеся вещества", "Растения и скоропортящиеся продукты"]]
+    ],
+    terms: "Общие условия переезда (на болгарском) →",
+    trustEyebrow: "Почему Корект", trustTitle: "Переезды с 1999 года",
+    trust: [["с 1999", "оба основателя и сегодня работают в компании"], ["4.9 ★", "393 отзыва в Google об офисе в Софии"], ["ISO 9001", "а также 14001 и 45001, TÜV NORD"], ["ЕС", "Германия, Греция, Австрия, Италия и другие"]],
+    priceEyebrow: "Итого с НДС", vatNote: (net, vat) => `${net} без НДС + ${vat} НДС 20%`,
+    subtotal: "Итого без НДС", vat: "НДС 20%", grand: "Итого с НДС", priceIncl: "В цену входит",
+    payEyebrow: "График оплаты", valid: d => `Предложение действительно до <b>${d}</b>.`,
+    accept: "Принимаю предложение", change: "Хочу изменения", ask: "У меня вопрос",
+    acceptedOn: d => `Предложение принято ${d}`, sendError: "Не удалось отправить. Пожалуйста, позвоните по 0700 1 4485.", expired: "Срок предложения истёк. Позвоните нам по 0700 1 4485.",
+    promise: "Качественное обслуживание по справедливой цене. Цена не меняется, если всё соответствует заданию.",
+    since: "с 1999 г.", sig: "Корректность — не просто имя, а наш стандарт.",
+    actAccept: "Подтверждение предложения", actChange: "Что нужно изменить?", actAsk: "Ваш вопрос",
+    actAcceptLead: "Проверьте итоговую сумму и подтвердите. Наш коллега свяжется с Вами в течение рабочего дня.",
+    actChangeLead: "Напишите, что хотели бы изменить. Мы пришлём обновлённое предложение.",
+    actAskLead: "Напишите вопрос. Мы ответим в течение рабочего дня.",
+    agree: "Я ознакомился(-ась) с общими условиями переезда.", send: "Отправить", cancel: "Отмена",
+    placeholderChange: "Например: хотим погрузку 25 ноября; добавьте ещё 3 м³ ...",
+    placeholderAsk: "Например: можете ли Вы перевезти и велосипед?",
+    sentAccept: "Спасибо! Подтверждение записано. Наш коллега позвонит Вам, чтобы уточнить детали.",
+    sentOther: "Спасибо! Мы получили Ваше сообщение.",
+    demoNote: "Пример: в этой версии сообщение не отправляется.",
+    msgAccept: "Принимаю предложение", msgChange: "Запрос на изменение предложения", msgAsk: "Вопрос по предложению",
+    selected: "Выбранные дополнительные услуги", none: "нет",
+    stageInd: "Ориентировочное предложение", stageFix: "Точное предложение", period: "Период",
+    greetInd: n => `Здравствуйте, ${n}, вот Ваше ориентировочное предложение по международному переезду`,
+    tbd: "Уточняется", wished: p => `желаемый период: ${p}`,
+    priceInd: "Ориентировочная цена без НДС", priceFix: "Точная цена без НДС",
+    vatLine: v => `+ НДС 20%: ${v} (если применимо)`,
+    track1: "Ориентировочная цена", track2: "Точная цена с датой",
+    whyInd: "При международных переездах транспорт бронируется на конкретные даты. Поэтому эта цена — ориентир. Точную цену Вы получите, как только мы согласуем даты.",
+    whyFix: d => `Цена зафиксирована для погрузки <b>${d}</b>. Транспорт забронирован на эти даты. Если дата изменится, цена будет пересчитана.`,
+    condInd: ["Эта цена ориентировочная", "Точная цена зависит от дат, потому что транспорт бронируется на конкретные даты."],
+    condFix: ["Цена зафиксирована для этих дат", "Транспорт забронирован на указанные даты. Если дата изменится, цена будет пересчитана."],
+    askDates: "Выберите даты для точной цены",
+    actDates: "Когда Вы хотите переехать?",
+    actDatesLead: "Укажите желаемую дату погрузки. Мы проверим транспорт и пришлём точную цену.",
+    fFlex: "Насколько Вы гибки?", flex: ["Только эта дата", "± 2–3 дня", "± 1 неделя"], fNote: "Примечание (необязательно)",
+    sentDates: "Спасибо! Мы проверим транспорт на эти даты и пришлём точную цену.",
+    payAfter: "График оплаты определяется вместе с точной ценой.",
+    payDefault: "Банковским переводом, картой или наличными. Срок оплаты согласуется с координатором.",
+    invEyebrow: "Опись", invTitle: "Список вещей", invLead: "Цена рассчитана для этих вещей. Если чего-то не хватает, нажмите «Хочу изменения».",
+    fDate: "Дата переезда", invItem: "Предмет", invQty: "Кол-во", invNote: "Примечание", invTotal: "Итого",
+    greetDom: n => n ? `Здравствуйте, ${n}, вот Ваше предложение по переезду` : "Здравствуйте, вот Ваше предложение по переезду",
+    priceDom: "Цена без НДС",
+    whyDom: "Цена не меняется, если всё соответствует заданию и списку вещей.",
+    stepsDom: [
+      ["При подтверждении", "Вы подтверждаете предложение", "Мы записываем заказ и сообщаем Вам его номер."],
+      ["Перед переездом", "Бесплатный осмотр при необходимости", "Уточняем доступ, этажи и лифт."],
+      ["В день переезда", "Упаковка и погрузка", "Бригада упаковывает вещи, разбирает мебель и грузит."],
+      ["В день переезда", "Перевозка и разгрузка", "Заносим, собираем и вместе подписываем акт."]
+    ],
+    autoNote: "Автоматический перевод. При расхождениях действует болгарский текст.",
+    preview: "Предпросмотр этапа"
   }
 };
 
@@ -607,9 +700,11 @@ const picked = new Set();
 // Жив режим (публичният линк oferta.html?t=…): приемането и съобщенията отиват в базата, не са демо
 const LIVE = window.KOREKT_LIVE || null;
 const $ = id => document.getElementById(id);
-const L = v => (v && typeof v === "object" && "bg" in v) ? v[lang] : v;
-const eur = n => new Intl.NumberFormat(lang === "bg" ? "bg-BG" : "en-GB", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
-const date = s => new Date(s + "T12:00:00").toLocaleDateString(lang === "bg" ? "bg-BG" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
+const LOC = { bg: "bg-BG", en: "en-GB", ru: "ru-RU" };
+const L = v => (v && typeof v === "object" && "bg" in v) ? (v[lang] ?? v.bg) : v;
+const LT = o => o[lang] ?? o.bg;   // липсващ превод → български
+const eur = n => new Intl.NumberFormat(LOC[lang] || "en-GB", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
+const date = s => new Date(s + "T12:00:00").toLocaleDateString(LOC[lang] || "en-GB", { day: "numeric", month: "long", year: "numeric" });
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 const isIntl = () => (OFFER.kind || "international") === "international";
@@ -642,8 +737,8 @@ function renderPrice() {
   if (OFFER.acceptedAt) { $("btnAccept").textContent = t.acceptedOn(date(String(OFFER.acceptedAt).slice(0, 10))); $("btnAccept").disabled = true; }
   $("pay").parentElement.querySelector(".eyebrow").hidden = false;
   // Само крайна цена: показваме какво включва, без суми по редове
-  const items = OFFER.lines.map(l => `<li>${esc(l[lang])}<span class="q">${esc(L(l.q))}</span></li>`);
-  OFFER.addons.filter(a => picked.has(a.id)).forEach(a => items.push(`<li class="addonline">${esc(a[lang])}</li>`));
+  const items = OFFER.lines.map(l => `<li>${esc(LT(l))}<span class="q">${esc(L(l.q))}</span></li>`);
+  OFFER.addons.filter(a => picked.has(a.id)).forEach(a => items.push(`<li class="addonline">${esc(LT(a))}</li>`));
   $("lines").innerHTML = `<span class="eyebrow">${t.priceIncl}</span><ul class="pincl">${items.join("")}</ul>`;
   if (ind) { $("pay").innerHTML = `<span>${t.payAfter}</span>`; return; }
   if (!OFFER.payments.length) { $("pay").innerHTML = `<span>${t.payDefault}</span>`; return; }
@@ -651,7 +746,7 @@ function renderPrice() {
   $("pay").innerHTML = OFFER.payments.map((p, i) => {
     const amt = i === OFFER.payments.length - 1 ? left : Math.round(s.gross * p.share * 100) / 100;
     left = Math.round((left - amt) * 100) / 100;
-    return `<div class="line"><span>${esc(p[lang])} · ${Math.round(p.share * 100)}%</span><span class="mono">${eur(amt)}</span></div>`;
+    return `<div class="line"><span>${esc(LT(p))} · ${Math.round(p.share * 100)}%</span><span class="mono">${eur(amt)}</span></div>`;
   }).join("");
 }
 
@@ -659,11 +754,13 @@ function render() {
   const langs = OFFER.langs || ["bg", "en"];
   if (!langs.includes(lang)) lang = langs[0];
   document.querySelector(".lang:not(.stagepick)").hidden = langs.length < 2;
+  document.querySelectorAll(".lang:not(.stagepick) button").forEach(b => { b.hidden = !langs.includes(b.dataset.lang); });
   const t = T[lang], o = OFFER;
   document.documentElement.lang = lang;
   document.querySelectorAll("[data-t]").forEach(el => { const v = t[el.dataset.t]; if (typeof v === "string") el.textContent = v; });
   document.querySelectorAll(".lang button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
   $("offerId").textContent = o.id;
+  $("autoNote").hidden = !(o.autoTranslated && lang !== "bg"); $("autoNote").textContent = t.autoNote;
   const ind = isInd(), intl = isIntl();
   $("greet").textContent = !intl ? t.greetDom(L(o.client)) : ind ? t.greetInd(L(o.client)) : t.greet(L(o.client));
   $("stagePick").hidden = !o.example || !intl;
@@ -671,7 +768,7 @@ function render() {
   document.querySelectorAll("[data-stage]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.stage === o.stage)));
   $("fromCity").textContent = L(o.from.city); $("fromCountry").textContent = L(o.from.country);
   $("toCity").textContent = L(o.to.city); $("toCountry").textContent = L(o.to.country);
-  $("km").textContent = o.km ? `≈ ${o.km.toLocaleString(lang === "bg" ? "bg-BG" : "en-GB")} km` : L(o.service);
+  $("km").textContent = o.km ? `≈ ${o.km.toLocaleString(LOC[lang] || "en-GB")} km` : L(o.service);
   $("chips").innerHTML = (o.example ? `<span class="chip example">${t.example}</span>` : "") +
     (intl ? `<span class="chip"><b>${ind ? t.stageInd : t.stageFix}</b></span>` : "") +
     (ind
@@ -699,7 +796,7 @@ $("coordName").textContent = L(c.name); $("coordRole").textContent = L(c.role);
   const contacts = [[t.phone, c.phone], [t.office, c.phone2], [t.email, c.email]].filter(x => x[1]);
   $("coordContacts").innerHTML = contacts.map(([k, v], i) => `<div class="contact-row"><span class="lbl">${k}</span><span class="mono" id="ct-${i}">${esc(v)}</span><button type="button" class="copy" data-copy="${esc(v)}">${t.copy}</button></div>`).join("");
   $("incl").innerHTML = t.incl.map(([b, s]) => `<li><span class="tick">✓</span><div><b>${b}</b><span>${s}</span></div></li>`).join("");
-  $("addons").innerHTML = o.addons.map(a => `<label class="addon" for="${a.id}"><input type="checkbox" id="${a.id}" ${picked.has(a.id) ? "checked" : ""}><span><span class="t">${esc(a[lang])}</span><br><span class="d">${esc(L(a.d))}</span></span></label>`).join("");
+  $("addons").innerHTML = o.addons.map(a => `<label class="addon" for="${a.id}"><input type="checkbox" id="${a.id}" ${picked.has(a.id) ? "checked" : ""}><span><span class="t">${esc(LT(a))}</span><br><span class="d">${esc(L(a.d))}</span></span></label>`).join("");
   renderInventory();
   $("steps").innerHTML = (intl ? t.steps : t.stepsDom).map(([w, h, d]) => `<li><div><div class="when">${w}</div><div class="what">${h}</div><div class="how">${d}</div></div></li>`).join("");
   $("info").innerHTML = t.info.map(([h, items]) => `<div><h3>${h}</h3><ul>${items.map(i => `<li>${i}</li>`).join("")}</ul></div>`).join("");
@@ -734,7 +831,7 @@ function openAct(kind, keep) {
     return;
   }
   const prev = keep && $("act-text") ? $("act-text").value : "";
-  const addons = OFFER.addons.filter(a => picked.has(a.id)).map(a => a[lang]).join(", ") || t.none;
+  const addons = OFFER.addons.filter(a => picked.has(a.id)).map(a => LT(a)).join(", ") || t.none;
   p.innerHTML = `<header><span class="eyebrow">${OFFER.id}</span><h2>${title}</h2><p>${lead}</p></header>` +
     (kind === "accept"
       ? `<div class="msg">${esc(t.grand)}: ${eur(s.gross)}\n${esc(t.selected)}: ${esc(addons)}</div><label class="chk" for="act-agree"><input type="checkbox" id="act-agree"> <span>${t.agree} <a class="link" href="https://www.korekt-bg.com/obshti-usloviya-za-premestvane" target="_blank" rel="noopener">→</a></span></label>`

@@ -583,6 +583,28 @@ async function renderSharePanel(id, token) {
     </div></div>` + status;
   $("shCopy").onclick = async () => { try { await navigator.clipboard.writeText(url); $("shCopy").textContent = "Копирано ✓"; } catch (e) { $("shCopy").textContent = "Маркирайте и копирайте ръчно"; } };
 }
+/* Автоматичен превод BG → EN/RU през Supabase функцията translate-offer (ключът за Claude е само на сървъра).
+   Преведените текстове се пазят в S.translations — при пак „Линк за клиента“ се превеждат само новите. */
+async function translateOffer(offer, cache) {
+  const refs = [];
+  (function walk(n) {
+    if (Array.isArray(n)) { n.forEach(walk); return; }
+    if (!n || typeof n !== "object") return;
+    if (typeof n.bg === "string" && typeof n.en === "string") refs.push(n);
+    Object.values(n).forEach(v => { if (v && typeof v === "object") walk(v); });
+  })(offer);
+  const need = [...new Set(refs.map(r => r.bg).filter(t => t && !cache[t]))];
+  for (let i = 0; i < need.length; i += 60) {
+    const chunk = need.slice(i, i + 60);
+    const res = await fetch(`${SB_URL}/functions/v1/translate-offer`, { method: "POST", headers: sbHeaders(), body: JSON.stringify({ texts: chunk }) });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw Object.assign(new Error(out.error || "translate"), { code: out.code, status: res.status });
+    chunk.forEach((t, k) => { cache[t] = { en: out.en[k], ru: out.ru[k] }; });
+  }
+  refs.forEach(r => { const c = cache[r.bg]; if (c) { r.en = c.en; r.ru = c.ru; } else { r.en = r.bg; r.ru = r.bg; } });
+  offer.langs = ["bg", "en", "ru"]; offer.autoTranslated = true;
+}
+
 $("btnShare").onclick = async () => {
   if (!session()) { showMsg("warn", "Не сте влезли. Влезте в калкулатора и отворете „Оферти“ оттам."); return; }
   const id = (S.id || "").trim();
@@ -591,15 +613,23 @@ $("btnShare").onclick = async () => {
   $("btnShare").disabled = true;
   try {
     const token = S.shareToken || newToken();
-    const doc = { ...S, id, shareToken: token, updatedAt: new Date().toISOString() };
-    await db.save(id, doc);                         // пази състоянието на формата
+    const doc = { ...S, id, shareToken: token, translations: { ...(S.translations || {}) }, updatedAt: new Date().toISOString() };
+    const pub = toOffer(doc);
+    let trNote = "";
+    try { await translateOffer(pub, doc.translations); trNote = " Преведена е на английски и руски (автоматичен превод) — отворете линка и прегледайте превода с превключвателя горе вдясно."; }
+    catch (e) {
+      pub.langs = ["bg"];
+      trNote = e && e.code === "no_key" ? " Само на български: за превод трябва да се добави ключът за Claude в Supabase (Edge Functions → Secrets → ANTHROPIC_API_KEY)."
+        : " Само на български: преводът не стана (" + ((e && e.message) || "грешка") + "). Натиснете пак „Линк за клиента“.";
+    }
+    await db.save(id, doc);                         // пази състоянието на формата и преводите
     const res = await fetch(`${SB_URL}/rest/v1/offers?id=eq.${encodeURIComponent(id)}`, {   // и снимка на това, което вижда клиентът
       method: "PATCH", headers: sbHeaders({ Prefer: "return=minimal" }),
-      body: JSON.stringify({ share_token: token, public_data: toOffer(doc), shared_at: new Date().toISOString() })
+      body: JSON.stringify({ share_token: token, public_data: pub, shared_at: new Date().toISOString() })
     });
     if (!res.ok) throw Object.assign(new Error("share"), { status: res.status });
-    saved[id] = doc; S.id = id; S.shareToken = token; markDirty(false); refreshPick();
-    showMsg("ok", "Линкът е готов. Клиентът вижда офертата така, както е запазена сега; ако я промените, натиснете пак „Линк за клиента“.");
+    saved[id] = doc; S.id = id; S.shareToken = token; S.translations = doc.translations; markDirty(false); refreshPick();
+    showMsg("ok", "Линкът е готов. Клиентът вижда офертата така, както е запазена сега; ако я промените, натиснете пак „Линк за клиента“." + trNote);
     await renderSharePanel(id, token);
   } catch (err) {
     showMsg("warn", err && (err.status === 401 || err.status === 403) ? "Сесията е изтекла. Презаредете калкулатора и влезте пак." : "Не успях да направя линка. Опитайте пак.");
