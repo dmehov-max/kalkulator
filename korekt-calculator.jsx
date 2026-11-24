@@ -71,13 +71,13 @@ const DEFAULTS = {
 
   // Стълби без асансьор — такси на етаж без асансьор, на адрес (товарене + разтоварване)
   floorFeeNoElevator: 0, // €/етаж плоска база (изкл. — пробваме per-кашон)
-  boxPerFloor: 0.3,      // €/етаж на кашон без асансьор
+  boxPerFloor: 0.2,      // €/етаж на кашон без асансьор
   heavyBoxPerFloor: 0.2, // € на ТЕЖЪК кашон/чувал (20+ кг: плочки, книги, строителни) на етаж — добавка „тежко“ ОТГОРЕ на часовете (Додо, 25.11.2026)
   heavyMinPerFloor: 2,   // минути труд за качване на ЕДИН тежък пакет с ЕДИН етаж (25 пакета × 5 ет. ≈ 2 ч за двама)
-  appliancePerFloor: 3,  // €/етаж на нормален уред (пералня/хладилник)
+  appliancePerFloor: 2,  // €/етаж на нормален уред (пералня/хладилник)
   heavyAppliancePerFloor: 5, // €/етаж на нестандартен уред (двуврат хлад., Miele)
   heavyWorkerSharePct: 40, // % от таксата „тежко“ по стълбите, който се дава на работниците (реално 30–50%; решение на Додо, 24.11.2026)
-  furniturePerFloor: 3,  // €/етаж на обикновена мебел без асансьор (гардероб, легло, маса...) —
+  furniturePerFloor: 2,  // €/етаж на обикновена мебел без асансьор (гардероб, легло, маса...) —
                           // преди 2026-08-06 тези вещи изобщо не се таксуваха на етаж (мъртва настройка)
   smallItemPerFloor: 1,  // €/етаж на дребна/лека вещ без категория (картина, килим, лампа, стол...) —
                           // преди 2026-08-07 се таксуваха по furniturePerFloor като пълна мебел (виж бъг в калк №98:
@@ -123,6 +123,8 @@ const DEFAULTS = {
 
   minPrice: { local: 80, international: 450 }, // междуградското НЯМА минимум — цената е по километри
 
+  crewBoostMinM3: 4,   // от колко м³ нагоре стълбите/монтажът качват малката бригада на следващото стъпало
+  crewBoostFloor: 3,   // „няма асансьор“ се брои от този етаж нагоре
   crewTiers: [
     { maxM3: 8, crew: 2 },
     { maxM3: 22, crew: 4 },
@@ -1156,6 +1158,15 @@ function computePrice(s, p) {
   Object.entries(s.qty).forEach(([id, cnt]) => { if (cnt > 0 && ITEM_INDEX[id]?.minCrew) reqCrew = Math.max(reqCrew, ITEM_INDEX[id].minCrew); });
   const crewByProtocol = reqCrew > crew;
   if (reqCrew) crew = Math.max(crew, reqCrew);
+  // Бригадата НЕ зависи от часовете, а от обема и от това има ли стълби и монтаж (Додо, 25.11.2026):
+  // малка поръчка (най-ниското стъпало) с поне p.crewBoostMinM3 м³ минава на следващото стъпало,
+  // ако няма асансьор от p.crewBoostFloor-и етаж нагоре ИЛИ има разглобяване/сглобяване.
+  const tierCrews = [...new Set((p.crewTiers || []).map((t) => n(t.crew)))].sort((a, b) => a - b);
+  const hardFloor = (a) => n(a?.floor) >= n(p.crewBoostFloor ?? 3) && !a?.elevator;
+  const hasDisAsm = [s.dis, s.asm].some((m) => Object.entries(m || {}).some(([id, v]) => v && n(s.qty[id]) > 0));
+  const crewByWork = !["assembly", "trd", "disposal"].includes(s.service) && tierCrews.length > 1 && crew === tierCrews[0]
+    && vol >= n(p.crewBoostMinM3 ?? 4) && (hardFloor(s.pickup) || (!["labour"].includes(s.service) && hardFloor(s.dropoff)) || hasDisAsm);
+  if (crewByWork) crew = tierCrews[1];
 
   // ръчна промяна от служител — не може под изисквания от протокола минимум
   const manualCrew = Number(s.crewOverride) || 0;
@@ -1188,10 +1199,16 @@ function computePrice(s, p) {
   const disCrew = n(p.disCrew || 2);
   const asmCrew = n(p.asmCrew || 2);
   const disAsmRate = n(p.disAsmRate || workerRate); // квалифициран труд — отделна ставка
-  const disOnlyHours = work.dis;                     // реални часове разглобяване
-  const asmOnlyHours = work.asm;                     // реални часове сглобяване
-  const disOnlyManHours = disOnlyHours * disCrew;
-  const asmOnlyManHours = asmOnlyHours * asmCrew;
+  // При по-голяма бригада мебелите се разглобяват/сглобяват от няколко двойки едновременно
+  // (4 души = 2 двойки), но не повече двойки, отколкото са мебелите. Човекочасовете (и парите)
+  // са същите — скъсява се само времето на обекта (Додо, 25.11.2026, №111).
+  const marked = (m) => Object.entries(m || {}).reduce((t, [id, v]) => t + (v && n(s.qty[id]) > 0 ? (typeof v === "number" ? v : n(s.qty[id])) : 0), 0);
+  const disTeams = Math.max(1, Math.min(Math.floor(crew / disCrew), marked(s.dis)));
+  const asmTeams = Math.max(1, Math.min(Math.floor(crew / asmCrew), marked(s.asm)));
+  const disOnlyHours = work.dis / disTeams;          // реални часове разглобяване (на часовник)
+  const asmOnlyHours = work.asm / asmTeams;          // реални часове сглобяване (на часовник)
+  const disOnlyManHours = work.dis * disCrew;
+  const asmOnlyManHours = work.asm * asmCrew;
   const disHours = disOnlyHours + asmOnlyHours;      // общо реално време
   const disManHours = disOnlyManHours + asmOnlyManHours;
 
@@ -1487,13 +1504,14 @@ function computePrice(s, p) {
 
   // 2) РАЗГЛОБЯВАНЕ/СГЛОБЯВАНЕ — реални часове × хора по демонтажа, квалифициран труд (камионът чака, но не се таксува)
   if (disOnlyManHours) {
-    const h = roundHalf(disOnlyHours);
-    add(`Разглобяване (${s.pickupHood || s.pickupCity || "товарене"}) — ${h.toFixed(1)} ч × ${disCrew} души × ${disAsmRate} ${p.currency}/ч`,
+    // парите са по труда (часове × двойка), както преди; при няколко двойки само времето е по-кратко
+    const h = roundHalf(work.dis);
+    add(`Разглобяване (${s.pickupHood || s.pickupCity || "товарене"}) — ${h.toFixed(1)} ч × ${disCrew} души × ${disAsmRate} ${p.currency}/ч${disTeams > 1 ? ` · ${disTeams} двойки едновременно (≈ ${roundHalf(disOnlyHours).toFixed(1)} ч)` : ""}`,
         h * disCrew * disAsmRate);
   }
   if (asmOnlyManHours) {
-    const h = roundHalf(asmOnlyHours);
-    add(`Сглобяване (${s.dropoffHood || s.dropoffCity || "разтоварване"}) — ${h.toFixed(1)} ч × ${asmCrew} души × ${disAsmRate} ${p.currency}/ч`,
+    const h = roundHalf(work.asm);
+    add(`Сглобяване (${s.dropoffHood || s.dropoffCity || "разтоварване"}) — ${h.toFixed(1)} ч × ${asmCrew} души × ${disAsmRate} ${p.currency}/ч${asmTeams > 1 ? ` · ${asmTeams} двойки едновременно (≈ ${roundHalf(asmOnlyHours).toFixed(1)} ч)` : ""}`,
         h * asmCrew * disAsmRate);
   }
 
@@ -1740,7 +1758,7 @@ function computePrice(s, p) {
   return { total: Math.round(total), lines, boxFillManHours, boxBuy,
     materialsCost: Math.round(materialsCost * 100) / 100, otherCost: Math.round((extraCostTotal - materialsCost) * 100) / 100,
     costCity, workerCostRate, workerRate, deviationFactor, deviationManual, floorsStdTot, floorsOvrTot, laborCost: Math.round(laborCost), heavyFee: Math.round(heavyTotal * 100) / 100, heavyWorkerBonus: Math.round(heavyWorkerBonus * 100) / 100, truckCost: Math.round(truckCost),
-    totalCost: Math.round(totalCost), margin: Math.round(margin), marginPercent, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, autoHandlingClock, hoursManual, autoTruckHours, truckHoursManual, truckH, truckHWork, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours, storage };
+    totalCost: Math.round(totalCost), margin: Math.round(margin), marginPercent, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, crewByWork, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, autoHandlingClock, hoursManual, autoTruckHours, truckHoursManual, truckH, truckHWork, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours, storage };
 }
 
 /* ================= ЗАПИС НА КАЛКУЛАЦИИ (база данни) ================= *
@@ -5615,7 +5633,7 @@ export default function KorektCalculator() {
                   <div className="grid grid-cols-2 gap-2 mt-4">
                     {[
                       ["Време за изпълнение", `≈ ${clockHours.toFixed(1)} ч`],
-                      ["Бригада", `${isDisposal ? disposalTotalCrew : crew} души${crewByProtocol ? " (протокол)" : ""}`],
+                      ["Бригада", `${isDisposal ? disposalTotalCrew : crew} души${crewByProtocol ? " (протокол)" : ""}${r.crewByWork ? " (стълби/монтаж)" : ""}`],
                       ["Курсове", `${trips}`],
                       ["Дни за изпълнение", `${workDays} ${workDays === 1 ? "ден" : "дни"}${workDays > 1 ? ` (макс. ${p.dayHours} ч/ден)` : ""}`],
                       ...(storage ? [["Складиране (отделно)", storageLabel(storage, p.currency)]] : []),

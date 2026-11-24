@@ -878,7 +878,7 @@ test("демонтаж: отметнат добавя часовете на ве
 });
 test("демонтаж: умножава се по броя", () => {
   const r = calc({ qty: { bedDouble: 3 }, dis: { bedDouble: true } });
-  near(r.disHours, E.ITEM_INDEX.bedDouble.dis * 3, 0.01);
+  near(r.disManHours / 2, E.ITEM_INDEX.bedDouble.dis * 3, 0.01);
 });
 test("демонтаж: сумира се по няколко вещи", () => {
   const r = calc({ qty: { wardrobe2: 1, desk: 2 }, dis: { wardrobe2: true, desk: true } });
@@ -1159,7 +1159,7 @@ test("спалня: типичен комплект легло + гардеро�
     asm: { bedDouble: true, wardrobe3: true, nightstand: true } });
   // нощните шкафчета не се разглобяват — отметките им не трябва да добавят часове
   const очаквано = ["bedDouble", "wardrobe3"].reduce((t, id) => t + E.ITEM_INDEX[id].dis + E.ITEM_INDEX[id].asm, 0);
-  near(r.disHours, очаквано, 0.01);
+  near(r.disManHours / 2, очаквано, 0.01);
 });
 test("дребни мебели не се разглобяват", () => {
   for (const id of ["chair", "nightstand"]) {
@@ -1757,6 +1757,22 @@ test("само монтаж по вещи: плаща се сглобяване�
   ok(!/Монтаж на мебели|Стълби|Опаковане|Стреч|Велпапе/.test(labels), "няма втори минимум, стълби и опаковане: " + labels);
   const small = calc({ service: "assembly", city: "Бургас", qty: { desk: 1 }, asm: { desk: true } });
   ok(small.total >= P.minLocalHours * small.crew * P.disAsmRate, "една малка мебел пак стига минимума от 2 ч: " + small.total);
+});
+test("бригада: по обем, стълби и монтаж — не по часове (Додо, 25.11.2026)", () => {
+  const p2 = { ...P, crewTiers: [{ crew: 2, maxM3: 8 }, { crew: 4, maxM3: 22 }, { crew: 6, maxM3: 999 }], crewBoostMinM3: 4, crewBoostFloor: 3 };
+  const base = { service: "local", city: "София", pickupHood: "Люлин", dropoffHood: "Младост" };
+  const up = (floor, elevator) => ({ floor, elevator, elevatorType: "passenger", carryDistanceM: 0 });
+  const sofa = { sofa3: 1, sofa2: 1, fridge: 1, washer: 1, boxM: 10 };             // ≈ 5 м³, без монтаж
+  ok(calc({ ...base, qty: sofa }, p2).vol >= 4 && calc({ ...base, qty: sofa }, p2).vol <= 8, "примерът е между 4 и 8 м³");
+  eq(calc({ ...base, qty: sofa }, p2).crew, 2, "под 8 м³, с асансьор/партер, без монтаж → 2");
+  eq(calc({ ...base, qty: sofa, pickup: up(5, false) }, p2).crew, 4, "без асансьор от 3-ти етаж нагоре → 4");
+  eq(calc({ ...base, qty: sofa, pickup: up(5, true) }, p2).crew, 2, "с асансьор → 2");
+  eq(calc({ ...base, qty: sofa, pickup: up(2, false) }, p2).crew, 2, "2-ри етаж без асансьор не стига → 2");
+  const withDis = calc({ ...base, qty: { ...sofa, wardrobe2: 1 }, dis: { wardrobe2: true } }, p2);
+  eq(withDis.crew, 4, "има разглобяване → 4"); eq(withDis.crewByWork, true);
+  eq(calc({ ...base, qty: { washer: 1 }, pickup: up(6, false) }, p2).crew, 2, "една пералня (под 4 м³) остава с двама");
+  eq(calc({ ...base, qty: { ...sofa, wardrobe3: 2, boxM: 30 } }, p2).crew, 4, "над 8 м³ → 4 и без стълби");
+  eq(calc({ ...base, qty: sofa, pickup: up(5, false), crewOverride: 2 }, p2).crew, 2, "ръчно зададената бригада не се пипа");
 });
 test("монтаж/ТРД: няма транспортно перо — стоката не е наша грижа", () => {
   const r = calc({ service: "assembly", city: "София", manualHours: 4 });
