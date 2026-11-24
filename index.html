@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-QILundvgewXB5C3XpA9ltUdO0z07pSUJYjx9O0l1izA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-Slvd8+k1Ri4vrtxkKT5aG3MuQRpzXPow/ci+wAD6MCU='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -6686,6 +6686,9 @@ function RecordDetail({
     }
   }, r.margin, " ", p?.currency, " (", r.marginPercent, "%)"))))));
 }
+
+// причини за 👎 — от тях се вижда КЪДЕ греши калкулаторът (по тях се групират предложенията за параметрите)
+const REVIEW_REASONS = ["Часовете за носене са малко", "Часовете за носене са много", "Стълби / етаж / асансьор", "Достъп и разстояние до камиона", "Разглобяване и сглобяване", "Опаковане и материали", "Тежки или обемисти вещи", "Път и транспорт", "Брой хора (бригада)", "Липсващи или грешни вещи в списъка", "Цената е твърде висока за пазара", "Цената е твърде ниска", "Друго"];
 function LogPanel({
   onClose,
   p,
@@ -6739,16 +6742,38 @@ function LogPanel({
   // Оценка на калкулацията от колега: 👍 = отговаря на реалността (влиза в самообучението),
   // 👎 = разминава се (не се ползва за самообучение). Второ натискане на същата оценка я маха.
   const [rating, setRating] = useState(null);
-  const rateRow = async (row, verdict) => {
+  // 👎 отваря прозорче: само „не е вярно“ не учи на нищо — питаме каква е вярната стойност и защо
+  const [fix, setFix] = useState(null); // { row, total, crew, hours, reason, note }
+  const rateRow = async (row, verdict, correction) => {
+    if (verdict === "bad" && row.review?.verdict !== "bad" && !correction) {
+      setFix({
+        row,
+        total: "",
+        crew: "",
+        hours: "",
+        reason: "",
+        note: ""
+      });
+      return;
+    }
+    setFix(null);
     setRating(row.key);
     const {
       key,
       ...record
     } = row;
-    if (record.review?.verdict === verdict) delete record.review;else record.review = {
+    if (record.review?.verdict === verdict && !correction) delete record.review;else record.review = {
       verdict,
       by: session?.email || null,
-      at: new Date().toISOString()
+      at: new Date().toISOString(),
+      // при 👍 също пазим какво точно е одобрено — записът може да се редактира след това
+      ...(correction || {
+        calculated: {
+          total: row.total ?? null,
+          crew: row.crew ?? null,
+          hours: row.hours ?? null
+        }
+      })
     };
     await pushCalcToSupabase(record, p?.supabaseUrl, p?.supabaseKey, true, true, session);
     await saveCalc(key, record);
@@ -6811,12 +6836,104 @@ function LogPanel({
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE));
   const pageSafe = Math.min(page, totalPages);
   const pagedRows = sortedRows.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+  const saveFix = () => {
+    const num = v => String(v).trim() === "" || !Number.isFinite(Number(v)) || Number(v) <= 0 ? null : Number(v);
+    const correct = {
+      total: num(fix.total),
+      crew: num(fix.crew),
+      hours: num(fix.hours)
+    };
+    rateRow(fix.row, "bad", {
+      // какво е сметнал калкулаторът в момента на оценката — за да се мери разликата и след редакция
+      calculated: {
+        total: fix.row.total ?? null,
+        crew: fix.row.crew ?? null,
+        hours: fix.row.hours ?? null
+      },
+      ...(Object.values(correct).some(v => v != null) ? {
+        correct
+      } : {}),
+      ...(fix.reason ? {
+        reason: fix.reason
+      } : {}),
+      ...(fix.note.trim() ? {
+        note: fix.note.trim().slice(0, 500)
+      } : {})
+    });
+  };
   return /*#__PURE__*/React.createElement("div", {
     className: "rounded-2xl border-2 bg-white p-5 mb-4",
     style: {
       borderColor: ink
     }
+  }, fix && /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/40 p-4",
+    onClick: () => setFix(null)
   }, /*#__PURE__*/React.createElement("div", {
+    onClick: e => e.stopPropagation(),
+    className: "w-full max-w-md my-8 rounded-2xl bg-white p-5 shadow-xl"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "text-sm font-bold mb-1",
+    style: {
+      color: ink
+    }
+  }, "👎 Какво не е вярно в калкулация №", fix.row.calcNumber ?? "", "?"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-slate-500 mb-3"
+  }, "Калкулаторът е сметнал ", /*#__PURE__*/React.createElement("b", null, fix.row.total, " € без ДДС"), ", ", fix.row.crew, " души, ≈ ", (fix.row.hours || 0).toFixed(1), " ч. Попълнете само това, което знаете — от него системата се учи. Празно поле = „там е вярно“."), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-3 gap-2 mb-3"
+  }, [["total", "Вярна цена", "€ без ДДС"], ["crew", "Хора", "души"], ["hours", "Часове", "ч"]].map(([k, label, unit]) => /*#__PURE__*/React.createElement("label", {
+    key: k,
+    className: "text-xs text-slate-600"
+  }, label, /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: "0",
+    step: k === "hours" ? "0.5" : "1",
+    inputMode: "decimal",
+    value: fix[k],
+    placeholder: unit,
+    onChange: e => setFix({
+      ...fix,
+      [k]: e.target.value
+    }),
+    className: "mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-sm"
+  })))), /*#__PURE__*/React.createElement("label", {
+    className: "text-xs text-slate-600 block mb-3"
+  }, "Причина", /*#__PURE__*/React.createElement("select", {
+    value: fix.reason,
+    onChange: e => setFix({
+      ...fix,
+      reason: e.target.value
+    }),
+    className: "mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-sm bg-white"
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "— изберете —"), REVIEW_REASONS.map(x => /*#__PURE__*/React.createElement("option", {
+    key: x,
+    value: x
+  }, x)))), /*#__PURE__*/React.createElement("label", {
+    className: "text-xs text-slate-600 block mb-4"
+  }, "Бележка (по желание)", /*#__PURE__*/React.createElement("textarea", {
+    rows: 2,
+    maxLength: 500,
+    value: fix.note,
+    onChange: e => setFix({
+      ...fix,
+      note: e.target.value
+    }),
+    placeholder: "Напр. тесен вход, носене 40 м до камиона",
+    className: "mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-sm"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-end gap-2"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setFix(null),
+    className: "text-sm px-3 py-2 text-slate-500"
+  }, "Отказ"), /*#__PURE__*/React.createElement("button", {
+    onClick: saveFix,
+    className: "text-sm font-semibold px-4 py-2 rounded-full text-white",
+    style: {
+      background: "#dc2626"
+    }
+  }, "Запиши оценката")))), /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between mb-3"
   }, /*#__PURE__*/React.createElement("div", {
     className: "font-bold",
@@ -6992,7 +7109,7 @@ function LogPanel({
     key: v,
     onClick: () => rateRow(r, v),
     disabled: rating === r.key,
-    title: title + (r.review?.verdict === v && r.review.by ? ` (оценил: ${r.review.by})` : ""),
+    title: title + (r.review?.verdict === v && r.review.by ? ` (оценил: ${r.review.by}${r.review.reason ? "; " + r.review.reason : ""}${r.review.correct?.total ? "; вярна цена " + r.review.correct.total + " €" : ""})` : ""),
     "aria-pressed": r.review?.verdict === v,
     className: "text-sm px-1.5 py-0.5 rounded-full border disabled:opacity-40",
     style: r.review?.verdict === v ? {

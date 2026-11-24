@@ -3357,6 +3357,16 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
   );
 }
 
+// причини за 👎 — от тях се вижда КЪДЕ греши калкулаторът (по тях се групират предложенията за параметрите)
+const REVIEW_REASONS = [
+  "Часовете за носене са малко", "Часовете за носене са много",
+  "Стълби / етаж / асансьор", "Достъп и разстояние до камиона",
+  "Разглобяване и сглобяване", "Опаковане и материали",
+  "Тежки или обемисти вещи", "Път и транспорт",
+  "Брой хора (бригада)", "Липсващи или грешни вещи в списъка",
+  "Цената е твърде висока за пазара", "Цената е твърде ниска", "Друго",
+];
+
 function LogPanel({ onClose, p, session, onEdit, notify }) {
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState(false);
@@ -3393,11 +3403,20 @@ function LogPanel({ onClose, p, session, onEdit, notify }) {
   // Оценка на калкулацията от колега: 👍 = отговаря на реалността (влиза в самообучението),
   // 👎 = разминава се (не се ползва за самообучение). Второ натискане на същата оценка я маха.
   const [rating, setRating] = useState(null);
-  const rateRow = async (row, verdict) => {
+  // 👎 отваря прозорче: само „не е вярно“ не учи на нищо — питаме каква е вярната стойност и защо
+  const [fix, setFix] = useState(null); // { row, total, crew, hours, reason, note }
+  const rateRow = async (row, verdict, correction) => {
+    if (verdict === "bad" && row.review?.verdict !== "bad" && !correction) {
+      setFix({ row, total: "", crew: "", hours: "", reason: "", note: "" });
+      return;
+    }
+    setFix(null);
     setRating(row.key);
     const { key, ...record } = row;
-    if (record.review?.verdict === verdict) delete record.review;
-    else record.review = { verdict, by: session?.email || null, at: new Date().toISOString() };
+    if (record.review?.verdict === verdict && !correction) delete record.review;
+    else record.review = { verdict, by: session?.email || null, at: new Date().toISOString(),
+      // при 👍 също пазим какво точно е одобрено — записът може да се редактира след това
+      ...(correction || { calculated: { total: row.total ?? null, crew: row.crew ?? null, hours: row.hours ?? null } }) };
     await pushCalcToSupabase(record, p?.supabaseUrl, p?.supabaseKey, true, true, session);
     await saveCalc(key, record);
     await refresh();
@@ -3456,8 +3475,57 @@ function LogPanel({ onClose, p, session, onEdit, notify }) {
   const pageSafe = Math.min(page, totalPages);
   const pagedRows = sortedRows.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
 
+  const saveFix = () => {
+    const num = (v) => (String(v).trim() === "" || !Number.isFinite(Number(v)) || Number(v) <= 0 ? null : Number(v));
+    const correct = { total: num(fix.total), crew: num(fix.crew), hours: num(fix.hours) };
+    rateRow(fix.row, "bad", {
+      // какво е сметнал калкулаторът в момента на оценката — за да се мери разликата и след редакция
+      calculated: { total: fix.row.total ?? null, crew: fix.row.crew ?? null, hours: fix.row.hours ?? null },
+      ...(Object.values(correct).some((v) => v != null) ? { correct } : {}),
+      ...(fix.reason ? { reason: fix.reason } : {}),
+      ...(fix.note.trim() ? { note: fix.note.trim().slice(0, 500) } : {}),
+    });
+  };
   return (
     <div className="rounded-2xl border-2 bg-white p-5 mb-4" style={{ borderColor: ink }}>
+      {fix && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/40 p-4" onClick={() => setFix(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md my-8 rounded-2xl bg-white p-5 shadow-xl">
+            <div className="text-sm font-bold mb-1" style={{ color: ink }}>👎 Какво не е вярно в калкулация №{fix.row.calcNumber ?? ""}?</div>
+            <p className="text-xs text-slate-500 mb-3">
+              Калкулаторът е сметнал <b>{fix.row.total} € без ДДС</b>, {fix.row.crew} души, ≈ {(fix.row.hours || 0).toFixed(1)} ч.
+              Попълнете само това, което знаете — от него системата се учи. Празно поле = „там е вярно“.
+            </p>
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              {[["total", "Вярна цена", "€ без ДДС"], ["crew", "Хора", "души"], ["hours", "Часове", "ч"]].map(([k, label, unit]) => (
+                <label key={k} className="text-xs text-slate-600">{label}
+                  <input type="number" min="0" step={k === "hours" ? "0.5" : "1"} inputMode="decimal" value={fix[k]} placeholder={unit}
+                    onChange={(e) => setFix({ ...fix, [k]: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-sm" />
+                </label>
+              ))}
+            </div>
+            <label className="text-xs text-slate-600 block mb-3">Причина
+              <select value={fix.reason} onChange={(e) => setFix({ ...fix, reason: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-sm bg-white">
+                <option value="">— изберете —</option>
+                {REVIEW_REASONS.map((x) => <option key={x} value={x}>{x}</option>)}
+              </select>
+            </label>
+            <label className="text-xs text-slate-600 block mb-4">Бележка (по желание)
+              <textarea rows={2} maxLength={500} value={fix.note} onChange={(e) => setFix({ ...fix, note: e.target.value })}
+                placeholder="Напр. тесен вход, носене 40 м до камиона"
+                className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-sm" />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setFix(null)} className="text-sm px-3 py-2 text-slate-500">Отказ</button>
+              <button onClick={saveFix} className="text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: "#dc2626" }}>
+                Запиши оценката
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-3">
         <div className="font-bold" style={{ color: ink }}>📋 Записани калкулации</div>
         <div className="flex gap-2">
@@ -3576,7 +3644,7 @@ function LogPanel({ onClose, p, session, onEdit, notify }) {
                       ) : (
                         <div className="flex gap-1 justify-end items-center">
                           {[["ok", "👍", "Калкулацията е вярна — ползва се за самообучение", "#dcfce7", "#16a34a"], ["bad", "👎", "Калкулацията се разминава — не се ползва за самообучение", "#fee2e2", "#dc2626"]].map(([v, icon, title, bg, border]) => (
-                            <button key={v} onClick={() => rateRow(r, v)} disabled={rating === r.key} title={title + (r.review?.verdict === v && r.review.by ? ` (оценил: ${r.review.by})` : "")}
+                            <button key={v} onClick={() => rateRow(r, v)} disabled={rating === r.key} title={title + (r.review?.verdict === v && r.review.by ? ` (оценил: ${r.review.by}${r.review.reason ? "; " + r.review.reason : ""}${r.review.correct?.total ? "; вярна цена " + r.review.correct.total + " €" : ""})` : "")}
                               aria-pressed={r.review?.verdict === v}
                               className="text-sm px-1.5 py-0.5 rounded-full border disabled:opacity-40"
                               style={r.review?.verdict === v ? { background: bg, borderColor: border } : { borderColor: "#e2e8f0", opacity: r.review ? 0.35 : 1 }}>
