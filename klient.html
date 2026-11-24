@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Калкулатор за преместване — Корект преместване</title>
 <meta name="description" content="Вижте ориентировъчна цена за Вашето преместване за една минута — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-LnJ0u8KJyLuN8DaDUEj7C5+Bh2ZJc6efdXj8MbN4vOQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-aKHRBNZo4wEU0cwTsdYmh6R5VnT0QApycZHQRWKZnrA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="robots" content="noindex">
 <script src="vendor/tailwind-play-3.4.17.js" integrity="sha384-igm5BeiBt36UU4gqwWS7imYmelpTsZlQ45FZf+XBn9MuJbn4nQr7yx1yFydocC/K"></script>
@@ -4604,7 +4604,6 @@ const DISCOUNT_PCT = 5;
 const DISCOUNT_DAYS = 14;
 const FLEX_DISCOUNT_PCT = 5; // още толкова %, ако клиентът приеме дата и час, предложени от нас
 const PHONE = "0882 944 099";
-const PHONE2 = "0888 883 237";
 const VAT = 1.2;
 const RED = "#d92027",
   BLUE = "#1d5fc2",
@@ -5196,7 +5195,7 @@ function KlientCalculator() {
     className: "mt-3 rounded-xl bg-blue-50 border border-blue-200 p-3 text-blue-900 text-sm"
   }, "Имайте предвид: може да получите ", /*#__PURE__*/React.createElement("b", null, "още ", FLEX_DISCOUNT_PCT, "% отстъпка"), ", ако се съобразите с дата и час, които ние Ви предложим. Колегата ще Ви ги предложи по телефона."), /*#__PURE__*/React.createElement("p", {
     className: "mt-3 text-sm text-slate-500"
-  }, "Бързате? Обадете се на ", PHONE, " или ", PHONE2, ".")), p && !done && step === 0 && /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement("div", {
+  }, "Бързате? Обадете се на ", PHONE, ".")), p && !done && step === 0 && /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement("div", {
     className: "text-lg font-bold mb-4"
   }, "1. Какво местим?"), /*#__PURE__*/React.createElement("div", {
     className: "grid sm:grid-cols-2 gap-3"
@@ -5527,7 +5526,7 @@ function KlientCalculator() {
     }
   }, "Остава да попълните: ", missing.join(", "), "."))))), /*#__PURE__*/React.createElement("footer", {
     className: "max-w-2xl mx-auto px-4 pb-8 text-xs text-slate-400"
-  }, "Корект преместване ООД · ", PHONE, " · ", PHONE2));
+  }, "Корект преместване ООД · ", PHONE));
 }
 
 // За разглобяване питаме само при мебели, които наистина се разглобяват (гардероби, легла, секция,
