@@ -74,6 +74,7 @@ const DEFAULTS = {
   boxPerFloor: 0.3,      // €/етаж на кашон без асансьор
   appliancePerFloor: 3,  // €/етаж на нормален уред (пералня/хладилник)
   heavyAppliancePerFloor: 5, // €/етаж на нестандартен уред (двуврат хлад., Miele)
+  heavyWorkerSharePct: 40, // % от таксата „тежко“ по стълбите, който се дава на работниците (реално 30–50%; решение на Додо, 24.11.2026)
   furniturePerFloor: 3,  // €/етаж на обикновена мебел без асансьор (гардероб, легло, маса...) —
                           // преди 2026-08-06 тези вещи изобщо не се таксуваха на етаж (мъртва настройка)
   smallItemPerFloor: 1,  // €/етаж на дребна/лека вещ без категория (картина, килим, лампа, стол...) —
@@ -1705,7 +1706,13 @@ function computePrice(s, p) {
 
   // СЕБЕСТОЙНОСТ И МАРЖ — вътрешни данни (реален разход), не влияят на цената на клиента.
   // costCity/workerCostRate вече са изчислени най-отгоре (общи и за цената към клиента).
-  const laborCost = manHours * workerCostRate;
+  // „Тежко“ по стълбите (тежки кашони + спец. уреди, таксуваната част): работниците получават
+  // p.heavyWorkerSharePct % от таксата. Това Е разходът за тази част — не се брои и по часове.
+  const heavyAppCharged = stairsManHoursAll - stairsHeavyManHours > 1e-9
+    ? floorsStdTot * appHeavy * n(p.heavyAppliancePerFloor) * (stairsManHours - stairsHeavyManHours) / (stairsManHoursAll - stairsHeavyManHours) : 0;
+  const heavyFee = floorsStdTot * heavyBoxes * n(p.boxPerFloor) + heavyAppCharged;
+  const heavyWorkerBonus = heavyFee * n(p.heavyWorkerSharePct ?? 40) / 100;
+  const laborCost = (manHours - (workerRate > 0 ? heavyFee / workerRate : 0)) * workerCostRate + heavyWorkerBonus;
   const truckCostRate = usesFieldCrew ? 0 : n(isCourse || isDisposal ? p.truckCostPerKm : p.truckCostPerHour);
   // градско: СЪЩИТЕ часове като перото "Транспорт" към клиента (truckClockHours, закръглени) —
   // без стълбите: по стълбите носят хората, камионът не участва (виж калк. №143 — 3.0 ч към
@@ -1720,7 +1727,7 @@ function computePrice(s, p) {
 
   return { total: Math.round(total), lines, boxFillManHours, boxBuy,
     materialsCost: Math.round(materialsCost * 100) / 100, otherCost: Math.round((extraCostTotal - materialsCost) * 100) / 100,
-    costCity, workerCostRate, workerRate, deviationFactor, deviationManual, floorsStdTot, floorsOvrTot, laborCost: Math.round(laborCost), truckCost: Math.round(truckCost),
+    costCity, workerCostRate, workerRate, deviationFactor, deviationManual, floorsStdTot, floorsOvrTot, laborCost: Math.round(laborCost), heavyFee: Math.round(heavyFee * 100) / 100, heavyWorkerBonus: Math.round(heavyWorkerBonus * 100) / 100, truckCost: Math.round(truckCost),
     totalCost: Math.round(totalCost), margin: Math.round(margin), marginPercent, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, autoHandlingClock, hoursManual, autoTruckHours, truckHoursManual, truckH, truckHWork, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours, storage };
 }
 
@@ -2107,6 +2114,7 @@ function buildRecord(s, p, r, id, calcNumber, createdBy) {
     costCity: r.costCity || null,
     workerCostRate: r.workerCostRate,
     laborCost: r.laborCost,
+    heavyWorkerBonus: r.heavyWorkerBonus || 0,   // частта от „тежкото“, която се дава на работниците (влиза в laborCost)
     truckCost: r.truckCost,
     materialsCost: r.materialsCost,
     otherCost: r.otherCost,
@@ -2750,6 +2758,7 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify, sessi
           <Num label="Уред/етаж" value={p.appliancePerFloor} step={0.5} onChange={(v) => upd({ appliancePerFloor: v })} suffix="€" />
           <Num label="Мебел/етаж" value={p.furniturePerFloor} step={0.5} onChange={(v) => upd({ furniturePerFloor: v })} suffix="€" />
           <Num label="Спец. уред/етаж" value={p.heavyAppliancePerFloor} step={0.5} onChange={(v) => upd({ heavyAppliancePerFloor: v })} suffix="€" />
+          <Num label="От „тежко“ към работниците" value={p.heavyWorkerSharePct ?? 40} step={5} onChange={(v) => upd({ heavyWorkerSharePct: v })} suffix="%" />
           <Num label="Плоска база/етаж" value={p.floorFeeNoElevator} step={0.5} onChange={(v) => upd({ floorFeeNoElevator: v })} suffix="€" />
           <Num label="Безплатно носене до" value={p.carryFreeDistanceM} step={5} onChange={(v) => upd({ carryFreeDistanceM: v })} suffix="м" />
           <Num label="Мин. на 10м носене" value={p.carryExtraMinPer10m} step={1} onChange={(v) => upd({ carryExtraMinPer10m: v })} suffix="мин" />
@@ -3364,6 +3373,12 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
                 <span className="text-slate-500">Труд{r.costCity ? ` (${r.costCity}, ${r.workerCostRate} €/ч)` : ""}</span>
                 <span style={{ color: ink }}>{r.laborCost} {p?.currency}</span>
               </div>
+              {r.heavyWorkerBonus > 0 && (
+                <div className="flex justify-between gap-3 text-xs">
+                  <span className="text-slate-500">↳ от тях за „тежко“ към работниците</span>
+                  <span style={{ color: ink }}>{r.heavyWorkerBonus} {p?.currency}</span>
+                </div>
+              )}
               <div className="flex justify-between gap-3">
                 <span className="text-slate-500">Камион</span>
                 <span style={{ color: ink }}>{r.truckCost} {p?.currency}</span>
@@ -5784,6 +5799,12 @@ export default function KorektCalculator() {
                         <span className="text-slate-500">Труд{costCity ? ` (${costCity}, ${workerCostRate} ${p.currency}/ч)` : ""}</span>
                         <span style={{ color: ink }}>{laborCost} {p.currency}</span>
                       </div>
+                      {r.heavyWorkerBonus > 0 && (
+                        <div className="flex justify-between gap-3 text-xs">
+                          <span className="text-slate-500">↳ от тях за „тежко“ към работниците ({p.heavyWorkerSharePct ?? 40}%)</span>
+                          <span style={{ color: ink }}>{r.heavyWorkerBonus} {p.currency}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between gap-3">
                         <span className="text-slate-500">Камион</span>
                         <span style={{ color: ink }}>{truckCost} {p.currency}</span>

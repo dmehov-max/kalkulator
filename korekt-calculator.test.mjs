@@ -1032,6 +1032,17 @@ test("себестойност: междуградско ползва ставк
   const r = calc({ service: "intercity", pickupCity: "София", dropoffCity: "Пловдив", qty: { boxM: 5 } }, params);
   eq(r.workerCostRate, 20, "тръгва от София, не Пловдив:");
 });
+test("марж: 40% от таксата „тежко“ по стълбите отива при работниците (№110)", () => {
+  const job = { service: "local", city: "София", pickupHood: "Красно село", dropoffHood: "Овча купел 2",
+    dropoff: { floor: 5, elevator: false, elevatorType: "passenger", carryDistanceM: 0 }, qty: { books: 25 } };
+  const r = calc(job);
+  const fee = 25 * 5 * P.boxPerFloor;
+  near(r.heavyFee, fee, 0.01); near(r.heavyWorkerBonus, fee * 0.4, 0.01, "40% от тежкото");
+  const noStairs = calc({ ...job, dropoff: { ...job.dropoff, floor: 0 } });
+  near(r.laborCost - noStairs.laborCost, fee * 0.4, 1, "разходът за тежкото е точно бонусът, не и часове отгоре");
+  eq(noStairs.heavyWorkerBonus, 0, "без стълби няма тежко");
+  near(calc(job, { ...P, heavyWorkerSharePct: 50 }).heavyWorkerBonus, fee * 0.5, 0.01, "процентът се взима от параметрите");
+});
 test("марж: цена минус себестойност, с положителен марж при нормални ставки", () => {
   const r = calc({ qty: { boxM: 5 }, pickupHood: "Център", dropoffHood: "Младост" });
   eq(r.margin, r.total - r.totalCost);

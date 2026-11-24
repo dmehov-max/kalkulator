@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-8WghYOcDKUii5CfjAGI0/eF0oYkHdrycT3FSQ7AHq0o='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-59GQnGxObFD/cv+2it8PYJmHf3zosskoCFhQcxvmjwQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -205,6 +205,8 @@ const DEFAULTS = {
   // €/етаж на нормален уред (пералня/хладилник)
   heavyAppliancePerFloor: 5,
   // €/етаж на нестандартен уред (двуврат хлад., Miele)
+  heavyWorkerSharePct: 40,
+  // % от таксата „тежко“ по стълбите, който се дава на работниците (реално 30–50%; решение на Додо, 24.11.2026)
   furniturePerFloor: 3,
   // €/етаж на обикновена мебел без асансьор (гардероб, легло, маса...) —
   // преди 2026-08-06 тези вещи изобщо не се таксуваха на етаж (мъртва настройка)
@@ -3708,7 +3710,12 @@ function computePrice(s, p) {
 
   // СЕБЕСТОЙНОСТ И МАРЖ — вътрешни данни (реален разход), не влияят на цената на клиента.
   // costCity/workerCostRate вече са изчислени най-отгоре (общи и за цената към клиента).
-  const laborCost = manHours * workerCostRate;
+  // „Тежко“ по стълбите (тежки кашони + спец. уреди, таксуваната част): работниците получават
+  // p.heavyWorkerSharePct % от таксата. Това Е разходът за тази част — не се брои и по часове.
+  const heavyAppCharged = stairsManHoursAll - stairsHeavyManHours > 1e-9 ? floorsStdTot * appHeavy * n(p.heavyAppliancePerFloor) * (stairsManHours - stairsHeavyManHours) / (stairsManHoursAll - stairsHeavyManHours) : 0;
+  const heavyFee = floorsStdTot * heavyBoxes * n(p.boxPerFloor) + heavyAppCharged;
+  const heavyWorkerBonus = heavyFee * n(p.heavyWorkerSharePct ?? 40) / 100;
+  const laborCost = (manHours - (workerRate > 0 ? heavyFee / workerRate : 0)) * workerCostRate + heavyWorkerBonus;
   const truckCostRate = usesFieldCrew ? 0 : n(isCourse || isDisposal ? p.truckCostPerKm : p.truckCostPerHour);
   // градско: СЪЩИТЕ часове като перото "Транспорт" към клиента (truckClockHours, закръглени) —
   // без стълбите: по стълбите носят хората, камионът не участва (виж калк. №143 — 3.0 ч към
@@ -3735,6 +3742,8 @@ function computePrice(s, p) {
     floorsStdTot,
     floorsOvrTot,
     laborCost: Math.round(laborCost),
+    heavyFee: Math.round(heavyFee * 100) / 100,
+    heavyWorkerBonus: Math.round(heavyWorkerBonus * 100) / 100,
     truckCost: Math.round(truckCost),
     totalCost: Math.round(totalCost),
     margin: Math.round(margin),
@@ -4392,6 +4401,8 @@ function buildRecord(s, p, r, id, calcNumber, createdBy) {
     costCity: r.costCity || null,
     workerCostRate: r.workerCostRate,
     laborCost: r.laborCost,
+    heavyWorkerBonus: r.heavyWorkerBonus || 0,
+    // частта от „тежкото“, която се дава на работниците (влиза в laborCost)
     truckCost: r.truckCost,
     materialsCost: r.materialsCost,
     otherCost: r.otherCost,
@@ -5550,6 +5561,14 @@ function SettingsPanel({
     }),
     suffix: "€"
   }), /*#__PURE__*/React.createElement(Num, {
+    label: "От „тежко“ към работниците",
+    value: p.heavyWorkerSharePct ?? 40,
+    step: 5,
+    onChange: v => upd({
+      heavyWorkerSharePct: v
+    }),
+    suffix: "%"
+  }), /*#__PURE__*/React.createElement(Num, {
     label: "Плоска база/етаж",
     value: p.floorFeeNoElevator,
     step: 0.5,
@@ -6706,7 +6725,15 @@ function RecordDetail({
     style: {
       color: ink
     }
-  }, r.laborCost, " ", p?.currency)), /*#__PURE__*/React.createElement("div", {
+  }, r.laborCost, " ", p?.currency)), r.heavyWorkerBonus > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3 text-xs"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500"
+  }, "↳ от тях за „тежко“ към работниците"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, r.heavyWorkerBonus, " ", p?.currency)), /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between gap-3"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-slate-500"
@@ -10198,7 +10225,15 @@ function KorektCalculator() {
     style: {
       color: ink
     }
-  }, laborCost, " ", p.currency)), /*#__PURE__*/React.createElement("div", {
+  }, laborCost, " ", p.currency)), r.heavyWorkerBonus > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between gap-3 text-xs"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500"
+  }, "↳ от тях за „тежко“ към работниците (", p.heavyWorkerSharePct ?? 40, "%)"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ink
+    }
+  }, r.heavyWorkerBonus, " ", p.currency)), /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between gap-3"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-slate-500"
