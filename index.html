@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-TwDIh69hgDirdKX4dfjqtl5nasduo7LX0swEDJcW/CE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-STgIMZl9r0aG53jI2PuA8dBF3Eid8DBFPTgT6w+JeVE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -6948,6 +6948,9 @@ function RecordDetail({
 
 // причини за 👎 — от тях се вижда КЪДЕ греши калкулаторът (по тях се групират предложенията за параметрите)
 const REVIEW_REASONS = ["Часовете за носене са малко", "Часовете за носене са много", "Стълби / етаж / асансьор", "Достъп и разстояние до камиона", "Разглобяване и сглобяване", "Опаковане и материали", "Тежки или обемисти вещи", "Път и транспорт", "Брой хора (бригада)", "Липсващи или грешни вещи в списъка", "Цената е твърде висока за пазара", "Цената е твърде ниска", "Друго"];
+
+// редакторът на оферти се зарежда с нов адрес при всяко отваряне — иначе браузърът пази стара версия след качване
+const OFFERS_BOOT = Date.now().toString(36);
 function LogPanel({
   onClose,
   p,
@@ -9058,7 +9061,7 @@ function KorektCalculator() {
     className: "rounded-2xl overflow-hidden mb-4 bg-white border border-slate-200"
   }, /*#__PURE__*/React.createElement("iframe", {
     key: offersFrameKey,
-    src: "oferti.html",
+    src: `oferti.html?v=${OFFERS_BOOT}-${offersFrameKey}`,
     title: "Оферти за клиенти",
     style: {
       width: "100%",

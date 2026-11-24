@@ -3536,6 +3536,8 @@ const REVIEW_REASONS = [
   "Цената е твърде висока за пазара", "Цената е твърде ниска", "Друго",
 ];
 
+// редакторът на оферти се зарежда с нов адрес при всяко отваряне — иначе браузърът пази стара версия след качване
+const OFFERS_BOOT = Date.now().toString(36);
 function LogPanel({ onClose, p, session, onEdit, onOffer, notify }) {
   const [rows, setRows] = useState(null);
   const [offers, setOffers] = useState({});
@@ -4938,7 +4940,7 @@ export default function KorektCalculator() {
         {showVoice && <VoicePanel session={authSession} p={p} />}
         {showOffers && (
           <div className="rounded-2xl overflow-hidden mb-4 bg-white border border-slate-200">
-            <iframe key={offersFrameKey} src="oferti.html" title="Оферти за клиенти"
+            <iframe key={offersFrameKey} src={`oferti.html?v=${OFFERS_BOOT}-${offersFrameKey}`} title="Оферти за клиенти"
               style={{ width: "100%", height: "calc(100vh - 170px)", minHeight: 560, border: 0, display: "block" }} />
           </div>
         )}

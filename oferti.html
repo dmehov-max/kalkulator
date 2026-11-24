@@ -674,7 +674,7 @@ function showMsg(kind, text) { $("dbMsg").innerHTML = text ? `<div class="msgbox
 /* ---------- Старт ---------- */
 (async function start() {
   try {
-    TEMPLATE = await (await fetch("oferta-template.html")).text();
+    TEMPLATE = await (await fetch("oferta-template.html", { cache: "no-cache" })).text();
     const a = TEMPLATE.indexOf("/*OFFER-START*/") + 15, b = TEMPLATE.indexOf("/*OFFER-END*/");
     const sample = new Function(TEMPLATE.slice(a, b) + "; return OFFER;")();
     DEFAULT_PHOTO = sample.coordinator.photo || "";
