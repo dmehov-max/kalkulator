@@ -665,9 +665,8 @@ test("велпапе: огледала и картини се защитават
   ok(E.ITEM_INDEX.art.protectReq, "огледалото трябва да е задължително");
   eq(E.protectMetersFor({ art: 1 }, {}), E.ITEM_INDEX.art.protect);
 });
-test("велпапе/стреч: телевизорът и принтерът са избираеми, не задължителни", () => {
-  ok(!E.ITEM_INDEX.tvstand.protectReq, "ТВ велпапе не бива да е задължително");
-  ok(!E.ITEM_INDEX.tvstand.wrapReq, "ТВ стреч не бива да е задължителен");
+test("велпапе/стреч: принтерът е избираем; телевизорът е задължителен (решение 24.11.2026)", () => {
+  ok(E.ITEM_INDEX.tvstand.protectReq && E.ITEM_INDEX.tvstand.wrapReq, "ТВ се опакова задължително със стреч и велпапе");
   ok(!E.ITEM_INDEX.printer.wrapReq, "принтер стреч не бива да е задължителен");
 });
 test("велпапе: стъклените мебели се защитават задължително", () => {
@@ -1161,9 +1160,9 @@ test("стреч: опаковано от клиента приспада и з�
   eq(E.wrapMetersFor({ wardrobe3: 3 }, {}, { wardrobe3: 1 }), E.ITEM_INDEX.wardrobe3.wrap * 2);
   eq(E.wrapMetersFor({ wardrobe3: 3 }, {}, { wardrobe3: true }), 0);
 });
-test("стреч: не-мебели (ТВ, килим) остават по избор", () => {
-  eq(E.wrapMetersFor({ tvstand: 1, rug: 1 }, {}), 0, "без отметка:");
-  eq(E.wrapMetersFor({ tvstand: 1 }, { tvstand: true }), E.ITEM_INDEX.tvstand.wrap);
+test("стреч: килимът остава по избор; телевизорът е задължителен", () => {
+  eq(E.wrapMetersFor({ rug: 1 }, {}), 0, "килим без отметка:");
+  eq(E.wrapMetersFor({ tvstand: 1 }, {}), E.ITEM_INDEX.tvstand.wrap, "ТВ без отметка пак се увива:");
 });
 test("марж: камионът се смята по същите часове като транспорта към клиента (без стълбите)", () => {
   const params = { ...P, truckCostPerHour: 18, truckRate: 20, truckWorkPct: 100, truckWorkPctBig: 100 };
@@ -2428,6 +2427,15 @@ test("складиране: ставките идват от Параметри 
   const o = order({ qty: { boxM: 30 }, storage: { on: true, months: 2, mode: "auto" } });
   const rec = E.buildRecord(o, P, E.computePrice(o, P), "calc:x");
   eq(rec.storage.months, 2); ok(rec.storage.monthly > 0);
+});
+
+test("телевизор: стреч фолио и велпапе са задължителни по подразбиране (и малкият, и големият)", () => {
+  for (const id of ["tvstand", "tvLarge"]) {
+    ok(E.ITEM_INDEX[id].wrapReq && E.ITEM_INDEX[id].protectReq, id + " трябва да е със задължително опаковане");
+    const r = calc({ qty: { [id]: 1 } });
+    ok(r.wrapMeters > 0, id + ": липсва стреч фолио");
+    eq(r.protectMeters, E.ITEM_INDEX[id].protect, id + ": метри велпапе:");
+  }
 });
 
 /* ---------- Синтактична проверка на целия файл (вкл. интерфейса) ---------- */

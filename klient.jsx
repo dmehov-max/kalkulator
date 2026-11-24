@@ -72,12 +72,11 @@ function Select({ value, onChange, options, placeholder }) {
   );
 }
 const OFFICE_CITIES = Object.keys(NEIGHBORHOODS);
-function CityPicker({ value, onChange, exclude, others }) {
-  const isOther = !!value && !OFFICE_CITIES.includes(value);
+function CityPicker({ value, onChange }) {
   return (
     <div>
       <div className="grid grid-cols-3 gap-1.5">
-        {OFFICE_CITIES.filter((c) => c !== exclude).map((c) => {
+        {OFFICE_CITIES.map((c) => {
           const on = value === c;
           return (
             <button key={c} type="button" aria-pressed={on} onClick={() => onChange(c)}
@@ -86,14 +85,6 @@ function CityPicker({ value, onChange, exclude, others }) {
           );
         })}
       </div>
-      {others && (
-        <select value={isOther ? value : ""} onChange={(e) => onChange(e.target.value)} aria-label="Друг град"
-          className={"mt-1.5 w-full rounded-xl border-2 bg-white px-3 py-2.5 text-sm focus:outline-none " + (isOther ? "font-semibold" : "text-slate-500 border-slate-200")}
-          style={isOther ? { borderColor: BLUE, color: BLUE } : undefined}>
-          <option value="">Друг град…</option>
-          {others.filter((c) => c !== exclude && !OFFICE_CITIES.includes(c)).map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-      )}
     </div>
   );
 }
@@ -335,9 +326,10 @@ function KlientCalculator() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
-                <div><Label>От град</Label><CityPicker value={s.pickupCity} onChange={(v) => set({ pickupCity: v, dropoffCity: v === s.dropoffCity ? "" : s.dropoffCity })} others={cities} /></div>
-                <div><Label>До град</Label><CityPicker value={s.dropoffCity} onChange={(v) => set({ dropoffCity: v })} exclude={s.pickupCity} others={cities} /></div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div><Label>От град</Label><Select value={s.pickupCity} onChange={(v) => set({ pickupCity: v, dropoffCity: v === s.dropoffCity ? "" : s.dropoffCity })} options={cities} placeholder="Изберете град" /></div>
+                <div><Label>До град</Label><Select value={s.dropoffCity} onChange={(v) => set({ dropoffCity: v })} options={cities.filter((c) => c !== s.pickupCity)} placeholder="Изберете град" /></div>
+                <p className="sm:col-span-2 text-xs text-slate-500">Местим в цяла България. Ако Вашето населено място го няма в списъка, обадете се на {PHONE}.</p>
               </div>
             )}
             <div className="grid sm:grid-cols-2 gap-3 mt-4">
@@ -461,8 +453,13 @@ function KlientCalculator() {
   );
 }
 
+// За разглобяване питаме само при мебели, които наистина се разглобяват (гардероби, легла, секция,
+// ъглов диван, витрина…): над ~1.3 ч общо. Не питаме за телевизор, масички, столове, уреди.
+const needsWorkQuestion = (it) => (it.dis || 0) + (it.asm || 0) >= 1.3 && !/^tv/.test(it.id) && !SPECIAL_IDS.has(it.id);
+const isTV = (it) => /^tv(stand|Large)$/.test(it.id);
+
 function ItemRow({ it, qty, setQty, work, setWork }) {
-  const canWork = qty > 0 && !!(it.dis || it.asm) && !!setWork;
+  const canWork = qty > 0 && needsWorkQuestion(it) && !!setWork;
   return (
     <div className="py-2.5">
       <div className="flex items-center justify-between gap-3">
@@ -471,6 +468,11 @@ function ItemRow({ it, qty, setQty, work, setWork }) {
         </span>
         <Stepper value={qty} onChange={(v) => setQty(it.id, v)} />
       </div>
+      {qty > 0 && isTV(it) && (
+        <div className="mt-2 rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs text-slate-600">
+          📺 Телевизорът се опакова задължително със стреч фолио и велпапе, за да е защитен екранът. Включено е в цената. Ако пазите оригиналния кашон, кажете на колегата.
+        </div>
+      )}
       {canWork && (
         <div className="mt-2 rounded-xl bg-amber-50 border border-amber-200 p-2.5">
           <div className="text-xs font-semibold text-amber-900 mb-1.5">🔧 Да го разглобим и сглобим ли?</div>

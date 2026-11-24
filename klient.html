@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Калкулатор за преместване — Корект преместване</title>
 <meta name="description" content="Вижте ориентировъчна цена за Вашето преместване за една минута — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-497cpEf5vHaVQKQH1UTGuQJGPQGpdoREqeM9t09a/6E='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-XqtCOobl+sirZhmpkRR714qLpX3d4qygwPFkGzUjlQc='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="robots" content="noindex">
 <script src="vendor/tailwind-play-3.4.17.js" integrity="sha384-igm5BeiBt36UU4gqwWS7imYmelpTsZlQ45FZf+XBn9MuJbn4nQr7yx1yFydocC/K"></script>
@@ -347,8 +347,12 @@ const CATALOG = [{
     dis: 0.15,
     asm: 0.3,
     wrap: 4,
-    protect: 4
-  }, {
+    wrapReq: true,
+    protect: 4,
+    protectReq: true
+  },
+  // екранът се пази задължително: стреч + велпапе
+  {
     id: "tvcabinet",
     label: "ТВ шкаф",
     m3: 0.6,
@@ -4704,14 +4708,11 @@ function Select({
 const OFFICE_CITIES = Object.keys(NEIGHBORHOODS);
 function CityPicker({
   value,
-  onChange,
-  exclude,
-  others
+  onChange
 }) {
-  const isOther = !!value && !OFFICE_CITIES.includes(value);
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-3 gap-1.5"
-  }, OFFICE_CITIES.filter(c => c !== exclude).map(c => {
+  }, OFFICE_CITIES.map(c => {
     const on = value === c;
     return /*#__PURE__*/React.createElement("button", {
       key: c,
@@ -4724,21 +4725,7 @@ function CityPicker({
         borderColor: BLUE
       } : undefined
     }, c);
-  })), others && /*#__PURE__*/React.createElement("select", {
-    value: isOther ? value : "",
-    onChange: e => onChange(e.target.value),
-    "aria-label": "Друг град",
-    className: "mt-1.5 w-full rounded-xl border-2 bg-white px-3 py-2.5 text-sm focus:outline-none " + (isOther ? "font-semibold" : "text-slate-500 border-slate-200"),
-    style: isOther ? {
-      borderColor: BLUE,
-      color: BLUE
-    } : undefined
-  }, /*#__PURE__*/React.createElement("option", {
-    value: ""
-  }, "Друг град…"), others.filter(c => c !== exclude && !OFFICE_CITIES.includes(c)).map(c => /*#__PURE__*/React.createElement("option", {
-    key: c,
-    value: c
-  }, c))));
+  })));
 }
 function Stepper({
   value,
@@ -5174,22 +5161,25 @@ function KlientCalculator() {
     options: hoods,
     placeholder: "Изберете"
   })))) : /*#__PURE__*/React.createElement("div", {
-    className: "space-y-4"
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "От град"), /*#__PURE__*/React.createElement(CityPicker, {
+    className: "grid sm:grid-cols-2 gap-3"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "От град"), /*#__PURE__*/React.createElement(Select, {
     value: s.pickupCity,
     onChange: v => set({
       pickupCity: v,
       dropoffCity: v === s.dropoffCity ? "" : s.dropoffCity
     }),
-    others: cities
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "До град"), /*#__PURE__*/React.createElement(CityPicker, {
+    options: cities,
+    placeholder: "Изберете град"
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "До град"), /*#__PURE__*/React.createElement(Select, {
     value: s.dropoffCity,
     onChange: v => set({
       dropoffCity: v
     }),
-    exclude: s.pickupCity,
-    others: cities
-  }))), /*#__PURE__*/React.createElement("div", {
+    options: cities.filter(c => c !== s.pickupCity),
+    placeholder: "Изберете град"
+  })), /*#__PURE__*/React.createElement("p", {
+    className: "sm:col-span-2 text-xs text-slate-500"
+  }, "Местим в цяла България. Ако Вашето населено място го няма в списъка, обадете се на ", PHONE, ".")), /*#__PURE__*/React.createElement("div", {
     className: "grid sm:grid-cols-2 gap-3 mt-4"
   }, /*#__PURE__*/React.createElement(Address, {
     title: "Откъде взимаме",
@@ -5424,6 +5414,11 @@ function KlientCalculator() {
     className: "max-w-2xl mx-auto px-4 pb-8 text-xs text-slate-400"
   }, "Корект преместване ООД · ", PHONE, " · ", PHONE2));
 }
+
+// За разглобяване питаме само при мебели, които наистина се разглобяват (гардероби, легла, секция,
+// ъглов диван, витрина…): над ~1.3 ч общо. Не питаме за телевизор, масички, столове, уреди.
+const needsWorkQuestion = it => (it.dis || 0) + (it.asm || 0) >= 1.3 && !/^tv/.test(it.id) && !SPECIAL_IDS.has(it.id);
+const isTV = it => /^tv(stand|Large)$/.test(it.id);
 function ItemRow({
   it,
   qty,
@@ -5431,7 +5426,7 @@ function ItemRow({
   work,
   setWork
 }) {
-  const canWork = qty > 0 && !!(it.dis || it.asm) && !!setWork;
+  const canWork = qty > 0 && needsWorkQuestion(it) && !!setWork;
   return /*#__PURE__*/React.createElement("div", {
     className: "py-2.5"
   }, /*#__PURE__*/React.createElement("div", {
@@ -5443,7 +5438,9 @@ function ItemRow({
   }, it.m3, " м³")), /*#__PURE__*/React.createElement(Stepper, {
     value: qty,
     onChange: v => setQty(it.id, v)
-  })), canWork && /*#__PURE__*/React.createElement("div", {
+  })), qty > 0 && isTV(it) && /*#__PURE__*/React.createElement("div", {
+    className: "mt-2 rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs text-slate-600"
+  }, "📺 Телевизорът се опакова задължително със стреч фолио и велпапе, за да е защитен екранът. Включено е в цената. Ако пазите оригиналния кашон, кажете на колегата."), canWork && /*#__PURE__*/React.createElement("div", {
     className: "mt-2 rounded-xl bg-amber-50 border border-amber-200 p-2.5"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-xs font-semibold text-amber-900 mb-1.5"
