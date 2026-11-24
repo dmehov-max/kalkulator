@@ -12,6 +12,7 @@ const LIMITS = {
 };
 const DISCOUNT_PCT = 5;
 const DISCOUNT_DAYS = 14;
+const FLEX_DISCOUNT_PCT = 5; // още толкова %, ако клиентът приеме дата и час, предложени от нас
 const PHONE = "0882 944 099";
 const PHONE2 = "0888 883 237";
 const VAT = 1.2;
@@ -162,6 +163,7 @@ function KlientCalculator() {
           shownPriceVat: needsSurvey ? null : priceVat,           // какво е видял клиентът — не се променя при редакция
           needsSurvey, surveyReasons: reasons,
           discountPct: needsSurvey ? 0 : DISCOUNT_PCT, discountUntil: needsSurvey ? null : until,
+          flexDiscountOfferedPct: needsSurvey ? 0 : FLEX_DISCOUNT_PCT, // казано на клиента: още толкова %, ако приеме дата и час, предложени от нас
           consentAt: new Date().toISOString(), consentText: "Съгласие за обработка на лични данни за изготвяне на оферта",
         },
       });
@@ -203,7 +205,8 @@ function KlientCalculator() {
           <Card>
             <div className="text-xl font-extrabold" style={{ color: INK }}>Благодарим Ви, {contact.first.trim()}!</div>
             <p className="mt-2 text-slate-700">Запитването е получено{done.number ? <> под № <b>{done.number}</b></> : null}. Наш колега ще Ви се обади на <b>{contact.phone}</b> в работно време, за да уточни подробностите{needsSurvey ? " и да уговори оглед" : " и да потвърди крайната цена"}.</p>
-            {!needsSurvey && <p className="mt-3 rounded-xl bg-green-50 border border-green-200 p-3 text-green-900 text-sm">Запазихме Ви <b>{DISCOUNT_PCT}% отстъпка</b> от крайната цена. Важи {DISCOUNT_DAYS} дни.</p>}
+            {!needsSurvey && <p className="mt-3 rounded-xl bg-green-50 border border-green-200 p-3 text-green-900 text-sm">Получихте своята <b>{DISCOUNT_PCT}% отстъпка</b> от крайната цена. Важи {DISCOUNT_DAYS} дни.</p>}
+            {!needsSurvey && <p className="mt-3 rounded-xl bg-blue-50 border border-blue-200 p-3 text-blue-900 text-sm">Имайте предвид: може да получите <b>още {FLEX_DISCOUNT_PCT}% отстъпка</b>, ако се съобразите с дата и час, които ние Ви предложим. Колегата ще Ви ги предложи по телефона.</p>}
             <p className="mt-3 text-sm text-slate-500">Бързате? Обадете се на {PHONE} или {PHONE2}.</p>
           </Card>
         )}
