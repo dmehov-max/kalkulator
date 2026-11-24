@@ -1749,6 +1749,15 @@ test("монтаж/ТРД: важи минимумът от 2 часа", () => {
   const r = calc({ service: "assembly", city: "София", manualHours: 0.5 });
   near(r.handlingClock, P.minLocalHours, 0.01);
 });
+test("само монтаж по вещи: плаща се сглобяването, без втори минимум, стълби, опаковане и фолио (№115)", () => {
+  const r = calc({ service: "assembly", city: "Бургас", pickup: { floor: 2, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
+    qty: { wardrobe4: 1, wardrobe2: 1, bedDouble: 1, desk: 1 }, asm: { wardrobe4: true, wardrobe2: true, bedDouble: true, desk: true } });
+  const labels = r.lines.map((l) => l.label).join(" | ");
+  ok(/Сглобяване/.test(labels), "има ред за сглобяването: " + labels);
+  ok(!/Монтаж на мебели|Стълби|Опаковане|Стреч|Велпапе/.test(labels), "няма втори минимум, стълби и опаковане: " + labels);
+  const small = calc({ service: "assembly", city: "Бургас", qty: { desk: 1 }, asm: { desk: true } });
+  ok(small.total >= P.minLocalHours * small.crew * P.disAsmRate, "една малка мебел пак стига минимума от 2 ч: " + small.total);
+});
 test("монтаж/ТРД: няма транспортно перо — стоката не е наша грижа", () => {
   const r = calc({ service: "assembly", city: "София", manualHours: 4 });
   ok(!r.lines.some((l) => l.label.startsWith("Транспорт")), "не бива да има транспорт");

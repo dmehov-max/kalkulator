@@ -1196,7 +1196,8 @@ function computePrice(s, p) {
   const disManHours = disOnlyManHours + asmOnlyManHours;
 
   // опаковане със стреч: метри → часове труд + ролки материал
-  const wrapMeters = wrapMetersFor(s.qty, s.wrap, s.selfPack);
+  // „Само монтаж“: мебелите вече са на място — няма опаковане, фолио и носене по стълби (№115, 25.11.2026)
+  const wrapMeters = isAssembly ? 0 : wrapMetersFor(s.qty, s.wrap, s.selfPack);
   const wrapManHours = wrapMeters / n(p.wrapMPerManHour || 40);
   const wrapHours = wrapManHours; // човекочаса за опаковане
   const autoRolls = wrapMeters > 0 ? wrapMeters / n(p.stretchRollM || 20) : 0; // дробна част се таксува пропорционално
@@ -1206,7 +1207,7 @@ function computePrice(s, p) {
   const rollPrice = rollsManual && n(s.stretchRollPriceManual || 0) > 0 ? n(s.stretchRollPriceManual) : n(p.stretchRollPrice);
 
   // велпапе / автопласт за огледала, картини, стъкла
-  const protectMeters = protectMetersFor(s.qty, s.protect, s.selfPack);
+  const protectMeters = isAssembly ? 0 : protectMetersFor(s.qty, s.protect, s.selfPack);
   const protectManHours = protectMeters / n(p.protectMPerManHour || 25);
 
   // кашони и чували: отметки под всяка вещ — „пълнене от нас“ (s.fill, труд) и
@@ -1417,14 +1418,17 @@ function computePrice(s, p) {
   } else if (isManualHoursService) {
     // монтаж на мебели / ТРД — часовете се въвеждат ръчно от служителя (по преценка на място),
     // не се смятат от обем. Пътят на бригадата и колата работят по същия начин като "Само хамали".
-    const jobClock = Math.max(n(s.manualHours || 0), n(p.minLocalHours));
+    // при монтаж по вещи времето идва от каталога (отделен ред „Сглобяване“) — минимумът от 2 ч
+    // само допълва до 2 ч, не се трупа отгоре (№115: 80 € минимум + 240 € сглобяване за едно и също)
+    const itemWork = isAssembly ? roundHalf(disOnlyHours) + roundHalf(asmOnlyHours) : 0; // както се таксуват
+    const jobClock = Math.max(n(s.manualHours || 0), n(p.minLocalHours) - itemWork, 0);
     const labourKm = labourTravelKm;
     const travelH = labourKm ? (2 * labourKm) / n(p.roadSpeed || 65) : 0;
 
     handlingClock = jobClock + travelH;
     handlingManHours = handlingClock * crew;
     const jobRate = isAssembly ? disAsmRate : workerRate; // монтажът е квалифициран труд
-    {
+    if (roundHalf(jobClock) > 0) {
       const h = roundHalf(jobClock);
       add(`${isAssembly ? "Монтаж на мебели" : "Товарене/разтоварване"} — ${h.toFixed(1)} ч × ${crew} души × ${jobRate} ${p.currency}/ч`,
           h * crew * jobRate);
@@ -1544,7 +1548,7 @@ function computePrice(s, p) {
   const skipDropoffFloors = isDisposal || selfUnloadMode || usesFieldCrew;
   const floorsStdTot = floorsStd(s.pickup) + (skipDropoffFloors ? 0 : floorsStd(s.dropoff));
   const floorsOvrTot = floorsOvr(s.pickup) + (skipDropoffFloors ? 0 : floorsOvr(s.dropoff));
-  const stairs = floorsStdTot * perFloorStd + floorsOvrTot * perFloorOvr;
+  const stairs = isAssembly ? 0 : floorsStdTot * perFloorStd + floorsOvrTot * perFloorOvr;
   // превръща таксата за стълби в реални човекочасове по стандартната работническа ставка —
   // екипът реално отделя толкова допълнително време, не само плаща толкова допълнително
   const stairsManHoursAll = workerRate > 0 ? stairs / workerRate : 0;
