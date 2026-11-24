@@ -34,7 +34,15 @@ const CLIENT_GROUPS = CATALOG.filter((g) => !/Отпадък/.test(g.group));
 const HEAVY_KG = 100;
 const SPECIAL_IDS = new Set(CATALOG.filter((g) => /Специални/.test(g.group)).flatMap((g) => g.items.map((i) => i.id)));
 const isSpecialItem = (it) => !!it && (SPECIAL_IDS.has(it.id) || !!it.surcharge || it.kind === "appliance_heavy" || (it.kg || 0) >= HEAVY_KG);
-const POPULAR = ["fridge", "washer", "sofa3", "wardrobe2", "bed2", "boxM"].filter((id) => ITEM_INDEX[id]);
+// Дом или офис: различни групи вещи и „най-чести“. Видът сграда „Офис“ е същият, по който
+// калкулаторът на кол-центъра показва офис списъка — записът се отваря там с правилния списък.
+const KINDS = {
+  home: { building: "Апартамент", icon: "🏠", title: "Преместване на дома", sub: "Апартамент, къща, стая, отделни мебели",
+    popular: ["fridge", "washer", "sofa3", "wardrobe2", "bedDouble", "boxM"] },
+  office: { building: "Офис", icon: "🏢", title: "Преместване на офиса", sub: "Офис, магазин, кабинет, фирмен архив",
+    popular: ["officeDesk", "officeChair", "filingCabinet", "officeCloset", "printer", "boxM"] },
+};
+const groupsFor = (kind) => CLIENT_GROUPS.filter((g) => g.for === "all" || (g.for === "office") === (kind === "office"));
 
 async function loadLiveParams() {
   const url = DEFAULTS.supabaseUrl, key = DEFAULTS.supabaseKey;
@@ -128,7 +136,7 @@ function Address({ title, a, set }) {
 }
 
 const GROUP_ICON = { "Хол и трапезария": "🛋️", "Спалня": "🛏️", "Кухня и баня": "🍳", "Офис": "💼", "Уреди": "🧺", "Кашони и дребни": "📦", "Двор и тераса": "🌿", "Специални (спец. обработка)": "🎹" };
-const STEPS = [["📍", "Маршрут"], ["🏠", "Адреси"], ["📦", "Вещи"], ["💶", "Цена"]];
+const STEPS = [["🚚", "Вид"], ["📍", "Адреси"], ["📦", "Вещи"], ["💶", "Цена"]];
 
 // Камионът се пълни, докато клиентът добавя вещи — показва кубиците на багажа на живо
 function TruckMeter({ vol, count }) {
@@ -159,6 +167,11 @@ function KlientCalculator() {
   const [p, setP] = useState(null);
   const [s, setS] = useState(K_INITIAL);
   const [step, setStep] = useState(0);
+  const [kind, setKind] = useState(null); // "home" | "office" — първият въпрос във формата
+  const pickKind = (k) => {
+    setKind(k);
+    setS((x) => ({ ...x, pickup: { ...x.pickup, building: KINDS[k].building }, dropoff: { ...x.dropoff, building: KINDS[k].building } }));
+  };
   const [search, setSearch] = useState("");
   const [other, setOther] = useState("");
   const [contact, setContact] = useState({ first: "", last: "", phone: "", email: "", consent: false, website: "" });
@@ -234,7 +247,8 @@ function KlientCalculator() {
     return Object.assign(rec, {
       status: withContact ? "заявка" : "калкулация", source: "сайт",
       contact: withContact ? { name, phone: contact.phone.trim(), email: contact.email.trim() || null } : null,
-      notes: [withContact ? "" : "Клиентът видя цената във формата на сайта, но (още) не е оставил данни за контакт.",
+      notes: [kind === "office" ? "Вид: преместване на офис." : "Вид: преместване на дом.",
+        withContact ? "" : "Клиентът видя цената във формата на сайта, но (още) не е оставил данни за контакт.",
         other.trim() ? "Клиентът добавя (извън списъка): " + other.trim() : "",
         needsSurvey ? "ЗА ОГЛЕД — на клиента не е показана цена (" + reasons.join("; ") + ")." : ""].filter(Boolean).join("\n") || null,
       site: {
@@ -271,7 +285,7 @@ function KlientCalculator() {
   );
   const Back = ({ bottom }) => step > 0 && !done && (
     <button type="button" onClick={() => setStep(step - 1)}
-      className={"rounded-xl border-2 font-bold transition active:scale-95 bg-white " + (bottom ? "px-5 py-4 text-base" : "px-4 py-2 text-sm mb-4")}
+      className={"rounded-xl border-2 font-bold transition active:scale-95 bg-white " + (bottom ? "px-5 py-4 text-base" : "px-4 py-3 text-sm mb-4")}
       style={{ borderColor: BLUE, color: BLUE }}>← Назад</button>
   );
   const input = "w-full rounded-xl border border-slate-300 px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500";
@@ -316,17 +330,33 @@ function KlientCalculator() {
 
         {p && !done && step === 0 && (
           <Card>
-            <div className="text-lg font-bold mb-4">1. Къде се местите?</div>
+            <div className="text-lg font-bold mb-4">1. Какво местим?</div>
             <div className="grid sm:grid-cols-2 gap-3">
-              {[["local", "В рамките на града", "От адрес до адрес в един град"], ["intercity", "Между градове", "От един град до друг в България"]].map(([id, t, d]) => (
-                <button key={id} type="button" onClick={() => { set({ service: id, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "" }); setStep(1); }}
-                  className="text-left rounded-2xl border-2 p-4 hover:border-blue-500" style={{ borderColor: s.service === id ? BLUE : "#e2e8f0" }}>
-                  <div className="font-bold text-base">{t}</div>
-                  <div className="text-sm text-slate-500 mt-1">{d}</div>
+              {Object.entries(KINDS).map(([id, k]) => (
+                <button key={id} type="button" aria-pressed={kind === id} onClick={() => pickKind(id)}
+                  className="text-left rounded-2xl border-2 p-4 transition active:scale-95 hover:border-blue-500"
+                  style={{ borderColor: kind === id ? BLUE : "#e2e8f0", background: kind === id ? "#eff6ff" : "#fff" }}>
+                  <div className="text-3xl leading-none">{k.icon}</div>
+                  <div className="font-bold text-base mt-2">{k.title}</div>
+                  <div className="text-sm text-slate-500 mt-1">{k.sub}</div>
                 </button>
               ))}
             </div>
-            <p className="text-sm text-slate-500 mt-4">За международно преместване, офис или склад се обадете на {PHONE}.</p>
+            {kind && (
+              <>
+                <div className="text-lg font-bold mt-6 mb-3">Къде се местите?</div>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {[["local", "🏙️", "В рамките на града", "От адрес до адрес в един град"], ["intercity", "🛣️", "Между градове", "От един град до друг в България"]].map(([id, icon, t, d]) => (
+                    <button key={id} type="button" onClick={() => { set({ service: id, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "" }); setStep(1); }}
+                      className="text-left rounded-2xl border-2 p-4 transition active:scale-95 hover:border-blue-500" style={{ borderColor: s.service === id ? BLUE : "#e2e8f0" }}>
+                      <div className="font-bold text-base">{icon} {t}</div>
+                      <div className="text-sm text-slate-500 mt-1">{d}</div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            <p className="text-sm text-slate-500 mt-4">За международно преместване или склад се обадете на {PHONE}.</p>
           </Card>
         )}
 
@@ -361,7 +391,7 @@ function KlientCalculator() {
           <Card>
             <Back />
             <div className="text-lg font-bold mb-1">3. Какво ще местим?</div>
-            <p className="text-sm text-slate-500 mb-3">Добавяйте с бутона + и гледайте как се пълни камионът.</p>
+            <p className="text-sm text-slate-500 mb-3">{kind === "office" ? "Добавете бюрата, столовете, шкафовете и техниката. Кашоните с документи също се броят." : "Добавяйте с бутона + и гледайте как се пълни камионът."}</p>
             <TruckMeter vol={liveVol} count={itemCount} />
             <input className={input} placeholder="Търсене: гардероб, диван, пералня…" value={search} onChange={(e) => setSearch(e.target.value)} />
             {q ? (
@@ -372,9 +402,9 @@ function KlientCalculator() {
               <div className="mt-3 space-y-2">
                 <div className="rounded-xl border border-slate-200">
                   <div className="px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-500">Най-чести</div>
-                  <div className="px-4 divide-y divide-slate-100">{POPULAR.map((id) => <ItemRow key={id} it={ITEM_INDEX[id]} qty={s.qty[id] || 0} setQty={setQty} work={hasWork(id)} setWork={setWork} />)}</div>
+                  <div className="px-4 divide-y divide-slate-100">{KINDS[kind || "home"].popular.filter((id) => ITEM_INDEX[id]).map((id) => <ItemRow key={id} it={ITEM_INDEX[id]} qty={s.qty[id] || 0} setQty={setQty} work={hasWork(id)} setWork={setWork} />)}</div>
                 </div>
-                {CLIENT_GROUPS.map((g) => {
+                {groupsFor(kind).map((g) => {
                   const n = g.items.reduce((a, i) => a + (s.qty[i.id] || 0), 0);
                   return (
                     <details key={g.group} className="rounded-xl border border-slate-200">
@@ -409,7 +439,7 @@ function KlientCalculator() {
                   <div className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Ориентировъчна цена</div>
                   <div className="mt-1 flex items-baseline gap-2">
                     <span className="text-5xl font-extrabold tabular-nums" style={{ color: INK }}>{priceVat} €</span>
-                    <span className="text-slate-500">с ДДС</span>
+                    <span className="text-slate-500">крайна цена</span>
                   </div>
                   <div className="mt-3 text-sm text-slate-600">
                     {s.service === "local" ? `${s.city}: ${s.pickupHood} → ${s.dropoffHood}` : `${s.pickupCity} → ${s.dropoffCity}`}

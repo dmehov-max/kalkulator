@@ -2438,6 +2438,30 @@ test("телевизор: стреч фолио и велпапе са задъ�
   }
 });
 
+/* --- Поставен списък: разговорни думи, „и“, бройки, крила (24.11.2026) --- */
+const lst = (t) => E.parseItemList(t).map((r) => [r.qty, r.chosenId]);
+test("списък: разговорни думи и множествено число се разпознават", () => {
+  eq(JSON.stringify(lst("2 гардероба трикрилни")), JSON.stringify([[2, "wardrobe3"]]));
+  eq(JSON.stringify(lst("гардероб двукрилен")), JSON.stringify([[1, "wardrobe2"]]));
+  eq(JSON.stringify(lst("3-крилен гардероб")), JSON.stringify([[1, "wardrobe3"]]), "числото е част от името:");
+  eq(JSON.stringify(lst("20 кашона")), JSON.stringify([[20, "boxM"]]), "кашон без размер = среден:");
+  eq(JSON.stringify(lst("спалня")), JSON.stringify([[1, "bedDouble"]]));
+  eq(JSON.stringify(lst("телевизор")), JSON.stringify([[1, "tvstand"]]));
+  eq(JSON.stringify(lst("диван тройка")), JSON.stringify([[1, "sofa3"]]));
+  eq(JSON.stringify(lst("4 стола")), JSON.stringify([[4, "chair"]]));
+});
+test("списък: „и“, „+“ и „маса с 6 стола“ се делят на отделни вещи", () => {
+  eq(JSON.stringify(lst("хладилник, пералня и печка")), JSON.stringify([[1, "fridge"], [1, "washer"], [1, "stove"]]));
+  eq(JSON.stringify(lst("маса с 6 стола")), JSON.stringify([[1, "table"], [6, "chair"]]));
+  eq(JSON.stringify(lst("- диван ъглов\n• 2 фотьойла")), JSON.stringify([[1, "sofaL"], [2, "armchair"]]), "с тирета и точки отпред:");
+});
+test("списък: точните имена от каталога пак печелят, непознатото остава неразпознато", () => {
+  eq(lst("Маса със стъклен плот")[0][1], "tableGlass");
+  eq(lst("Кашон малък")[0][1], "boxS");
+  eq(lst("Хладилник голям (American)")[0][1], "fridgeXL");
+  eq(lst("джакузи")[0][1], null);
+});
+
 /* ---------- Синтактична проверка на целия файл (вкл. интерфейса) ---------- */
 test("файлът е синтактично валиден JSX", () => {
   let parse;

@@ -276,9 +276,36 @@ function translitBG(str) {
  * локално чрез съвпадение с каталога, толерантно към бройка отпред/отзад,
  * латиница и кирилица. Разпознава повечето директно копирани списъци; неясните
  * редове се показват на потребителя за ръчен избор, вместо да се гадае тихо. */
+// Разговорни думи → вещ от каталога (поставен списък и гласовият асистент). Първото съвпадение печели.
+const ITEM_SYNONYMS = [
+  [/^(кашон\S*|кутия|кутии)$/, "boxM"], [/кашон\S* (с|за) книги|книги/, "books"],
+  [/спалн/, "bedDouble"], [/персон и половина|приста/, "bedDouble"],
+  [/телевизор|^тв$|плазма/, "tvstand"], [/секци/, "wallUnit"],
+  [/^печка$|готварск/, "stove"], [/фурн/, "ovenBuiltIn"], [/микровълн/, "microwave"],
+  [/трапезн\S* маса|маса\S* за хранене|^маса$|^маси$/, "table"], [/холна маса|масичк/, "tableSmall"],
+  [/плъзг/, "wardrobe4"], [/етажерк|библиотек|рафт/, "shelf"], [/скрин|комод/, "dresser"], [/нощн/, "nightstand"],
+  [/огледал|картин/, "art"], [/сакси|цвет|растени/, "plant"], [/колел|велосипед/, "bike"],
+  [/климатик/, "ac"], [/компютър|монитор|лаптоп/, "computer"], [/ъглов/, "sofaL"],
+  [/матра/, "mattress"], [/фотьойл|кресло/, "armchair"], [/куфар|сак$|сакове/, "suitcase"], [/чувал/, "clothesBag"],
+];
+// „трикрилен“, „3 крилен“, „три крила“ → „3-крилен“; „тройка“, „триместен“ → „3-местен“
+function normalizeItemText(text) {
+  const NUM = { едно: 1, един: 1, дву: 2, две: 2, два: 2, три: 3, четири: 4 };
+  let t = " " + String(text || "").toLowerCase().replace(/ё/g, "е") + " ";
+  t = t.replace(/(едно|дву|три|четири)\s*-?\s*крил\S*/g, (m, w) => `${NUM[w]}-крилен`)
+       .replace(/(\d)\s*-?\s*(?:крил\S*|врат\S*)/g, "$1-крилен")
+       .replace(/с (две|три|четири) (?:крила|врати)/g, (m, w) => `${NUM[w]}-крилен`)
+       .replace(/(дву|три)\s*-?\s*мест\S*/g, (m, w) => `${NUM[w]}-местен`)
+       .replace(/(\d)\s*-?\s*мест\S*/g, "$1-местен")
+       .replace(/ двойка(?= )/g, " 2-местен").replace(/ тройка(?= )/g, " 3-местен"); // \b не работи с кирилица
+  return t.replace(/\s+/g, " ").trim();
+}
+
 function parseItemListLine(line) {
   const raw = String(line || "").trim();
   if (!raw) return null;
+  // „3-крилен гардероб“: числото е част от името, не е бройка
+  if (/^\d\s*-\s*(крил|мест)/i.test(normalizeItemText(raw))) return { raw, qty: 1, text: raw };
   // бройка отпред: "2x диван", "2 х диван", "2 дивана", "2. диван"
   // разделителят се приема САМО ако е самостоятелен (следван от интервал/край) —
   // иначе "1 хладилник" би изял буквата "х" от началото на "хладилник"
@@ -290,9 +317,13 @@ function parseItemListLine(line) {
   return { raw, qty: 1, text: raw };
 }
 function matchCatalogItem(text) {
-  const q = translitBG(String(text || "").toLowerCase().trim());
+  const norm = normalizeItemText(text);
+  const q = translitBG(norm);
   if (!q) return [];
   const all = CATALOG.flatMap((g) => g.items.map((it) => ({ ...it, group: g.group })));
+  // основа на думата: „гардероба“, „гардеробите“ → „гардероб“; „столове“ → „стол“
+  const stem = (w) => (w.length > 6 ? w.slice(0, w.length - 2) : w.length > 4 ? w.slice(0, w.length - 1) : w);
+  const syn = ITEM_SYNONYMS.find(([re]) => re.test(norm));
   const scored = all.map((it) => {
     const label = translitBG(it.label.toLowerCase());
     let score = 0;
@@ -303,10 +334,12 @@ function matchCatalogItem(text) {
       // припокриване на думи — хваща разместен ред ("местен диван" vs "диван местен").
       // минимална дължина 3, инак къси думи ("с", "на") съвпадат тривиално навсякъде
       const qWords = q.split(/\s+/).filter((w) => w.length >= 3);
-      const lWords = label.split(/\s+/).filter((w) => w.length >= 3);
-      const common = qWords.filter((w) => lWords.some((lw) => lw.includes(w) || w.includes(lw)));
+      const lWords = label.split(/[\s/()]+/).filter((w) => w.length >= 3);
+      const same = (w, lw) => lw.includes(w) || w.includes(lw) || lw.startsWith(stem(w)) || w.startsWith(stem(lw));
+      const common = qWords.filter((w) => lWords.some((lw) => same(w, lw)));
       if (qWords.length && common.length === qWords.length) score = 40;
     }
+    if (syn && syn[1] === it.id) score = Math.max(score, 90); // разговорната дума води, точното име пак е над нея
     return { item: it, score };
   }).filter((s) => s.score > 0).sort((a, b) => b.score - a.score);
   return scored.map((s) => s.item);
@@ -314,7 +347,9 @@ function matchCatalogItem(text) {
 // разпознава цял поставен списък (текст, ред на ред) — връща за всеки ред бройка,
 // оригиналния текст и кандидати от каталога (0 = неразпознато, 1 = сигурно, >1 = неясно)
 function parseItemList(text) {
-  const lines = String(text || "").split(/[\n,;]+/).map((l) => l.trim()).filter(Boolean);
+  // по ред, запетая и точка и запетая; още „X и Y“, „X + Y“ и „маса с 6 стола“ → отделни вещи
+  const lines = String(text || "").split(/[\n,;+]+|\s+и\s+|\s+с(?:ъс)?\s+(?=\d)/i)
+    .map((l) => l.replace(/^[\s•*–—-]+/, "").trim()).filter(Boolean);
   return lines.map((line) => {
     const parsed = parseItemListLine(line);
     if (!parsed) return null;
@@ -4979,8 +5014,9 @@ export default function KorektCalculator() {
                     )}
                   </div>
                   <button onClick={() => setShowPasteList(true)}
-                    className="text-xs font-medium mb-3 underline" style={{ color: accent }}>
-                    📋 Постави списък с вещи от клиента
+                    className="w-full mb-3 rounded-xl border-2 border-dashed px-3 py-3 text-sm font-semibold text-left" style={{ borderColor: accent, color: accent }}>
+                    📋 Напиши или постави списък с вещи
+                    <span className="block text-xs font-normal text-slate-500 mt-0.5">Напр. „2 гардероба трикрилни, диван, 20 кашона, хладилник и пералня“ — намираме ги в списъка вместо Вас.</span>
                   </button>
 
                   {itemSearch.trim() && (
@@ -5726,7 +5762,7 @@ export default function KorektCalculator() {
           <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg my-8 rounded-2xl bg-white p-6 shadow-xl">
             <div className="text-sm font-semibold mb-1" style={{ color: ink }}>📋 Постави списък с вещи</div>
             <p className="text-xs text-slate-500 mb-3">
-              Постави текст от клиента (по ред, или разделен със запетая) — напр. „2 дивана, хладилник, 3 стола".
+              Напишете или поставете списъка, както е (по ред, със запетаи или с „и“) — напр. „2 гардероба трикрилни, диван, 20 кашона, маса с 6 стола".
               Разпознава се по каталога тук, без да се праща никъде — не е AI услуга.
             </p>
             {!pasteResults ? (
