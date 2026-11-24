@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Калкулатор за преместване — Корект преместване</title>
 <meta name="description" content="Вижте ориентировъчна цена за Вашето преместване за една минута — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-prQANDTNK/xzl0eUc7Lee1DrWM+yL3TCODxdLVsl06c='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-1sBKsleQdfrV0/W0TEGUI8jR6nimgEs2c7DxNYdaHc4='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="robots" content="noindex">
 <script src="vendor/tailwind-play-3.4.17.js" integrity="sha384-igm5BeiBt36UU4gqwWS7imYmelpTsZlQ45FZf+XBn9MuJbn4nQr7yx1yFydocC/K"></script>
@@ -55,6 +55,13 @@ const DEFAULTS = {
   // (отделно от workerCostByCity, което е вътрешната себестойност)
   truckRate: 20,
   // €/час транспорт (за градско)
+  // СКЛАДИРАНЕ (месечна цена, отделно от еднократната цена за пренасянето до склада)
+  palletM3: 1.4,
+  // реален багаж на едно палето място (скара 1.20×0.80 м, височина 1.80 м = 1.73 м³, ~80% запълване)
+  palletPrice: 18,
+  // €/палето място на месец
+  looseM3Price: 15,
+  // €/м³ на месец за насипен багаж, който не се слага на пале (мебели)
   truckWorkPct: 70,
   // % от ставката на камиона, докато екипът разглобява/сглобява/опакова (камионът стои, не кара)
   truckWorkBigM3: 10,
@@ -3578,6 +3585,38 @@ function computePrice(s, p) {
   // комбинацията параметри (напр. отрицателен коеф. на отклонение)
   total = Math.max(0, total);
 
+  // СКЛАДИРАНЕ — месечна цена според обема; НЕ влиза в total (той е еднократната цена за
+  // пренасянето). Кашони, чували, дребни вещи и уреди се редят на палета; мебелите са
+  // „насипен“ багаж на кубик. s.storage.mode: "auto" (по вид на вещта) | "pallet" | "loose".
+  let storage = null;
+  if (s.storage?.on && !isDisposal) {
+    const PALLET_KINDS = new Set(["box", "sack", "small", "appliance", "appliance_heavy"]);
+    const mode = s.storage.mode || "auto";
+    let palletVol = 0,
+      looseVol = 0;
+    for (const [id, cnt] of Object.entries(s.qty)) {
+      const it = ITEM_INDEX[id];
+      if (!it || !(cnt > 0)) continue;
+      const v = n(it.m3) * cnt;
+      if (mode === "pallet" || mode !== "loose" && PALLET_KINDS.has(it.kind)) palletVol += v;else looseVol += v;
+    }
+    const pallets = palletVol > 0 ? Math.ceil(palletVol / (n(p.palletM3) || 1.4) - 1e-9) : 0;
+    const looseM3 = Math.ceil(looseVol * 2 - 1e-9) / 2; // на половин кубик нагоре
+    const monthly = Math.round((pallets * n(p.palletPrice) + looseM3 * n(p.looseM3Price)) * 100) / 100;
+    const months = Math.max(1, Math.round(n(s.storage.months || 1)));
+    storage = {
+      mode,
+      pallets,
+      palletVol: +palletVol.toFixed(2),
+      looseM3,
+      palletPrice: n(p.palletPrice),
+      looseM3Price: n(p.looseM3Price),
+      monthly,
+      months,
+      total: Math.round(monthly * months * 100) / 100
+    };
+  }
+
   // СЕБЕСТОЙНОСТ И МАРЖ — вътрешни данни (реален разход), не влияят на цената на клиента.
   // costCity/workerCostRate вече са изчислени най-отгоре (общи и за цената към клиента).
   const laborCost = manHours * workerCostRate;
@@ -3686,7 +3725,8 @@ function computePrice(s, p) {
     nights,
     oneWayDriveH,
     carryHoursTot,
-    carryManHours
+    carryManHours,
+    storage
   };
 }
 
@@ -4290,6 +4330,8 @@ function buildRecord(s, p, r, id, calcNumber, createdBy) {
     // пълното входно състояние на съветника (qty, dis/asm/wrap/protect, pickup/dropoff...) —
     // единствения начин "Редактирай" по-късно да презареди точно същата калкулация в
     // съветника, вместо да гади от резюмето (items/breakdown), което губи детайли
+    storage: r.storage || null,
+    // складиране: палета, насипни м³, месечна цена (извън total)
     formState: s,
     contact: null,
     requestNumber: s.requestNumber?.trim() || null,

@@ -23,6 +23,10 @@ const DEFAULTS = {
   workerRateByCity: [],  // [{ city:"София", rate:20 }, ...] — различна цена по градове КЪМ КЛИЕНТА
                           // (отделно от workerCostByCity, което е вътрешната себестойност)
   truckRate: 20,         // €/час транспорт (за градско)
+  // СКЛАДИРАНЕ (месечна цена, отделно от еднократната цена за пренасянето до склада)
+  palletM3: 1.4,         // реален багаж на едно палето място (скара 1.20×0.80 м, височина 1.80 м = 1.73 м³, ~80% запълване)
+  palletPrice: 18,       // €/палето място на месец
+  looseM3Price: 15,      // €/м³ на месец за насипен багаж, който не се слага на пале (мебели)
   truckWorkPct: 70,      // % от ставката на камиона, докато екипът разглобява/сглобява/опакова (камионът стои, не кара)
   truckWorkBigM3: 10,    // над толкова м³ преместването е „голямо“: камионът не стои през разглобяването/опаковането
   truckWorkPctBig: 0,    // % от ставката на камиона през разглобяване/сглобяване/опаковане при голямо преместване
@@ -1636,6 +1640,28 @@ function computePrice(s, p) {
   // комбинацията параметри (напр. отрицателен коеф. на отклонение)
   total = Math.max(0, total);
 
+  // СКЛАДИРАНЕ — месечна цена според обема; НЕ влиза в total (той е еднократната цена за
+  // пренасянето). Кашони, чували, дребни вещи и уреди се редят на палета; мебелите са
+  // „насипен“ багаж на кубик. s.storage.mode: "auto" (по вид на вещта) | "pallet" | "loose".
+  let storage = null;
+  if (s.storage?.on && !isDisposal) {
+    const PALLET_KINDS = new Set(["box", "sack", "small", "appliance", "appliance_heavy"]);
+    const mode = s.storage.mode || "auto";
+    let palletVol = 0, looseVol = 0;
+    for (const [id, cnt] of Object.entries(s.qty)) {
+      const it = ITEM_INDEX[id];
+      if (!it || !(cnt > 0)) continue;
+      const v = n(it.m3) * cnt;
+      if (mode === "pallet" || (mode !== "loose" && PALLET_KINDS.has(it.kind))) palletVol += v; else looseVol += v;
+    }
+    const pallets = palletVol > 0 ? Math.ceil(palletVol / (n(p.palletM3) || 1.4) - 1e-9) : 0;
+    const looseM3 = Math.ceil(looseVol * 2 - 1e-9) / 2;                 // на половин кубик нагоре
+    const monthly = Math.round((pallets * n(p.palletPrice) + looseM3 * n(p.looseM3Price)) * 100) / 100;
+    const months = Math.max(1, Math.round(n(s.storage.months || 1)));
+    storage = { mode, pallets, palletVol: +palletVol.toFixed(2), looseM3, palletPrice: n(p.palletPrice), looseM3Price: n(p.looseM3Price),
+      monthly, months, total: Math.round(monthly * months * 100) / 100 };
+  }
+
   // СЕБЕСТОЙНОСТ И МАРЖ — вътрешни данни (реален разход), не влияят на цената на клиента.
   // costCity/workerCostRate вече са изчислени най-отгоре (общи и за цената към клиента).
   const laborCost = manHours * workerCostRate;
@@ -1654,7 +1680,7 @@ function computePrice(s, p) {
   return { total: Math.round(total), lines, boxFillManHours, boxBuy,
     materialsCost: Math.round(materialsCost * 100) / 100, otherCost: Math.round((extraCostTotal - materialsCost) * 100) / 100,
     costCity, workerCostRate, workerRate, deviationFactor, deviationManual, floorsStdTot, floorsOvrTot, laborCost: Math.round(laborCost), truckCost: Math.round(truckCost),
-    totalCost: Math.round(totalCost), margin: Math.round(margin), marginPercent, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, autoHandlingClock, hoursManual, autoTruckHours, truckHoursManual, truckH, truckHWork, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours };
+    totalCost: Math.round(totalCost), margin: Math.round(margin), marginPercent, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, autoHandlingClock, hoursManual, autoTruckHours, truckHoursManual, truckH, truckHWork, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours, storage };
 }
 
 /* ================= ЗАПИС НА КАЛКУЛАЦИИ (база данни) ================= *
@@ -2063,6 +2089,7 @@ function buildRecord(s, p, r, id, calcNumber, createdBy) {
     // пълното входно състояние на съветника (qty, dis/asm/wrap/protect, pickup/dropoff...) —
     // единствения начин "Редактирай" по-късно да презареди точно същата калкулация в
     // съветника, вместо да гади от резюмето (items/breakdown), което губи детайли
+    storage: r.storage || null,   // складиране: палета, насипни м³, месечна цена (извън total)
     formState: s,
     contact: null,
     requestNumber: s.requestNumber?.trim() || null,
@@ -2599,6 +2626,9 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify, sessi
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Num label="Работник (по подразбиране)" value={p.workerRate} onChange={(v) => upd({ workerRate: v })} suffix="€/ч" />
           <Num label="Транспорт (градско)" value={p.truckRate} onChange={(v) => upd({ truckRate: v })} suffix="€/ч" />
+          <Num label="Склад: палето място" value={p.palletPrice} step={1} onChange={(v) => upd({ palletPrice: v })} suffix="€/мес." />
+          <Num label="Склад: багаж на едно пале" value={p.palletM3} step={0.1} onChange={(v) => upd({ palletM3: v })} suffix="м³" />
+          <Num label="Склад: насипен багаж" value={p.looseM3Price} step={1} onChange={(v) => upd({ looseM3Price: v })} suffix="€/м³ мес." />
           <Num label="Камион при разглобяване/опаковане" value={p.truckWorkPct} step={5} onChange={(v) => upd({ truckWorkPct: v })} suffix="% от ставката" />
           <Num label="„Голямо“ преместване над" value={p.truckWorkBigM3} step={1} onChange={(v) => upd({ truckWorkBigM3: v })} suffix="м³" />
           <Num label="Камион при голямо, при разглобяване" value={p.truckWorkPctBig} step={5} onChange={(v) => upd({ truckWorkPctBig: v })} suffix="% от ставката" />
@@ -2923,6 +2953,14 @@ function recordRouteLabel(r) {
 
 // текст за поле „Забележка“ на поръчка в pro (и Description в ERP) — кол центърът го копира
 // с един бутон, вместо да преписва калкулацията на ръка. Работи и за стари записи от „Записи“.
+// „2 палета + 3.5 м³ насипно — 88.5 €/мес. без ДДС (3 мес. = 265.5 €)“
+function storageLabel(st, currency = "€") {
+  const parts = [];
+  if (st.pallets) parts.push(`${st.pallets} ${st.pallets === 1 ? "палето място" : "палето места"}`);
+  if (st.looseM3) parts.push(`${st.looseM3} м³ насипно`);
+  return `${parts.join(" + ") || "—"} — ${st.monthly} ${currency}/мес. без ДДС` + (st.months > 1 ? ` (${st.months} мес. = ${st.total} ${currency})` : "");
+}
+
 function proNoteText(r, currency = "€") {
   const fs = r.formState || {};
   const lift = (a) => (!a ? "" : a.elevator ? (a.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор") : "без асансьор");
@@ -2946,6 +2984,7 @@ function proNoteText(r, currency = "€") {
   lines.push(`Организация: ${org.join(", ")}`);
   const total = Number(r.total) || 0;
   lines.push(`Цена: ${total} ${currency} без ДДС / ${Math.round(total * 1.2)} ${currency} с ДДС (ориентировъчна)`);
+  if (r.storage) lines.push(`Складиране: ${storageLabel(r.storage, currency)}`);
   if (r.notes) lines.push(`Бележка: ${r.notes}`);
   return lines.join("\n");
 }
@@ -3103,6 +3142,7 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
               ["Бригада", `${r.crew} души`],
               ["Курсове", `${r.trips || 0}`],
               ["Дни за изпълнение", `${r.workDays || 1} ${r.workDays === 1 ? "ден" : "дни"}`],
+              ...(r.storage ? [["Складиране (отделно)", storageLabel(r.storage, "€")]] : []),
             ].map(([k, v]) => (
               <div key={k} className="rounded-xl px-3 py-2" style={{ background: "rgba(255,255,255,0.08)" }}>
                 <div className="text-[11px] opacity-70">{k}</div>
@@ -3898,7 +3938,7 @@ function ProfilePanel({ session, userName, onSaved, notify, p }) {
 // начално състояние на калкулацията (стъпка 1) — извадено извън компонента, за да служи и като
 // база при сливане с възстановена чернова (schema-safe, ако по-късно добавим ново поле)
 const INITIAL_S = {
-  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, truckHoursOverride: 0, labourKmOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, deviationOverride: 0, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {}, floorFeeOff: {}, fill: {}, buyBox: {}, stretchRollsManual: 0, stretchRollPriceManual: 0,
+  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, truckHoursOverride: 0, labourKmOverride: 0, storage: { on: false, months: 1, mode: "auto" }, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, deviationOverride: 0, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {}, floorFeeOff: {}, fill: {}, buyBox: {}, stretchRollsManual: 0, stretchRollPriceManual: 0,
   pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   extras: { packing: false, materials: false, disassembly: false },
@@ -4082,7 +4122,7 @@ export default function KorektCalculator() {
     setS((prev) => ({ ...prev, [field]: { ...prev[field], [id]: value } }));
 
   const r = useMemo(() => computePrice(s, p), [s, p]);
-  const { total, lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto, crewByProtocol, autoCrew, crewManual, reqCrew, isCourse, autoHandlingClock, hoursManual, autoTruckHours, truckHoursManual, truckH, disHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, wrapMeters, wrapHours, rolls, protectMeters, protectManHours, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, costCity, workerCostRate, workerRate, deviationFactor, deviationManual, floorsStdTot, floorsOvrTot, laborCost, truckCost, totalCost, margin, marginPercent } = r;
+  const { total, lines, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto, crewByProtocol, autoCrew, crewManual, reqCrew, isCourse, autoHandlingClock, hoursManual, autoTruckHours, truckHoursManual, truckH, storage, disHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, wrapMeters, wrapHours, rolls, protectMeters, protectManHours, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, costCity, workerCostRate, workerRate, deviationFactor, deviationManual, floorsStdTot, floorsOvrTot, laborCost, truckCost, totalCost, margin, marginPercent } = r;
   const localEst = s.service === "local" ? estimateKm(s.city, s.pickupHood, s.dropoffHood, Number(p.cityRoadFactor) || 1.3) : null;
   const isAssembly = s.service === "assembly";
   const isTRD = s.service === "trd";
@@ -5086,6 +5126,37 @@ export default function KorektCalculator() {
                   </div>
                 )}
 
+                {vol > 0 && !isDisposal && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <label className="flex items-center justify-between gap-3 cursor-pointer">
+                      <div className="min-w-0 pr-3">
+                        <div className="text-sm font-medium" style={{ color: ink }}>Складиране при нас</div>
+                        <div className="text-xs text-slate-400">Месечна цена, отделно от пренасянето. За адрес на доставка изберете склада.</div>
+                      </div>
+                      <input type="checkbox" className="w-5 h-5 accent-blue-600" checked={!!s.storage?.on}
+                        onChange={(e) => set({ storage: { months: 1, mode: "auto", ...(s.storage || {}), on: e.target.checked } })} />
+                    </label>
+                    {s.storage?.on && storage && (
+                      <div className="mt-3 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-sm" style={{ color: ink }}>Месеци</span>
+                          <Stepper value={storage.months} onChange={(v) => set({ storage: { ...s.storage, months: Math.max(1, v) } })} />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {[["auto", "Кашони на палета, мебели на кубик"], ["pallet", "Всичко на палета"], ["loose", "Всичко насипно"]].map(([id, label]) => (
+                            <Pill key={id} active={(s.storage.mode || "auto") === id} onClick={() => set({ storage: { ...s.storage, mode: id } })}>{label}</Pill>
+                          ))}
+                        </div>
+                        <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm" style={{ color: ink }}>
+                          {storage.pallets > 0 && <div>{storage.pallets} палето {storage.pallets === 1 ? "място" : "места"} × {storage.palletPrice} {p.currency} ({storage.palletVol} м³)</div>}
+                          {storage.looseM3 > 0 && <div>{storage.looseM3} м³ насипно × {storage.looseM3Price} {p.currency}</div>}
+                          <div className="font-semibold mt-1">{storage.monthly} {p.currency} на месец без ДДС{storage.months > 1 ? ` · ${storage.months} мес. = ${storage.total} ${p.currency}` : ""}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {vol > 0 && !isCourse && !isDisposal && !usesFieldCrew && (
                   <div className="rounded-2xl border border-slate-200 bg-white p-4">
                     <div className="flex items-center justify-between gap-3">
@@ -5328,6 +5399,7 @@ export default function KorektCalculator() {
                       ["Бригада", `${isDisposal ? disposalTotalCrew : crew} души${crewByProtocol ? " (протокол)" : ""}`],
                       ["Курсове", `${trips}`],
                       ["Дни за изпълнение", `${workDays} ${workDays === 1 ? "ден" : "дни"}${workDays > 1 ? ` (макс. ${p.dayHours} ч/ден)` : ""}`],
+                      ...(storage ? [["Складиране (отделно)", storageLabel(storage, p.currency)]] : []),
                     ].map(([k, v]) => (
                       <div key={k} className="rounded-xl px-3 py-2" style={{ background: "rgba(255,255,255,0.08)" }}>
                         <div className="text-[11px] opacity-70">{k}</div>

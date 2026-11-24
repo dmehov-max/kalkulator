@@ -2379,6 +2379,57 @@ test("само хамали: зададени км до бригадата (от
   eq(calc({ service: "labour", city: "Равда", labourBase: "Бургас", labourKmOverride: 9, qty: { boxM: 10 } }).labourTravelKm, 0, "под радиуса без път — без път:");
 });
 
+/* --- Складиране: палета + насипен багаж, месечна цена извън total (решение 24.11.2026) --- */
+const sklad = (qty, st = {}, params = P) => calc({ qty, storage: { on: true, months: 1, mode: "auto", ...st } }, params);
+test("складиране: параметри по подразбиране — 18 €/пале, 1.4 м³ на пале, 15 €/м³ насипно", () => {
+  eq(P.palletPrice, 18); eq(P.palletM3, 1.4); eq(P.looseM3Price, 15);
+});
+test("складиране: изключено — няма складиране в резултата", () => {
+  eq(calc({ qty: { boxM: 10 } }).storage, null);
+});
+test("складиране: кашоните се редят на палета, закръглено нагоре", () => {
+  const m3 = E.ITEM_INDEX.boxM.m3;
+  const r = sklad({ boxM: 30 });
+  eq(r.storage.pallets, Math.ceil((30 * m3) / 1.4 - 1e-9), "брой палета:");
+  eq(r.storage.looseM3, 0);
+  eq(r.storage.monthly, r.storage.pallets * 18, "месечно:");
+});
+test("складиране: мебелите са насипен багаж на кубик (на половин кубик нагоре)", () => {
+  const r = sklad({ wardrobe3: 1, sofa3: 1 });
+  const v = E.ITEM_INDEX.wardrobe3.m3 + E.ITEM_INDEX.sofa3.m3;
+  eq(r.storage.pallets, 0);
+  eq(r.storage.looseM3, Math.ceil(v * 2 - 1e-9) / 2);
+  eq(r.storage.monthly, r.storage.looseM3 * 15);
+});
+test("складиране: смесен багаж — палета за кашоните и уредите + кубици за мебелите", () => {
+  const r = sklad({ boxM: 20, fridge: 1, wardrobe3: 2 });
+  ok(r.storage.pallets >= 1 && r.storage.looseM3 > 0, "и палета, и насипно");
+  near(r.storage.monthly, r.storage.pallets * 18 + r.storage.looseM3 * 15, 0.01);
+});
+test("складиране: режим „всичко на палета“ и „всичко насипно“", () => {
+  const q = { boxM: 20, wardrobe3: 2 };
+  const pal = sklad(q, { mode: "pallet" }), loose = sklad(q, { mode: "loose" });
+  eq(pal.storage.looseM3, 0); ok(pal.storage.pallets >= 1);
+  eq(loose.storage.pallets, 0); ok(loose.storage.looseM3 > 0);
+});
+test("складиране: месеците умножават сумата, минимум 1 месец", () => {
+  const r3 = sklad({ boxM: 30 }, { months: 3 });
+  near(r3.storage.total, r3.storage.monthly * 3, 0.01); eq(r3.storage.months, 3);
+  eq(sklad({ boxM: 30 }, { months: 0 }).storage.months, 1);
+});
+test("складиране: НЕ променя еднократната цена за пренасянето", () => {
+  const q = { boxM: 20, wardrobe3: 2 };
+  eq(sklad(q).total, calc({ qty: q }).total, "total е само пренасянето:");
+});
+test("складиране: ставките идват от Параметри и се пазят в записа", () => {
+  const r = sklad({ boxM: 30 }, {}, { ...P, palletPrice: 20, palletM3: 1 });
+  eq(r.storage.monthly, r.storage.pallets * 20);
+  eq(r.storage.pallets, Math.ceil(30 * E.ITEM_INDEX.boxM.m3 - 1e-9));
+  const o = order({ qty: { boxM: 30 }, storage: { on: true, months: 2, mode: "auto" } });
+  const rec = E.buildRecord(o, P, E.computePrice(o, P), "calc:x");
+  eq(rec.storage.months, 2); ok(rec.storage.monthly > 0);
+});
+
 /* ---------- Синтактична проверка на целия файл (вкл. интерфейса) ---------- */
 test("файлът е синтактично валиден JSX", () => {
   let parse;
