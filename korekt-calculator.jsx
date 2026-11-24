@@ -4372,7 +4372,11 @@ export default function KorektCalculator() {
   // редакция на едно и също нещо
   const loadRecordForEditing = (rec) => {
     if (!rec?.formState) { notify("Този запис е отпреди тази функция — няма запазено пълно състояние.", "error"); return; }
-    setS({ ...INITIAL_S, ...rec.formState });
+    // Коефициентът на отклонение важи от момента на смяната нататък: стар запис се отваря с коефициента,
+    // с който е бил сметнат (от снимката на параметрите му), не с днешния (решение на Додо, 24.11.2026).
+    const oldDev = Number(rec.paramsSnapshot?.deviationFactor);
+    const keepDev = !(Number(rec.formState.deviationOverride) > 0) && Number.isFinite(oldDev) && oldDev > 0 && oldDev !== n(p.deviationFactor || 1);
+    setS({ ...INITIAL_S, ...rec.formState, ...(keepDev ? { deviationOverride: oldDev } : {}) });
     // неща извън формата (разговор с гласовия асистент, бележка, източник, контакт) —
     // пренасят се при всяко презаписване на записа и в офертата, иначе редакцията ги трие
     carryRef.current = { transcript: rec.transcript || null, notes: rec.notes || null, source: rec.source || null, contact: rec.contact || null, site: rec.site || null, oldCalcNumber: rec.oldCalcNumber ?? null, review: rec.review || null };

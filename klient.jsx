@@ -299,13 +299,6 @@ function KlientCalculator() {
         </div>
       </header>
 
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-2xl mx-auto px-4 py-2 flex items-center justify-center gap-5">
-          <img src="eu.jpg" alt="Съфинансирано от Европейския съюз" className="h-7 w-auto" />
-          <img src="program.jpg" alt="Програма „Конкурентоспособност и иновации в предприятията“" className="h-8 w-auto" />
-        </div>
-      </div>
-
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-4">
         <div>
           <h1 className="text-2xl font-extrabold" style={{ color: BLUE }}>Колко ще струва преместването?</h1>

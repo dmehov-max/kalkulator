@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-Slvd8+k1Ri4vrtxkKT5aG3MuQRpzXPow/ci+wAD6MCU='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-8vWm0qHdql2neGkjz17e+if2dWZHxhGI5VWpOFQbgHw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -8173,9 +8173,16 @@ function KorektCalculator() {
       notify("Този запис е отпреди тази функция — няма запазено пълно състояние.", "error");
       return;
     }
+    // Коефициентът на отклонение важи от момента на смяната нататък: стар запис се отваря с коефициента,
+    // с който е бил сметнат (от снимката на параметрите му), не с днешния (решение на Додо, 24.11.2026).
+    const oldDev = Number(rec.paramsSnapshot?.deviationFactor);
+    const keepDev = !(Number(rec.formState.deviationOverride) > 0) && Number.isFinite(oldDev) && oldDev > 0 && oldDev !== n(p.deviationFactor || 1);
     setS({
       ...INITIAL_S,
-      ...rec.formState
+      ...rec.formState,
+      ...(keepDev ? {
+        deviationOverride: oldDev
+      } : {})
     });
     // неща извън формата (разговор с гласовия асистент, бележка, източник, контакт) —
     // пренасят се при всяко презаписване на записа и в офертата, иначе редакцията ги трие
