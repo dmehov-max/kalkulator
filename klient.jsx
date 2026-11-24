@@ -299,6 +299,13 @@ function KlientCalculator() {
         </div>
       </header>
 
+      <div className="bg-white border-b border-slate-200">
+        <div className="max-w-2xl mx-auto px-4 py-2 flex items-center justify-center gap-5">
+          <img src="eu.jpg" alt="Съфинансирано от Европейския съюз" className="h-7 w-auto" />
+          <img src="program.jpg" alt="Програма „Конкурентоспособност и иновации в предприятията“" className="h-8 w-auto" />
+        </div>
+      </div>
+
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-4">
         <div>
           <h1 className="text-2xl font-extrabold" style={{ color: BLUE }}>Колко ще струва преместването?</h1>
@@ -306,7 +313,7 @@ function KlientCalculator() {
           {!done && (
             <div className="flex gap-1.5 mt-4">
               {STEPS.map(([icon, name], i) => (
-                <div key={name} className={"flex-1 rounded-xl px-1 py-2 text-center transition-all duration-300 " + (i === step ? "scale-105 shadow" : "")}
+                <div key={name} className={"flex-1 rounded-xl px-1 py-2 text-center transition-colors duration-300 " + (i === step ? "scale-105 shadow" : "")}
                   style={{ background: i < step ? "#dbeafe" : i === step ? BLUE : "#e2e8f0", color: i === step ? "#fff" : i < step ? BLUE : "#64748b" }}>
                   <div className="text-lg leading-none">{i < step ? "✓" : icon}</div>
                   <div className="text-[11px] font-semibold mt-1">{name}</div>

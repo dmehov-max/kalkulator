@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Калкулатор за преместване — Корект преместване</title>
 <meta name="description" content="Вижте ориентировъчна цена за Вашето преместване за една минута — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-di/Tl6QCmnFUIVVNUxUtKh3eIRwI5tIyxBGn3/Yv4RU='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-dVR04B2vANHMWa+OKBvRjhH6hxm3hH5NRaeCt5N4RNE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="robots" content="noindex">
 <script src="vendor/tailwind-play-3.4.17.js" integrity="sha384-igm5BeiBt36UU4gqwWS7imYmelpTsZlQ45FZf+XBn9MuJbn4nQr7yx1yFydocC/K"></script>
@@ -17,6 +17,16 @@
 </head>
 <body>
 <div id="root"></div>
+<!-- Публичност по проекта (логата и текстът са от страницата на проекта) -->
+<footer style="background:#fff;border-top:1px solid #e2e8f0;padding:18px 16px 22px;font-family:'Fira Sans',system-ui,sans-serif">
+  <div style="max-width:42rem;margin:0 auto;text-align:center">
+    <div style="display:flex;flex-wrap:wrap;gap:14px 24px;align-items:center;justify-content:center">
+      <img src="eu.jpg" alt="Съфинансирано от Европейския съюз" style="height:44px;width:auto">
+      <img src="program.jpg" alt="Програма „Конкурентоспособност и иновации в предприятията“" style="height:52px;width:auto">
+    </div>
+    <p style="margin:12px 0 0;font-size:12px;line-height:1.5;color:#475569">Проект BG16RFPR001-1.001-0077-C01 „Разработване на иновативен продукт за управление и анализ на бизнес процеси във фирма „Корект-Преместване“ ООД“, финансиран от Програма „Конкурентоспособност и иновации в предприятията“ 2021-2027, съфинансирана от Европейския съюз.</p>
+  </div>
+</footer>
 <script>
 const {
   useState,
@@ -5149,7 +5159,19 @@ function KlientCalculator() {
     style: {
       color: BLUE
     }
-  }, "☎ ", PHONE))), /*#__PURE__*/React.createElement("main", {
+  }, "☎ ", PHONE))), /*#__PURE__*/React.createElement("div", {
+    className: "bg-white border-b border-slate-200"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "max-w-2xl mx-auto px-4 py-2 flex items-center justify-center gap-5"
+  }, /*#__PURE__*/React.createElement("img", {
+    src: "eu.jpg",
+    alt: "Съфинансирано от Европейския съюз",
+    className: "h-7 w-auto"
+  }), /*#__PURE__*/React.createElement("img", {
+    src: "program.jpg",
+    alt: "Програма „Конкурентоспособност и иновации в предприятията“",
+    className: "h-8 w-auto"
+  }))), /*#__PURE__*/React.createElement("main", {
     className: "max-w-2xl mx-auto px-4 py-6 space-y-4"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", {
     className: "text-2xl font-extrabold",
@@ -5162,7 +5184,7 @@ function KlientCalculator() {
     className: "flex gap-1.5 mt-4"
   }, STEPS.map(([icon, name], i) => /*#__PURE__*/React.createElement("div", {
     key: name,
-    className: "flex-1 rounded-xl px-1 py-2 text-center transition-all duration-300 " + (i === step ? "scale-105 shadow" : ""),
+    className: "flex-1 rounded-xl px-1 py-2 text-center transition-colors duration-300 " + (i === step ? "scale-105 shadow" : ""),
     style: {
       background: i < step ? "#dbeafe" : i === step ? BLUE : "#e2e8f0",
       color: i === step ? "#fff" : i < step ? BLUE : "#64748b"
