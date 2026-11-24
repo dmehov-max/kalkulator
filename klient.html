@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Калкулатор за преместване — Корект преместване</title>
 <meta name="description" content="Вижте ориентировъчна цена за Вашето преместване за една минута — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-ncTQDpF+j0cNbnfFd6O0a99gdHgHCu0EEr7kDkR+VqA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-1htRfqanVniTyzeGh2/yfRn2vlnSSTeYUld63LsYDW8='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="robots" content="noindex">
 <script src="vendor/tailwind-play-3.4.17.js" integrity="sha384-igm5BeiBt36UU4gqwWS7imYmelpTsZlQ45FZf+XBn9MuJbn4nQr7yx1yFydocC/K"></script>
@@ -2537,6 +2537,10 @@ const CITIES = {
     lat: 42.418,
     lng: 27.696
   },
+  "Черноморец": {
+    lat: 42.444,
+    lng: 27.639
+  },
   "Приморско": {
     lat: 42.267,
     lng: 27.759
@@ -2760,6 +2764,10 @@ const REAL_DISTANCES_RAW = {
     km: 160
   },
   // изцяло планински път, без магистрала
+  "Бургас|Черноморец": {
+    km: 25
+  },
+  // по пътя за Созопол (по права линия излиза по-малко заради залива)
   "София|Пловдив": {
     km: 150,
     highwayKm: 140
