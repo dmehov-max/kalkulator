@@ -2243,6 +2243,8 @@ function offerPayloadFromRecord(rec) {
     // вътрешно за офертата (клиентът не го вижда): разговорът с гласовия асистент и бележката
     transcript: rec.transcript || null, notes: rec.notes || null,
     clientName: c.name || "", clientPhone: c.phone || "", clientEmail: c.email || "",
+    // отстъпката, обещана при запитването: формата я пази в site.discountPct, асистентът — в бележката
+    discountPct: Number(rec.site?.discountPct) || Number((String(rec.notes || "").match(/Обещана отстъпка (\d+)%/) || [])[1]) || 0,
   };
 }
 // офертите към запитванията: { "111": [{ id, shared, accepted }] } — за колоната „Статус“ в Записи
@@ -3263,12 +3265,17 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit, onOffer 
                 title="Копира калкулацията като текст за поле „Забележка“ в pro и Description в ERP">
                 📋 За Pro
               </button>
-              {onOffer && (
-                <button onClick={() => onOffer(r)} className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "#fff", color: ink }}
-                  title="Прави оферта от това запитване. Трябват цена, име на клиента и телефон или имейл.">
-                  📄 Оферта
-                </button>
-              )}
+              {onOffer && (() => {
+                const miss = offerBlockers(r);
+                return (
+                  <button onClick={() => onOffer(r)} disabled={miss.length > 0}
+                    className="text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap"
+                    style={{ background: "#fff", color: ink, opacity: miss.length ? 0.45 : 1, cursor: miss.length ? "not-allowed" : "pointer" }}
+                    title={miss.length ? "За оферта липсва: " + miss.join("; ") + "." : "Прави оферта от това запитване."}>
+                    📄 Оферта
+                  </button>
+                );
+              })()}
               {onEdit && (
                 r.formState ? (
                   <button onClick={() => onEdit(r)} className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: accent, color: ink }}>
@@ -3523,7 +3530,7 @@ function LogPanel({ onClose, p, session, onEdit, onOffer, notify }) {
   const [sortKey, setSortKey] = useState("createdAt");
   const [sortDir, setSortDir] = useState("desc");
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 20;
+  const PAGE_SIZE = 30;
   const refresh = async () => {
     setRows(null); const d = await loadCalcs(p, session); setRows(d); setErr(d.length === 0);
     setOffers(await fetchOffersByCalc(p?.supabaseUrl, p?.supabaseKey, session));
@@ -3633,7 +3640,7 @@ function LogPanel({ onClose, p, session, onEdit, onOffer, notify }) {
     });
   };
   return (
-    <div className="rounded-2xl border-2 bg-white p-5 mb-4" style={{ borderColor: ink }}>
+    <div className="mb-4">
       {fix && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-auto bg-black/40 p-4" onClick={() => setFix(null)}>
           <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md my-8 rounded-2xl bg-white p-5 shadow-xl">
@@ -3732,8 +3739,8 @@ function LogPanel({ onClose, p, session, onEdit, onOffer, notify }) {
           {sortedRows.length === 0 ? (
             <div className="text-sm text-slate-400 py-4 text-center">Няма записи, отговарящи на филтъра.</div>
           ) : (
-          <div className="max-h-80 overflow-auto -mx-1">
-            <table className="w-full text-xs">
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="text-slate-400 text-left">
                   <th className="py-1.5 px-1 font-medium cursor-pointer select-none" onClick={() => toggleSort("calcNumber")}>№{sortArrow("calcNumber")}</th>
@@ -4890,7 +4897,7 @@ export default function KorektCalculator() {
         </div>
         <div style={{ height: 3, background: brandGradient }} />
       </header>
-      <div className={`${showOffers ? "max-w-7xl" : "max-w-3xl"} mx-auto px-4 py-8`}>
+      <div className={`${showOffers || showLog ? "max-w-7xl" : "max-w-3xl"} mx-auto px-4 py-8`}>
         <div className="flex items-baseline justify-between gap-3 mb-6">
           <h1 className="text-2xl font-semibold" style={{ color: accent }}>
             {showLog ? "Записи" : showOffers ? "Оферти" : showVoice ? "Разговор с асистента" : showSettings ? "Параметри"
@@ -5710,10 +5717,19 @@ export default function KorektCalculator() {
                     {saveState === "unavailable" && <span className="ml-1">· Записът не е наличен в тази среда</span>}
                     {saveState === "error" && <span className="ml-1">· Записът не бе запазен</span>}
                   </div>
-                  <button onClick={makeOfferFromCalc}
-                    className="mt-3 w-full rounded-xl py-2.5 text-sm font-semibold" style={{ background: "#fff", color: ink }}>
-                    📄 Направи оферта за клиента
-                  </button>
+                  {(() => {
+                    // бутонът е неактивен, докато няма номер, цена, име и телефон или имейл (Додо, 25.11.2026)
+                    const c = carryRef.current?.contact || {};
+                    const miss = offerBlockers({ calcNumber: calcNumberState, total: r.total,
+                      contact: { name: s.name || c.name, phone: s.phone || c.phone, email: s.email || c.email } });
+                    return (<>
+                      <button onClick={makeOfferFromCalc} disabled={miss.length > 0}
+                        className="mt-3 w-full rounded-xl py-2.5 text-sm font-semibold" style={{ background: "#fff", color: ink, opacity: miss.length ? 0.45 : 1, cursor: miss.length ? "not-allowed" : "pointer" }}>
+                        📄 Направи оферта за клиента
+                      </button>
+                      {miss.length > 0 && <div className="mt-1.5 text-xs opacity-80">За оферта липсва: {miss.join("; ")}.</div>}
+                    </>);
+                  })()}
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5">

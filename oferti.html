@@ -113,6 +113,7 @@ textarea { min-height: 54px; resize: vertical; }
         <label class="f">Номер<input type="text" id="f-id" data-k="id"></label>
         <label class="f">Дата на издаване<input type="date" id="f-issued" data-k="issued"></label>
         <label class="f">Валидна (дни)<input type="number" id="f-valid" data-k="validDays" min="1"></label>
+        <label class="f">Отстъпка (%) — обещаната на клиента<input type="number" id="f-discountPct" data-k="discountPct" min="0" max="50" step="1"></label>
       </div>
       <label class="f">Обръщение към клиента<input type="text" id="f-client" data-k="client" placeholder="напр. г-жо Петрова"></label>
       <div>
@@ -291,6 +292,7 @@ function fromCalc(c) {
   o.calcNumber = c.calcNumber ? String(c.calcNumber) : "";
   if (o.calcNumber) o.id = idForCalc(kind, o.calcNumber);
   o.client = c.clientName || "";
+  o.discountPct = +c.discountPct || 0;
   o.clientPhone = c.clientPhone || ""; o.clientEmail = c.clientEmail || "";   // вътрешни — за връзка с клиента
   o.internalNotes = c.notes || "";
   o.transcript = Array.isArray(c.transcript)
@@ -366,7 +368,7 @@ function toOffer(s) {
   return {
     id: s.id || "—", example: false, demo: true, langs: ["bg"], kind: s.kind || "international",
     inventory: (s.inventory || []).filter(r => r.item).map(r => ({ item: B(r.item), qty: +r.qty || 1, note: B(r.note) })),
-    client: B(s.client), issued: s.issued || TODAY, validDays: +s.validDays || 28, vatRate: 0.2,
+    client: B(s.client), issued: s.issued || TODAY, validDays: +s.validDays || 28, vatRate: 0.2, discountPct: +s.discountPct || 0,
     from: { city: B(s.fromCity), country: B(s.fromCountry), addr: B(s.fromAddr) },
     to: { city: B(s.toCity || "…"), country: B(s.toCountry), addr: B(s.toAddr) },
     km: +s.km || null, stage: s.stage, preferredPeriod: B(s.period || "предстои да се уточни"),

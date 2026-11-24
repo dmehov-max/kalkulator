@@ -1785,6 +1785,9 @@ test("оферта: само от запитване с номер, цена, и
   eq(E.offerBlockers({ ...rec, contact: { name: "Тест", phone: "", email: "" } }).length, 1, "без телефон и имейл");
   eq(E.offerBlockers({ ...rec, contact: { name: "Тест", phone: "", email: "a@b.bg" } }).length, 0, "само имейл стига");
   const pay = E.offerPayloadFromRecord(rec);
+  eq(pay.discountPct, 0, "без обещана отстъпка");
+  eq(E.offerPayloadFromRecord({ ...rec, notes: "Разговор\nОбещана отстъпка 5% от крайната цена (оставил е име)." }).discountPct, 5, "отстъпката от асистента");
+  eq(E.offerPayloadFromRecord({ ...rec, site: { discountPct: 5 } }).discountPct, 5, "отстъпката от формата");
   eq(pay.calcNumber, 111); eq(pay.clientName, "Тест Клиент"); eq(pay.clientPhone, "0888 000 101"); eq(pay.total, 538); eq(pay.fromCity, "София");
 });
 test("монтаж/ТРД: няма транспортно перо — стоката не е наша грижа", () => {

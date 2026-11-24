@@ -504,7 +504,7 @@ const T = {
     invEyebrow: "Опис", invTitle: "Списък на багажа", invLead: "Цената е изчислена за тези вещи. Ако нещо липсва, натиснете „Искам промени“.",
     fDate: "Дата на преместване", invItem: "Предмет", invQty: "Брой", invNote: "Бележка", invTotal: "Общо",
     greetDom: n => n ? `Здравейте, ${n}, ето Вашата оферта за преместване` : "Здравейте, ето Вашата оферта за преместване",
-    priceDom: "Цена без ДДС",
+    priceDom: "Крайна цена", vatDom: "с включен ДДС", discLine: (pct, sum) => `включена отстъпка ${pct}%: −${sum}`,
     whyDom: "Цената не се променя, ако всичко е по задание и по списъка на багажа.",
     stepsDom: [
       ["При потвърждение", "Потвърждавате офертата", "Записваме поръчката и Ви казваме номера ѝ."],
@@ -592,7 +592,7 @@ const T = {
     invEyebrow: "Inventory", invTitle: "List of items", invLead: "The price is calculated for these items. If something is missing, press “Request changes”.",
     fDate: "Moving date", invItem: "Item", invQty: "Qty", invNote: "Note", invTotal: "Total",
     greetDom: n => n ? `Hello ${n}, here is your moving quote` : "Hello, here is your moving quote",
-    priceDom: "Price excl. VAT",
+    priceDom: "Final price", vatDom: "VAT included", discLine: (pct, sum) => `includes ${pct}% discount: −${sum}`,
     whyDom: "The price does not change if the job matches the brief and the list of items.",
     stepsDom: [
       ["On confirmation", "You confirm the quote", "We record the order and give you its number."],
@@ -680,7 +680,7 @@ const T = {
     invEyebrow: "Опись", invTitle: "Список вещей", invLead: "Цена рассчитана для этих вещей. Если чего-то не хватает, нажмите «Хочу изменения».",
     fDate: "Дата переезда", invItem: "Предмет", invQty: "Кол-во", invNote: "Примечание", invTotal: "Итого",
     greetDom: n => n ? `Здравствуйте, ${n}, вот Ваше предложение по переезду` : "Здравствуйте, вот Ваше предложение по переезду",
-    priceDom: "Цена без НДС",
+    priceDom: "Итоговая цена", vatDom: "НДС включён", discLine: (pct, sum) => `включена скидка ${pct}%: −${sum}`,
     whyDom: "Цена не меняется, если всё соответствует заданию и списку вещей.",
     stepsDom: [
       ["При подтверждении", "Вы подтверждаете предложение", "Мы записываем заказ и сообщаем Вам его номер."],
@@ -694,6 +694,12 @@ const T = {
 };
 
 /* ===================== ЛОГИКА ===================== */
+// текстовете споменават координатора по име — взима се от офертата, не е зашито „Тодор“
+{
+  const first = (l) => String((OFFER.coordinator && OFFER.coordinator.name && (OFFER.coordinator.name[l] || OFFER.coordinator.name.bg)) || "").split(/\s+/)[0] || (l === "en" ? "Your coordinator" : "Координаторът");
+  const fix = (v, l) => typeof v === "string" ? v.replace(/Тодор|Todor/g, first(l)) : Array.isArray(v) ? v.map((x) => fix(x, l)) : v;
+  for (const l in T) for (const k in T[l]) T[l][k] = fix(T[l][k], l);
+}
 let lang = "bg";
 try { lang = localStorage.getItem("korekt-lang") || "bg"; } catch (e) {}
 const picked = new Set();
@@ -721,16 +727,20 @@ function renderInventory() {
 function totals() {
   const base = OFFER.lines.reduce((a, l) => a + l.amount, 0);
   const extra = OFFER.addons.filter(a => picked.has(a.id)).reduce((a, l) => a + l.amount, 0);
-  const net = Math.round((base + extra) * 100) / 100;
+  // 2) отстъпката, обещана на клиента при запитването (напр. 5% за оставени данни)
+  const pct = Math.min(50, Math.max(0, +OFFER.discountPct || 0));
+  const full = Math.round((base + extra) * 100) / 100;
+  const net = Math.round(full * (1 - pct / 100) * 100) / 100;
   const vat = Math.round(net * OFFER.vatRate * 100) / 100;
-  return { net, vat, gross: Math.round((net + vat) * 100) / 100 };
+  const gross = Math.round((net + vat) * 100) / 100;
+  return { net, vat, gross, pct, discount: Math.round((full * (1 + OFFER.vatRate) - gross) * 100) / 100 };
 }
 
 function renderPrice() {
   const t = T[lang], s = totals(), ind = isInd(), intl = isIntl();
   $("h-price").textContent = !intl ? t.priceDom : ind ? t.priceInd : t.priceFix;
-  $("grandTop").textContent = (ind ? "≈ " : "") + eur(s.net);
-  $("vatNote").textContent = t.vatLine(eur(s.vat));
+  $("grandTop").textContent = (ind ? "≈ " : "") + eur(intl ? s.net : s.gross);
+  $("vatNote").textContent = (intl ? t.vatLine(eur(s.vat)) : t.vatDom) + (s.pct ? " · " + t.discLine(s.pct, eur(intl ? s.discount / (1 + OFFER.vatRate) : s.discount)) : "");
   $("stageBox").innerHTML = !intl ? `<p class="why">${t.whyDom}</p>` : `<div class="track"><span class="${ind ? "on" : "done"}">${ind ? "1" : "✓"} · ${t.track1}</span><span class="${ind ? "" : "on"}">2 · ${t.track2}</span></div>` +
     `<p class="why">${ind ? t.whyInd : t.whyFix(date(OFFER.loadDate))}</p>`;
   $("btnAccept").textContent = ind ? t.askDates : t.accept;
@@ -796,6 +806,7 @@ $("coordName").textContent = L(c.name); $("coordRole").textContent = L(c.role);
   const contacts = [[t.phone, c.phone], [t.office, c.phone2], [t.email, c.email]].filter(x => x[1]);
   $("coordContacts").innerHTML = contacts.map(([k, v], i) => `<div class="contact-row"><span class="lbl">${k}</span><span class="mono" id="ct-${i}">${esc(v)}</span><button type="button" class="copy" data-copy="${esc(v)}">${t.copy}</button></div>`).join("");
   $("incl").innerHTML = t.incl.map(([b, s]) => `<li><span class="tick">✓</span><div><b>${b}</b><span>${s}</span></div></li>`).join("");
+  $("addons").closest("section").hidden = !o.addons.length;
   $("addons").innerHTML = o.addons.map(a => `<label class="addon" for="${a.id}"><input type="checkbox" id="${a.id}" ${picked.has(a.id) ? "checked" : ""}><span><span class="t">${esc(LT(a))}</span><br><span class="d">${esc(L(a.d))}</span></span></label>`).join("");
   renderInventory();
   $("steps").innerHTML = (intl ? t.steps : t.stepsDom).map(([w, h, d]) => `<li><div><div class="when">${w}</div><div class="what">${h}</div><div class="how">${d}</div></div></li>`).join("");
