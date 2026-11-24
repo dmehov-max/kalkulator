@@ -5,11 +5,12 @@
  *  Задание: втори мозък → бизнес\калкулатор-за-клиенти.md
  * ================================================================== */
 
-// Кога НЕ се показва цена, а „подлежи на оглед“ (решения на Додо, 18.11.2026)
-const LIMITS = {
-  local: { maxM3: 10, maxPriceVat: 300 },          // градско: до 10 м³ и до 300 €
-  intercity: { maxM3: 12, maxKg: 1300 },           // извънградско: едно наше камионче
-};
+// Кога НЕ се показва цена, а клиентът се насочва към офиса. Едно правило за формата и за гласовия
+// асистент (решение на Додо, 24.11.2026; ще се вдига постепенно):
+//   градско — до 400 € без ДДС;  извънградско — до 12 м³ багаж (едно наше камионче), без таван в евро.
+// Същите стойности са в korekt-glasov-asistent\cena.mjs (LIMIT_LOCAL_EUR_BEZ_DDS, LIMIT_INTERCITY_M3).
+const LIMITS = { local: { maxPriceNoVat: 400 }, intercity: { maxM3: 12 } };
+const TRUCK_M3 = 12; // вместимост на „камиона“ в брояча на обема
 const DISCOUNT_PCT = 5;
 const DISCOUNT_DAYS = 14;
 const FLEX_DISCOUNT_PCT = 5; // още толкова %, ако клиентът приеме дата и час, предложени от нас
@@ -89,11 +90,50 @@ function Address({ title, a, set }) {
         <Stepper value={a.floor} max={25} onChange={(v) => set({ ...a, floor: v })} />
       </div>
       {a.floor > 0 && (
-        <label className="flex items-center gap-3 mt-3 cursor-pointer">
-          <input type="checkbox" className="w-5 h-5 accent-blue-600" checked={a.elevator} onChange={(e) => set({ ...a, elevator: e.target.checked })} />
-          <span className="text-sm text-slate-700">Има асансьор</span>
-        </label>
+        <div className="mt-3">
+          <div className="text-sm text-slate-600 mb-1.5">Асансьор</div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {[["none", "🚶 Няма"], ["passenger", "🛗 Пътнически"], ["cargo", "📦 Товарен"]].map(([id, label]) => {
+              const on = id === "none" ? !a.elevator : a.elevator && a.elevatorType === id;
+              return (
+                <button key={id} type="button" aria-pressed={on}
+                  onClick={() => set({ ...a, elevator: id !== "none", elevatorType: id === "cargo" ? "cargo" : "passenger" })}
+                  className={"rounded-xl border-2 px-1 py-2 text-xs font-semibold transition active:scale-95 " + (on ? "text-white" : "bg-white text-slate-700 border-slate-200")}
+                  style={on ? { background: BLUE, borderColor: BLUE } : undefined}>{label}</button>
+              );
+            })}
+          </div>
+          {a.elevator && a.elevatorType === "passenger" && <div className="text-xs text-slate-400 mt-1.5">Големите мебели (диван, голям гардероб) не влизат в пътнически асансьор и се носят по стълбите.</div>}
+        </div>
       )}
+    </div>
+  );
+}
+
+const GROUP_ICON = { "Хол и трапезария": "🛋️", "Спалня": "🛏️", "Кухня и баня": "🍳", "Офис": "💼", "Уреди": "🧺", "Кашони и дребни": "📦", "Двор и тераса": "🌿", "Специални (спец. обработка)": "🎹" };
+const STEPS = [["📍", "Маршрут"], ["🏠", "Адреси"], ["📦", "Вещи"], ["💶", "Цена"]];
+
+// Камионът се пълни, докато клиентът добавя вещи — показва кубиците на багажа на живо
+function TruckMeter({ vol, count }) {
+  const pct = Math.min(100, Math.round((vol / TRUCK_M3) * 100));
+  const over = vol > TRUCK_M3;
+  const msg = !count ? "Добавете първата вещ и камионът тръгва да се пълни."
+    : over ? "Един камион не стига — това е голямо преместване."
+    : pct < 25 ? "Добро начало! Има още много място."
+    : pct < 60 ? "Камионът се пълни. Не забравяйте кашоните."
+    : pct < 90 ? "Почти пълен камион. Проверете дали сте добавили всичко."
+    : "Камионът е пълен догоре!";
+  return (
+    <div className="sticky top-2 z-10 mb-3 rounded-2xl border border-slate-200 bg-white/95 backdrop-blur shadow-sm p-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-sm font-semibold text-slate-700">Вашият багаж</span>
+        <span className="tabular-nums"><b className="text-xl" style={{ color: over ? RED : BLUE }}>{vol.toFixed(1)}</b> <span className="text-sm text-slate-500">м³ · {count} {count === 1 ? "вещ" : "вещи"}</span></span>
+      </div>
+      <div className="relative mt-2 h-7 rounded-full bg-slate-100 overflow-hidden">
+        <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-500 ease-out" style={{ width: pct + "%", background: over ? RED : BLUE, opacity: 0.25 }} />
+        <div className="absolute top-0 text-xl leading-7 transition-all duration-500 ease-out" style={{ left: `calc(${pct}% - ${pct > 8 ? 28 : 0}px)` }} aria-hidden="true">🚚</div>
+      </div>
+      <div className="text-xs text-slate-500 mt-1.5">{msg}</div>
     </div>
   );
 }
@@ -115,8 +155,21 @@ function KlientCalculator() {
   useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [step]);
 
   const set = (patch) => setS((x) => ({ ...x, ...patch }));
-  const setQty = (id, v) => setS((x) => { const qty = { ...x.qty }; if (v > 0) qty[id] = v; else delete qty[id]; return { ...x, qty }; });
+  const setQty = (id, v) => setS((x) => {
+    const qty = { ...x.qty }, dis = { ...x.dis }, asm = { ...x.asm };
+    if (v > 0) qty[id] = v; else { delete qty[id]; delete dis[id]; delete asm[id]; }
+    return { ...x, qty, dis, asm };
+  });
+  // „Да го разглобим и сглобим ли?“ — едно решение за вещта: ние разглобяваме и сглобяваме, или е готова за носене
+  const setWork = (id, on) => setS((x) => {
+    const dis = { ...x.dis }, asm = { ...x.asm }, it = ITEM_INDEX[id];
+    if (on) { if (it.dis) dis[id] = true; if (it.asm) asm[id] = true; } else { delete dis[id]; delete asm[id]; }
+    return { ...x, dis, asm };
+  });
+  const hasWork = (id) => !!(s.dis[id] || s.asm[id]);
   const itemCount = Object.values(s.qty).reduce((a, b) => a + b, 0);
+  const liveVol = Object.entries(s.qty).reduce((a, [id, n]) => a + (ITEM_INDEX[id]?.m3 || 0) * n, 0);
+  const workItems = Object.keys(s.qty).filter(hasWork).map((id) => ITEM_INDEX[id].label);
 
   const r = useMemo(() => {
     if (!p || !s.service || !itemCount) return null;
@@ -124,12 +177,16 @@ function KlientCalculator() {
   }, [p, s, itemCount]);
 
   const priceVat = r ? Math.round(r.total * VAT) : 0;
+  // същото без разглобяване/сглобяване — за да види клиентът колко добавя монтажът
+  const priceNoWorkVat = useMemo(() => {
+    if (!r || !workItems.length) return null;
+    try { return Math.round(computePrice({ ...s, dis: {}, asm: {} }, p).total * VAT); } catch (e) { return null; }
+  }, [r, workItems.length]);
   const lim = LIMITS[s.service] || {};
   const reasons = [];
   if (r) {
     if (lim.maxM3 && r.vol > lim.maxM3) reasons.push(`обемът е над ${lim.maxM3} м³`);
-    if (lim.maxKg && r.weight > lim.maxKg) reasons.push(`багажът е над ${lim.maxKg} кг`);
-    if (lim.maxPriceVat && priceVat > lim.maxPriceVat) reasons.push("задачата е по-голяма от обичайното");
+    if (lim.maxPriceNoVat && r.total > lim.maxPriceNoVat) reasons.push("задачата е по-голяма от обичайното");
     const special = Object.keys(s.qty).map((id) => ITEM_INDEX[id]).filter(isSpecialItem);
     if (special.length) reasons.push("има тежки, обемисти или прецизни предмети: " + special.map((i) => i.label).join(", "));
     if (other.trim()) reasons.push("има вещи извън списъка");
@@ -195,8 +252,18 @@ function KlientCalculator() {
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-4">
         <div>
           <h1 className="text-2xl font-extrabold" style={{ color: BLUE }}>Колко ще струва преместването?</h1>
-          <p className="text-slate-600 mt-1">Отговорете на три въпроса и вижте ориентировъчна цена веднага.</p>
-          {!done && <div className="flex gap-1.5 mt-4">{[0, 1, 2, 3].map((i) => <div key={i} className="h-1.5 flex-1 rounded-full" style={{ background: i <= step ? BLUE : "#cbd5e1" }} />)}</div>}
+          <p className="text-slate-600 mt-1">Напълнете камиона за минута и вижте цената веднага.</p>
+          {!done && (
+            <div className="flex gap-1.5 mt-4">
+              {STEPS.map(([icon, name], i) => (
+                <div key={name} className={"flex-1 rounded-xl px-1 py-2 text-center transition-all duration-300 " + (i === step ? "scale-105 shadow" : "")}
+                  style={{ background: i < step ? "#dbeafe" : i === step ? BLUE : "#e2e8f0", color: i === step ? "#fff" : i < step ? BLUE : "#64748b" }}>
+                  <div className="text-lg leading-none">{i < step ? "✓" : icon}</div>
+                  <div className="text-[11px] font-semibold mt-1">{name}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {!p && <Card><div className="text-slate-500">Зареждане на цените…</div></Card>}
@@ -257,24 +324,25 @@ function KlientCalculator() {
           <Card>
             <Back />
             <div className="text-lg font-bold mb-1">3. Какво ще местим?</div>
-            <p className="text-sm text-slate-500 mb-4">Добавете вещите с бутона +. Избрани: <b>{itemCount}</b></p>
+            <p className="text-sm text-slate-500 mb-3">Добавяйте с бутона + и гледайте как се пълни камионът.</p>
+            <TruckMeter vol={liveVol} count={itemCount} />
             <input className={input} placeholder="Търсене: гардероб, диван, пералня…" value={search} onChange={(e) => setSearch(e.target.value)} />
             {q ? (
               <div className="mt-3 divide-y divide-slate-100">
-                {found.length ? found.map((it) => <ItemRow key={it.id} it={it} qty={s.qty[it.id] || 0} setQty={setQty} />) : <div className="py-3 text-sm text-slate-500">Няма такава вещ в списъка. Опишете я в полето най-долу.</div>}
+                {found.length ? found.map((it) => <ItemRow key={it.id} it={it} qty={s.qty[it.id] || 0} setQty={setQty} work={hasWork(it.id)} setWork={setWork} />) : <div className="py-3 text-sm text-slate-500">Няма такава вещ в списъка. Опишете я в полето най-долу.</div>}
               </div>
             ) : (
               <div className="mt-3 space-y-2">
                 <div className="rounded-xl border border-slate-200">
                   <div className="px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-500">Най-чести</div>
-                  <div className="px-4 divide-y divide-slate-100">{POPULAR.map((id) => <ItemRow key={id} it={ITEM_INDEX[id]} qty={s.qty[id] || 0} setQty={setQty} />)}</div>
+                  <div className="px-4 divide-y divide-slate-100">{POPULAR.map((id) => <ItemRow key={id} it={ITEM_INDEX[id]} qty={s.qty[id] || 0} setQty={setQty} work={hasWork(id)} setWork={setWork} />)}</div>
                 </div>
                 {CLIENT_GROUPS.map((g) => {
                   const n = g.items.reduce((a, i) => a + (s.qty[i.id] || 0), 0);
                   return (
                     <details key={g.group} className="rounded-xl border border-slate-200">
-                      <summary className="px-4 py-3 font-semibold cursor-pointer flex justify-between"><span>{g.group}</span>{n > 0 && <span className="text-sm font-bold" style={{ color: BLUE }}>{n} бр.</span>}</summary>
-                      <div className="px-4 pb-2 divide-y divide-slate-100">{g.items.map((it) => <ItemRow key={it.id} it={it} qty={s.qty[it.id] || 0} setQty={setQty} />)}</div>
+                      <summary className="px-4 py-3 font-semibold cursor-pointer flex justify-between"><span>{GROUP_ICON[g.group] || "📦"} {g.group}</span>{n > 0 && <span className="text-sm font-bold" style={{ color: BLUE }}>{n} бр.</span>}</summary>
+                      <div className="px-4 pb-2 divide-y divide-slate-100">{g.items.map((it) => <ItemRow key={it.id} it={it} qty={s.qty[it.id] || 0} setQty={setQty} work={hasWork(it.id)} setWork={setWork} />)}</div>
                     </details>
                   );
                 })}
@@ -307,8 +375,23 @@ function KlientCalculator() {
                     <span className="text-slate-500">с ДДС</span>
                   </div>
                   <div className="mt-3 text-sm text-slate-600">
-                    {s.service === "local" ? `${s.city}: ${s.pickupHood} → ${s.dropoffHood}` : `${s.pickupCity} → ${s.dropoffCity}`} · {itemCount} вещи · около {r.vol.toFixed(1)} м³ · {r.crew} души · ≈ {r.clockHours.toFixed(1)} ч
+                    {s.service === "local" ? `${s.city}: ${s.pickupHood} → ${s.dropoffHood}` : `${s.pickupCity} → ${s.dropoffCity}`}
                   </div>
+                  <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                    {[["📦", `${r.vol.toFixed(1)} м³`, `${itemCount} вещи`], ["💪", `${r.crew} души`, "бригада"], ["⏱️", `≈ ${r.clockHours.toFixed(1)} ч`, "на място"]].map(([icon, big, small]) => (
+                      <div key={small} className="rounded-xl bg-slate-50 border border-slate-200 py-2">
+                        <div className="text-lg leading-none">{icon}</div>
+                        <div className="font-bold text-sm mt-1">{big}</div>
+                        <div className="text-[11px] text-slate-500">{small}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {workItems.length > 0 && priceNoWorkVat != null && (
+                    <div className="mt-3 rounded-xl bg-blue-50 border border-blue-200 p-3 text-sm text-blue-900">
+                      🔧 В цената влиза разглобяване и сглобяване на: <b>{workItems.join(", ")}</b> — това добавя около <b>{priceVat - priceNoWorkVat} €</b>.
+                      Ако мебелите са вече разглобени, цената е около <b>{priceNoWorkVat} €</b>. Можете да го смените с „Назад“.
+                    </div>
+                  )}
                   <div className="mt-4 rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900">
                     Цената е изчислена автоматично от нашия калкулатор по нашите цени и опит и е ориентировъчна. Възможни са отклонения и си запазваме правото да я променим след уточняване на заданието. За въпроси: {PHONE}.
                   </div>
@@ -350,11 +433,28 @@ function KlientCalculator() {
   );
 }
 
-function ItemRow({ it, qty, setQty }) {
+function ItemRow({ it, qty, setQty, work, setWork }) {
+  const canWork = qty > 0 && !!(it.dis || it.asm) && !!setWork;
   return (
-    <div className="flex items-center justify-between gap-3 py-2.5">
-      <span className={"text-base " + (qty ? "font-semibold text-slate-900" : "text-slate-700")}>{it.label}</span>
-      <Stepper value={qty} onChange={(v) => setQty(it.id, v)} />
+    <div className="py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <span className={"text-base " + (qty ? "font-semibold text-slate-900" : "text-slate-700")}>
+          {it.label} <span className="text-xs font-normal text-slate-400 whitespace-nowrap">{it.m3} м³</span>
+        </span>
+        <Stepper value={qty} onChange={(v) => setQty(it.id, v)} />
+      </div>
+      {canWork && (
+        <div className="mt-2 rounded-xl bg-amber-50 border border-amber-200 p-2.5">
+          <div className="text-xs font-semibold text-amber-900 mb-1.5">🔧 Да го разглобим и сглобим ли?</div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {[[true, "Да, Вие го направете"], [false, "Не, готов е за носене"]].map(([val, label]) => (
+              <button key={label} type="button" aria-pressed={work === val} onClick={() => setWork(it.id, val)}
+                className={"rounded-lg border-2 px-2 py-2 text-xs font-semibold transition active:scale-95 " + (work === val ? "text-white" : "bg-white text-slate-700 border-slate-200")}
+                style={work === val ? { background: BLUE, borderColor: BLUE } : undefined}>{label}</button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
