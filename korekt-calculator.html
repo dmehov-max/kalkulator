@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-TR62bBUw/ciHNxoyRd1CQ6nGWXVLTwzaf7i3/9KIlyI='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-8WghYOcDKUii5CfjAGI0/eF0oYkHdrycT3FSQ7AHq0o='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -6369,6 +6369,54 @@ function ActualResultForm({
 }
 
 // показва запазена калкулация в същия вид, в който е показана при генерирането ѝ
+// Звуковият запис на разговора с асистента: файлът е в частна кофа, затова при натискане се
+// иска краткотраен линк (15 мин) с входа на колегата — без вход не се отваря.
+function CallAudio({
+  audio,
+  p,
+  session
+}) {
+  const [src, setSrc] = useState(null);
+  const [err, setErr] = useState("");
+  const load = async () => {
+    setErr("");
+    try {
+      const res = await fetch(`${p.supabaseUrl}/storage/v1/object/sign/calls/${encodeURIComponent(audio.path)}`, {
+        method: "POST",
+        headers: {
+          apikey: p.supabaseKey,
+          Authorization: `Bearer ${session?.access_token || ""}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          expiresIn: 900
+        })
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.signedURL) throw new Error(data?.message || `HTTP ${res.status}`);
+      setSrc(`${p.supabaseUrl}/storage/v1${data.signedURL}`);
+    } catch (e) {
+      setErr("Записът не се отвори: " + (e.message || e));
+    }
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    className: "mt-4 rounded-xl border border-slate-200 px-3 py-2 text-sm"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between gap-2"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "font-semibold"
+  }, "🔊 Запис на разговора", audio.at ? ` · ${audio.at}` : ""), !src && /*#__PURE__*/React.createElement("button", {
+    onClick: load,
+    className: "rounded-full px-3 py-1 text-xs font-semibold text-white bg-slate-700"
+  }, "Чуй")), src && /*#__PURE__*/React.createElement("audio", {
+    controls: true,
+    autoPlay: true,
+    src: src,
+    className: "mt-2 w-full"
+  }), err && /*#__PURE__*/React.createElement("div", {
+    className: "mt-1 text-xs text-red-600"
+  }, err));
+}
 function RecordDetail({
   record: r,
   p,
@@ -6563,7 +6611,11 @@ function RecordDetail({
     style: {
       color: ink
     }
-  }, r.notes), Array.isArray(r.transcript) && r.transcript.length > 0 && /*#__PURE__*/React.createElement("details", {
+  }, r.notes), r.audio?.path && /*#__PURE__*/React.createElement(CallAudio, {
+    audio: r.audio,
+    p: p,
+    session: session
+  }), Array.isArray(r.transcript) && r.transcript.length > 0 && /*#__PURE__*/React.createElement("details", {
     className: "mt-4 rounded-xl border border-slate-200"
   }, /*#__PURE__*/React.createElement("summary", {
     className: "cursor-pointer px-3 py-2 text-sm font-semibold",
@@ -8186,6 +8238,7 @@ function KorektCalculator() {
     if (c.site) rec.site = c.site; // запитване от сайта: показана цена, обещана отстъпка, съгласие
     if (c.oldCalcNumber != null) rec.oldCalcNumber = c.oldCalcNumber; // номерът преди преномерирането от 24.11.2026
     if (c.review) rec.review = c.review; // оценката 👍/👎 от колега
+    if (c.audio) rec.audio = c.audio; // звуковият запис на разговора
     if (c.pin) rec.pin = c.pin; // ПИН-ът, с който клиентът се връща към поръчката
     if (c.clientNotes) rec.clientNotes = c.clientNotes; // бележки, добавени от клиента по телефона
     if (!rec.contact && c.contact) rec.contact = c.contact;
@@ -8224,6 +8277,7 @@ function KorektCalculator() {
       oldCalcNumber: rec.oldCalcNumber ?? null,
       review: rec.review || null,
       pin: rec.pin || null,
+      audio: rec.audio || null,
       clientNotes: rec.clientNotes || null
     };
     recordKey.current = rec.key || null;

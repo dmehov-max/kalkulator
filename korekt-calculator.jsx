@@ -3126,6 +3126,36 @@ function ActualResultForm({ r, p, session, notify }) {
 }
 
 // показва запазена калкулация в същия вид, в който е показана при генерирането ѝ
+// Звуковият запис на разговора с асистента: файлът е в частна кофа, затова при натискане се
+// иска краткотраен линк (15 мин) с входа на колегата — без вход не се отваря.
+function CallAudio({ audio, p, session }) {
+  const [src, setSrc] = useState(null);
+  const [err, setErr] = useState("");
+  const load = async () => {
+    setErr("");
+    try {
+      const res = await fetch(`${p.supabaseUrl}/storage/v1/object/sign/calls/${encodeURIComponent(audio.path)}`, {
+        method: "POST",
+        headers: { apikey: p.supabaseKey, Authorization: `Bearer ${session?.access_token || ""}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ expiresIn: 900 }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.signedURL) throw new Error(data?.message || `HTTP ${res.status}`);
+      setSrc(`${p.supabaseUrl}/storage/v1${data.signedURL}`);
+    } catch (e) { setErr("Записът не се отвори: " + (e.message || e)); }
+  };
+  return (
+    <div className="mt-4 rounded-xl border border-slate-200 px-3 py-2 text-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold">🔊 Запис на разговора{audio.at ? ` · ${audio.at}` : ""}</span>
+        {!src && <button onClick={load} className="rounded-full px-3 py-1 text-xs font-semibold text-white bg-slate-700">Чуй</button>}
+      </div>
+      {src && <audio controls autoPlay src={src} className="mt-2 w-full" />}
+      {err && <div className="mt-1 text-xs text-red-600">{err}</div>}
+    </div>
+  );
+}
+
 function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
   const serviceLabel = SERVICE_LABELS[r.service] || r.service;
   const lift = (a) => (!a ? "" : a.elevator ? (a.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор") : "без асансьор");
@@ -3261,6 +3291,7 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
             <p className="mt-3 text-sm rounded-xl px-3 py-2 bg-slate-50 whitespace-pre-line" style={{ color: ink }}>{r.notes}</p>
           )}
 
+          {r.audio?.path && <CallAudio audio={r.audio} p={p} session={session} />}
           {/* разговорът с гласовия асистент — дословно, само за екипа */}
           {Array.isArray(r.transcript) && r.transcript.length > 0 && (
             <details className="mt-4 rounded-xl border border-slate-200">
@@ -4382,6 +4413,7 @@ export default function KorektCalculator() {
     if (c.site) rec.site = c.site;                                   // запитване от сайта: показана цена, обещана отстъпка, съгласие
     if (c.oldCalcNumber != null) rec.oldCalcNumber = c.oldCalcNumber; // номерът преди преномерирането от 24.11.2026
     if (c.review) rec.review = c.review;                             // оценката 👍/👎 от колега
+    if (c.audio) rec.audio = c.audio;                                // звуковият запис на разговора
     if (c.pin) rec.pin = c.pin;                                      // ПИН-ът, с който клиентът се връща към поръчката
     if (c.clientNotes) rec.clientNotes = c.clientNotes;              // бележки, добавени от клиента по телефона
     if (!rec.contact && c.contact) rec.contact = c.contact;
@@ -4402,7 +4434,7 @@ export default function KorektCalculator() {
     setS({ ...INITIAL_S, ...rec.formState, ...(keepDev ? { deviationOverride: oldDev } : {}) });
     // неща извън формата (разговор с гласовия асистент, бележка, източник, контакт) —
     // пренасят се при всяко презаписване на записа и в офертата, иначе редакцията ги трие
-    carryRef.current = { transcript: rec.transcript || null, notes: rec.notes || null, source: rec.source || null, contact: rec.contact || null, site: rec.site || null, oldCalcNumber: rec.oldCalcNumber ?? null, review: rec.review || null, pin: rec.pin || null, clientNotes: rec.clientNotes || null };
+    carryRef.current = { transcript: rec.transcript || null, notes: rec.notes || null, source: rec.source || null, contact: rec.contact || null, site: rec.site || null, oldCalcNumber: rec.oldCalcNumber ?? null, review: rec.review || null, pin: rec.pin || null, audio: rec.audio || null, clientNotes: rec.clientNotes || null };
     recordKey.current = rec.key || null;
     recordNumber.current = rec.calcNumber ?? null;
     pushedRef.current = !!rec.key; // вече съществува ред в Supabase — следващият autosave трябва да е PATCH, не нов POST
