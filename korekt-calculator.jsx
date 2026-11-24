@@ -2218,6 +2218,45 @@ async function pushCalcToSupabase(record, url, key, isUpdate, touchStatus = true
 
 // изтегля всички калкулации от Supabase (видими за всички устройства) — праща логнатата
 // сесия; от 08.11.2026 RLS пуска calculations само на authenticated, anon вижда празно
+// ОФЕРТА СЕ ПРАВИ САМО ОТ ЗАПИТВАНЕ (решение на Додо, 25.11.2026): трябва да има номер на запитването,
+// определена цена, име на клиента и телефон или имейл. Връща списък с липсващото (празен = може).
+function offerBlockers(rec) {
+  const c = rec?.contact || {}, miss = [];
+  if (!rec?.calcNumber) miss.push("запитването още няма номер (изчакайте да се запише)");
+  if (!(Number(rec?.total) > 0) || rec?.noPrice) miss.push("цена (отворете записа с „Редактирай“ и я определете)");
+  if (!String(c.name || "").trim()) miss.push("име на клиента");
+  if (!String(c.phone || "").trim() && !String(c.email || "").trim()) miss.push("телефон или имейл на клиента");
+  return miss;
+}
+// какво минава от запитването в офертата (oferti.html → fromCalc)
+function offerPayloadFromRecord(rec) {
+  const fs = rec.formState || {}, intl = rec.service === "international", c = rec.contact || {};
+  return {
+    service: rec.service, serviceLabel: (typeof SERVICE_LABELS !== "undefined" && SERVICE_LABELS[rec.service]) || rec.service,
+    calcNumber: rec.calcNumber || null, total: rec.total,
+    fromCity: rec.service === "local" ? (fs.city || rec.city) : fs.pickupCity || fs.city || rec.city || "",
+    toCity: rec.service === "local" ? (fs.city || rec.city) : intl ? "" : fs.dropoffCity || "",
+    toCountry: intl ? fs.country || "" : "България",
+    from: rec.from, to: rec.to, pickup: rec.pickup, dropoff: rec.dropoff,
+    km: rec.km, volumeM3: rec.volumeM3, weightKg: rec.weightKg, truck: rec.truck,
+    items: (rec.items || []).map((i) => ({ label: i.label, qty: i.qty })),
+    // вътрешно за офертата (клиентът не го вижда): разговорът с гласовия асистент и бележката
+    transcript: rec.transcript || null, notes: rec.notes || null,
+    clientName: c.name || "", clientPhone: c.phone || "", clientEmail: c.email || "",
+  };
+}
+// офертите към запитванията: { "111": [{ id, shared, accepted }] } — за колоната „Статус“ в Записи
+async function fetchOffersByCalc(url, key, session) {
+  if (!url || !key || !session) return {};
+  try {
+    const res = await fetch(`${url}/rest/v1/offers?select=id,shared_at,accepted_at,calc:data->>calcNumber&order=updated_at.desc`, { headers: authHeaders(session, key) });
+    if (!res.ok) return {};
+    const out = {};
+    for (const o of await res.json()) if (o.calc) (out[o.calc] ||= []).push({ id: o.id, shared: !!o.shared_at, accepted: !!o.accepted_at });
+    return out;
+  } catch (e) { return {}; }
+}
+
 async function fetchCalcsFromSupabase(url, key, session) {
   if (!url || !key) return [];
   try {
@@ -3197,7 +3236,7 @@ function CallAudio({ audio, p, session }) {
   );
 }
 
-function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
+function RecordDetail({ record: r, p, session, notify, onClose, onEdit, onOffer }) {
   const serviceLabel = SERVICE_LABELS[r.service] || r.service;
   const lift = (a) => (!a ? "" : a.elevator ? (a.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор") : "без асансьор");
   const disSet = new Set(r.disassembly || []);
@@ -3224,6 +3263,12 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
                 title="Копира калкулацията като текст за поле „Забележка“ в pro и Description в ERP">
                 📋 За Pro
               </button>
+              {onOffer && (
+                <button onClick={() => onOffer(r)} className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "#fff", color: ink }}
+                  title="Прави оферта от това запитване. Трябват цена, име на клиента и телефон или имейл.">
+                  📄 Оферта
+                </button>
+              )}
               {onEdit && (
                 r.formState ? (
                   <button onClick={() => onEdit(r)} className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: accent, color: ink }}>
@@ -3464,8 +3509,9 @@ const REVIEW_REASONS = [
   "Цената е твърде висока за пазара", "Цената е твърде ниска", "Друго",
 ];
 
-function LogPanel({ onClose, p, session, onEdit, notify }) {
+function LogPanel({ onClose, p, session, onEdit, onOffer, notify }) {
   const [rows, setRows] = useState(null);
+  const [offers, setOffers] = useState({});
   const [err, setErr] = useState(false);
   const [confirming, setConfirming] = useState(null);
   const [confirmingWhich, setConfirmingWhich] = useState(null); // ред, чакащ второ потвърждение (inline, не native confirm)
@@ -3478,7 +3524,10 @@ function LogPanel({ onClose, p, session, onEdit, notify }) {
   const [sortDir, setSortDir] = useState("desc");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
-  const refresh = async () => { setRows(null); const d = await loadCalcs(p, session); setRows(d); setErr(d.length === 0); };
+  const refresh = async () => {
+    setRows(null); const d = await loadCalcs(p, session); setRows(d); setErr(d.length === 0);
+    setOffers(await fetchOffersByCalc(p?.supabaseUrl, p?.supabaseKey, session));
+  };
   useEffect(() => { refresh(); }, []);
   useEffect(() => { setPage(1); }, [search, statusFilter, periodFilter]);
 
@@ -3719,6 +3768,12 @@ function LogPanel({ onClose, p, session, onEdit, notify }) {
                         background: r.status === "потвърдена" ? "#dcfce7" : r.status === "заявка" ? "#fff8ef" : "#f1f5f9",
                         color: r.status === "потвърдена" ? "#166534" : r.status === "заявка" ? accent : "#64748b",
                       }}>{r.status || "калкулация"}</span>
+                      {(offers[String(r.calcNumber)] || []).slice(0, 1).map((o) => (
+                        <div key={o.id} className="text-[10px] mt-0.5" style={{ color: o.accepted ? "#166534" : "#64748b" }}
+                          title={`Оферта ${o.id} към това запитване`}>
+                          📄 {o.id} · {o.accepted ? "приета" : o.shared ? "изпратена" : "чернова"}
+                        </div>
+                      ))}
                       {r.actual && (
                         <span className="ml-1 text-[11px]" style={{ color: accent }} title="Има въведени реални стойности">✓ реални</span>
                       )}
@@ -3791,7 +3846,7 @@ function LogPanel({ onClose, p, session, onEdit, notify }) {
           ? "Записите се пазят локално за това устройство и този браузър."
           : "Тази среда не пази записи трайно."}
       </p>
-      {selected && <RecordDetail record={selected} p={p} session={session} notify={notify} onClose={() => setSelected(null)} onEdit={onEdit} />}
+      {selected && <RecordDetail record={selected} p={p} session={session} notify={notify} onClose={() => setSelected(null)} onEdit={onEdit} onOffer={onOffer} />}
     </div>
   );
 }
@@ -4530,29 +4585,23 @@ export default function KorektCalculator() {
   const [offersFrameKey, setOffersFrameKey] = useState(0); // смяна → iframe-ът се презарежда и поема нова калкулация
   // „Направи оферта“ от стъпка „Цена“: оставя калкулацията в localStorage (същият
   // origin като oferti.html) и отваря раздела; формата я превръща в нова оферта
-  const makeOfferFromCalc = () => {
-    const rec = buildRecord(s, p, r, null, recordNumber.current, userName);
-    const intl = s.service === "international";
-    const payload = {
-      service: s.service, serviceLabel: SERVICE_LABELS[s.service] || s.service,
-      calcNumber: recordNumber.current || null, total: rec.total,
-      fromCity: s.service === "local" ? s.city : s.pickupCity || s.city || "",
-      toCity: s.service === "local" ? s.city : intl ? "" : s.dropoffCity || "",
-      toCountry: intl ? s.country || "" : "България",
-      from: rec.from, to: rec.to, pickup: rec.pickup, dropoff: rec.dropoff,
-      km: rec.km, volumeM3: rec.volumeM3, weightKg: rec.weightKg, truck: rec.truck,
-      items: rec.items.map((i) => ({ label: i.label, qty: i.qty })),
-      // вътрешно за офертата (клиентът не го вижда): разговорът с гласовия асистент и бележката
-      transcript: carryRef.current?.transcript || null,
-      notes: carryRef.current?.notes || null,
-      clientName: carryRef.current?.contact?.name || s.name || "",
-    };
-    try { localStorage.setItem("korekt:offerFromCalc", JSON.stringify(payload)); } catch (e) { /* без значение */ }
+  // Оферта от запитване: проверява условията, оставя запитването в localStorage (същият origin
+  // като oferti.html) и отваря раздела; формата го превръща в оферта с номера на запитването.
+  const openOfferFor = (rec) => {
+    const miss = offerBlockers(rec);
+    if (miss.length) { notify("За оферта липсва: " + miss.join("; ") + ".", "error"); return; }
+    try { localStorage.setItem("korekt:offerFromCalc", JSON.stringify(offerPayloadFromRecord(rec))); } catch (e) { /* без значение */ }
     guardAdmin(() => {
       setShowLog(false); setShowSettings(false); setShowUsers(false); setShowProfile(false);
       setOffersFrameKey((k) => k + 1); setShowOffers(true);
       window.scrollTo(0, 0);
     });
+  };
+  // „Направи оферта“ от стъпка „Цена“ — текущата калкулация, с клиента от полетата горе
+  const makeOfferFromCalc = () => {
+    const rec = withCarry(buildRecord(s, p, r, recordKey.current, recordNumber.current, userName));
+    if (s.name || s.phone || s.email) rec.contact = { name: s.name, phone: s.phone, email: s.email };
+    openOfferFor(rec);
   };
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
 
@@ -4850,7 +4899,7 @@ export default function KorektCalculator() {
           {userName && <span className="text-sm text-slate-500 truncate">{userName}</span>}
         </div>
 
-        {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} session={authSession} onEdit={loadRecordForEditing} notify={notify} />}
+        {showLog && <LogPanel onClose={() => setShowLog(false)} p={p} session={authSession} onEdit={loadRecordForEditing} onOffer={openOfferFor} notify={notify} />}
         {/* остава монтиран, само скрит — за да не се затварят отворените секции при всяко отваряне на панела */}
         {isAdmin && (
           <div style={{ display: showSettings ? "block" : "none" }}>

@@ -29,7 +29,7 @@ const engineSrc =
   fleetFor, tripsFor, bestTruck, computePrice, totalWeight, findCity, protectMetersFor, BASES, nearestBase, baseOnRoute, mergeParams, buildRecord, toCSV, disHoursFor, wrapMetersFor, CITIES, estimateKmAny, pointFor,
   saveCalc, loadCalcs, saveParams, loadParams, CALC_PREFIX, PARAMS_KEY, fetchParamsFromSupabase, pushParamsToSupabase, pushCalcToSupabase, fetchCalcsFromSupabase, fetchCatalogItemsFromSupabase, pushCatalogItemToSupabase, applyExtraCatalogItems, nextCalcNumber, CALC_COUNTER_KEY, fetchRealDistanceKm, routesCache, ROUTES_CACHE_KEY, roundHalf, sanitizeNumericParams,
   storageSet, storageGet, storageList, getStorageMode, hasStorage, isValidEmail, isValidPhone, isAllowedSignupEmail, isAdminSession,
-  parseItemList, parseItemListLine, matchCatalogItem };\n`;
+  parseItemList, parseItemListLine, matchCatalogItem, offerBlockers, offerPayloadFromRecord };\n`;
 
 const tmp = path.join(os.tmpdir(), `korekt-engine-${Date.now()}.mjs`);
 fs.writeFileSync(tmp, engineSrc);
@@ -1773,6 +1773,19 @@ test("бригада: по обем, стълби и монтаж — не по 
   eq(calc({ ...base, qty: { washer: 1 }, pickup: up(6, false) }, p2).crew, 2, "една пералня (под 4 м³) остава с двама");
   eq(calc({ ...base, qty: { ...sofa, wardrobe3: 2, boxM: 30 } }, p2).crew, 4, "над 8 м³ → 4 и без стълби");
   eq(calc({ ...base, qty: sofa, pickup: up(5, false), crewOverride: 2 }, p2).crew, 2, "ръчно зададената бригада не се пипа");
+});
+test("оферта: само от запитване с номер, цена, име и телефон или имейл (Додо, 25.11.2026)", () => {
+  const rec = { calcNumber: 111, total: 538, service: "local", city: "София", from: "Люлин", to: "Младост", items: [{ label: "Пералня", qty: 1 }],
+    contact: { name: "Тест Клиент", phone: "0888 000 101", email: "" }, formState: { city: "София" } };
+  eq(E.offerBlockers(rec).length, 0, "пълното запитване става оферта");
+  eq(E.offerBlockers({ ...rec, calcNumber: null }).length, 1, "без номер на запитване");
+  eq(E.offerBlockers({ ...rec, total: 0 }).length, 1, "без цена");
+  eq(E.offerBlockers({ ...rec, noPrice: true }).length, 1, "цена, която не е определена от колега");
+  eq(E.offerBlockers({ ...rec, contact: { name: "", phone: "0888" } }).length, 1, "без име");
+  eq(E.offerBlockers({ ...rec, contact: { name: "Тест", phone: "", email: "" } }).length, 1, "без телефон и имейл");
+  eq(E.offerBlockers({ ...rec, contact: { name: "Тест", phone: "", email: "a@b.bg" } }).length, 0, "само имейл стига");
+  const pay = E.offerPayloadFromRecord(rec);
+  eq(pay.calcNumber, 111); eq(pay.clientName, "Тест Клиент"); eq(pay.clientPhone, "0888 000 101"); eq(pay.total, 538); eq(pay.fromCity, "София");
 });
 test("монтаж/ТРД: няма транспортно перо — стоката не е наша грижа", () => {
   const r = calc({ service: "assembly", city: "София", manualHours: 4 });

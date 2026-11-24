@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-nlOMb4jM5UeeYRjQWcnmcfLLCb754IwBroM7GKOfrqE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-tQi6ESI5H7WuS1ha70+98oaSZci64kkYlkpkLv0iT4k='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -4546,6 +4546,69 @@ async function pushCalcToSupabase(record, url, key, isUpdate, touchStatus = true
 
 // изтегля всички калкулации от Supabase (видими за всички устройства) — праща логнатата
 // сесия; от 08.11.2026 RLS пуска calculations само на authenticated, anon вижда празно
+// ОФЕРТА СЕ ПРАВИ САМО ОТ ЗАПИТВАНЕ (решение на Додо, 25.11.2026): трябва да има номер на запитването,
+// определена цена, име на клиента и телефон или имейл. Връща списък с липсващото (празен = може).
+function offerBlockers(rec) {
+  const c = rec?.contact || {},
+    miss = [];
+  if (!rec?.calcNumber) miss.push("запитването още няма номер (изчакайте да се запише)");
+  if (!(Number(rec?.total) > 0) || rec?.noPrice) miss.push("цена (отворете записа с „Редактирай“ и я определете)");
+  if (!String(c.name || "").trim()) miss.push("име на клиента");
+  if (!String(c.phone || "").trim() && !String(c.email || "").trim()) miss.push("телефон или имейл на клиента");
+  return miss;
+}
+// какво минава от запитването в офертата (oferti.html → fromCalc)
+function offerPayloadFromRecord(rec) {
+  const fs = rec.formState || {},
+    intl = rec.service === "international",
+    c = rec.contact || {};
+  return {
+    service: rec.service,
+    serviceLabel: typeof SERVICE_LABELS !== "undefined" && SERVICE_LABELS[rec.service] || rec.service,
+    calcNumber: rec.calcNumber || null,
+    total: rec.total,
+    fromCity: rec.service === "local" ? fs.city || rec.city : fs.pickupCity || fs.city || rec.city || "",
+    toCity: rec.service === "local" ? fs.city || rec.city : intl ? "" : fs.dropoffCity || "",
+    toCountry: intl ? fs.country || "" : "България",
+    from: rec.from,
+    to: rec.to,
+    pickup: rec.pickup,
+    dropoff: rec.dropoff,
+    km: rec.km,
+    volumeM3: rec.volumeM3,
+    weightKg: rec.weightKg,
+    truck: rec.truck,
+    items: (rec.items || []).map(i => ({
+      label: i.label,
+      qty: i.qty
+    })),
+    // вътрешно за офертата (клиентът не го вижда): разговорът с гласовия асистент и бележката
+    transcript: rec.transcript || null,
+    notes: rec.notes || null,
+    clientName: c.name || "",
+    clientPhone: c.phone || "",
+    clientEmail: c.email || ""
+  };
+}
+// офертите към запитванията: { "111": [{ id, shared, accepted }] } — за колоната „Статус“ в Записи
+async function fetchOffersByCalc(url, key, session) {
+  if (!url || !key || !session) return {};
+  try {
+    const res = await fetch(`${url}/rest/v1/offers?select=id,shared_at,accepted_at,calc:data->>calcNumber&order=updated_at.desc`, {
+      headers: authHeaders(session, key)
+    });
+    if (!res.ok) return {};
+    const out = {};
+    for (const o of await res.json()) if (o.calc) (out[o.calc] ||= []).push({
+      id: o.id,
+      shared: !!o.shared_at,
+      accepted: !!o.accepted_at
+    });
+    return out;
+  } catch (e) {
+    return {};
+  }
+}
 async function fetchCalcsFromSupabase(url, key, session) {
   if (!url || !key) return [];
   try {
@@ -6494,7 +6557,8 @@ function RecordDetail({
   session,
   notify,
   onClose,
-  onEdit
+  onEdit,
+  onOffer
 }) {
   const serviceLabel = SERVICE_LABELS[r.service] || r.service;
   const lift = a => !a ? "" : a.elevator ? a.elevatorType === "cargo" ? "товарен асансьор" : "пътнически асансьор" : "без асансьор";
@@ -6536,7 +6600,15 @@ function RecordDetail({
       color: ink
     },
     title: "Копира калкулацията като текст за поле „Забележка“ в pro и Description в ERP"
-  }, "📋 За Pro"), onEdit && (r.formState ? /*#__PURE__*/React.createElement("button", {
+  }, "📋 За Pro"), onOffer && /*#__PURE__*/React.createElement("button", {
+    onClick: () => onOffer(r),
+    className: "text-xs font-semibold px-3 py-1 rounded-full",
+    style: {
+      background: "#fff",
+      color: ink
+    },
+    title: "Прави оферта от това запитване. Трябват цена, име на клиента и телефон или имейл."
+  }, "📄 Оферта"), onEdit && (r.formState ? /*#__PURE__*/React.createElement("button", {
     onClick: () => onEdit(r),
     className: "text-xs font-semibold px-3 py-1 rounded-full",
     style: {
@@ -6849,9 +6921,11 @@ function LogPanel({
   p,
   session,
   onEdit,
+  onOffer,
   notify
 }) {
   const [rows, setRows] = useState(null);
+  const [offers, setOffers] = useState({});
   const [err, setErr] = useState(false);
   const [confirming, setConfirming] = useState(null);
   const [confirmingWhich, setConfirmingWhich] = useState(null); // ред, чакащ второ потвърждение (inline, не native confirm)
@@ -6869,6 +6943,7 @@ function LogPanel({
     const d = await loadCalcs(p, session);
     setRows(d);
     setErr(d.length === 0);
+    setOffers(await fetchOffersByCalc(p?.supabaseUrl, p?.supabaseKey, session));
   };
   useEffect(() => {
     refresh();
@@ -7233,7 +7308,14 @@ function LogPanel({
       background: r.status === "потвърдена" ? "#dcfce7" : r.status === "заявка" ? "#fff8ef" : "#f1f5f9",
       color: r.status === "потвърдена" ? "#166534" : r.status === "заявка" ? accent : "#64748b"
     }
-  }, r.status || "калкулация"), r.actual && /*#__PURE__*/React.createElement("span", {
+  }, r.status || "калкулация"), (offers[String(r.calcNumber)] || []).slice(0, 1).map(o => /*#__PURE__*/React.createElement("div", {
+    key: o.id,
+    className: "text-[10px] mt-0.5",
+    style: {
+      color: o.accepted ? "#166534" : "#64748b"
+    },
+    title: `Оферта ${o.id} към това запитване`
+  }, "📄 ", o.id, " · ", o.accepted ? "приета" : o.shared ? "изпратена" : "чернова")), r.actual && /*#__PURE__*/React.createElement("span", {
     className: "ml-1 text-[11px]",
     style: {
       color: accent
@@ -7306,7 +7388,8 @@ function LogPanel({
     session: session,
     notify: notify,
     onClose: () => setSelected(null),
-    onEdit: onEdit
+    onEdit: onEdit,
+    onOffer: onOffer
   }));
 }
 
@@ -8409,36 +8492,16 @@ function KorektCalculator() {
   const [offersFrameKey, setOffersFrameKey] = useState(0); // смяна → iframe-ът се презарежда и поема нова калкулация
   // „Направи оферта“ от стъпка „Цена“: оставя калкулацията в localStorage (същият
   // origin като oferti.html) и отваря раздела; формата я превръща в нова оферта
-  const makeOfferFromCalc = () => {
-    const rec = buildRecord(s, p, r, null, recordNumber.current, userName);
-    const intl = s.service === "international";
-    const payload = {
-      service: s.service,
-      serviceLabel: SERVICE_LABELS[s.service] || s.service,
-      calcNumber: recordNumber.current || null,
-      total: rec.total,
-      fromCity: s.service === "local" ? s.city : s.pickupCity || s.city || "",
-      toCity: s.service === "local" ? s.city : intl ? "" : s.dropoffCity || "",
-      toCountry: intl ? s.country || "" : "България",
-      from: rec.from,
-      to: rec.to,
-      pickup: rec.pickup,
-      dropoff: rec.dropoff,
-      km: rec.km,
-      volumeM3: rec.volumeM3,
-      weightKg: rec.weightKg,
-      truck: rec.truck,
-      items: rec.items.map(i => ({
-        label: i.label,
-        qty: i.qty
-      })),
-      // вътрешно за офертата (клиентът не го вижда): разговорът с гласовия асистент и бележката
-      transcript: carryRef.current?.transcript || null,
-      notes: carryRef.current?.notes || null,
-      clientName: carryRef.current?.contact?.name || s.name || ""
-    };
+  // Оферта от запитване: проверява условията, оставя запитването в localStorage (същият origin
+  // като oferti.html) и отваря раздела; формата го превръща в оферта с номера на запитването.
+  const openOfferFor = rec => {
+    const miss = offerBlockers(rec);
+    if (miss.length) {
+      notify("За оферта липсва: " + miss.join("; ") + ".", "error");
+      return;
+    }
     try {
-      localStorage.setItem("korekt:offerFromCalc", JSON.stringify(payload));
+      localStorage.setItem("korekt:offerFromCalc", JSON.stringify(offerPayloadFromRecord(rec)));
     } catch (e) {/* без значение */}
     guardAdmin(() => {
       setShowLog(false);
@@ -8449,6 +8512,16 @@ function KorektCalculator() {
       setShowOffers(true);
       window.scrollTo(0, 0);
     });
+  };
+  // „Направи оферта“ от стъпка „Цена“ — текущата калкулация, с клиента от полетата горе
+  const makeOfferFromCalc = () => {
+    const rec = withCarry(buildRecord(s, p, r, recordKey.current, recordNumber.current, userName));
+    if (s.name || s.phone || s.email) rec.contact = {
+      name: s.name,
+      phone: s.phone,
+      email: s.email
+    };
+    openOfferFor(rec);
   };
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
 
@@ -8926,6 +8999,7 @@ function KorektCalculator() {
     p: p,
     session: authSession,
     onEdit: loadRecordForEditing,
+    onOffer: openOfferFor,
     notify: notify
   }), isAdmin && /*#__PURE__*/React.createElement("div", {
     style: {

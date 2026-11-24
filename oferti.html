@@ -90,8 +90,7 @@ textarea { min-height: 54px; resize: vertical; }
 <header class="bar">
   <h1>Корект · Оферти</h1>
   <select id="pick" aria-label="Запазени оферти"><option value="">Запазени оферти…</option></select>
-  <button type="button" class="tb" id="btnNew">+ Нова</button>
-  <button type="button" class="tb" id="btnDup">Копие</button>
+  <button type="button" class="tb" id="btnDup" title="Нова версия на офертата към същото запитване (напр. BG-2026-0111-2)">Нова версия</button>
   <span class="sp"></span>
   <span class="pill" id="status">Зарежда…</span>
   <div class="seg panes-switch" role="group" aria-label="Изглед">
@@ -188,7 +187,9 @@ textarea { min-height: 54px; resize: vertical; }
 
     <fieldset>
       <legend>Вътрешно — клиентът не го вижда</legend>
-      <label class="f">По калкулация №<input type="text" id="f-calcNumber" data-k="calcNumber" placeholder="напр. 171"></label>
+      <label class="f">По запитване №<input type="text" id="f-calcNumber" data-k="calcNumber" readonly title="Идва от запитването — офертата се прави от „Записи“"></label>
+      <label class="f">Телефон на клиента<input type="text" id="f-clientPhone" data-k="clientPhone"></label>
+      <label class="f">Имейл на клиента<input type="text" id="f-clientEmail" data-k="clientEmail"></label>
       <label class="f">Бележка за колегите<textarea id="f-internalNotes" data-k="internalNotes" placeholder="особености, желана дата, неща извън каталога"></textarea></label>
       <label class="f">Разговор с клиента (гласов асистент)<textarea id="f-transcript" data-k="transcript" style="min-height:140px" placeholder="Попълва се сам, когато офертата е направена от калкулация на гласовия асистент."></textarea></label>
     </fieldset>
@@ -288,6 +289,9 @@ function fromCalc(c) {
   o.lines = [{ name: c.serviceLabel || "Услуга", desc: c.calcNumber ? `По калкулация №${c.calcNumber}` : "", amount: c.total || "" }];
   // вътрешни полета — не влизат в toOffer(), затова клиентът не ги вижда
   o.calcNumber = c.calcNumber ? String(c.calcNumber) : "";
+  if (o.calcNumber) o.id = idForCalc(kind, o.calcNumber);
+  o.client = c.clientName || "";
+  o.clientPhone = c.clientPhone || ""; o.clientEmail = c.clientEmail || "";   // вътрешни — за връзка с клиента
   o.internalNotes = c.notes || "";
   o.transcript = Array.isArray(c.transcript)
     ? c.transcript.map(t => `${t.at || ""} ${t.who === "клиент" ? "Клиент" : "Асистент"}: ${t.text}`.trim()).join("\n")
@@ -295,7 +299,7 @@ function fromCalc(c) {
   return o;
 }
 
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10); // местната дата, не UTC
 let TEMPLATE = "", DEFAULT_PHOTO = "";
 let S = null;            // текущата оферта
 let dirty = false, saved = {}, pvReady = false;
@@ -308,6 +312,14 @@ function nextId(kind) {
   const re = new RegExp(`^${pre}-(\\d{4})-(\\d+)$`);
   const nums = Object.keys(saved).map(k => (k.match(re) || [])).filter(m => m[1] === yr).map(m => +m[2]);
   return `${pre}-${yr}-${String((nums.length ? Math.max(...nums) : 0) + 1).padStart(4, "0")}`;
+}
+
+// Номерът на офертата идва от номера на запитването: №111 → BG-2026-0111; втора оферта към същото
+// запитване → BG-2026-0111-2 (решение на Додо, 25.11.2026). Оферта без запитване не се прави.
+function idForCalc(kind, calcNumber) {
+  const base = `${kind === "domestic" ? "BG" : "INT"}-${TODAY.slice(0, 4)}-${String(calcNumber).padStart(4, "0")}`;
+  if (!saved[base]) return base;
+  for (let v = 2; ; v++) if (!saved[`${base}-${v}`]) return `${base}-${v}`;
 }
 
 function blank(kind = "international") {
@@ -470,7 +482,7 @@ document.addEventListener("click", e => {
     ["conditions", "service", "vehicle", "lines", "advance", "toCountry", "coName", "coRole", "coPhone", "coPhoto"]
       .forEach(f => { if (JSON.stringify(S[f]) === JSON.stringify(was[f])) S[f] = now[f]; });
     S.kind = k;
-    if (!saved[S.id]) S.id = nextId(k);           // нов номер с правилния префикс (BG- / INT-)
+    if (!saved[S.id]) S.id = S.calcNumber ? idForCalc(k, S.calcNumber) : nextId(k);   // нов номер с правилния префикс (BG- / INT-)
     if (k === "domestic" && !S.toCountry) S.toCountry = "България";
     fillInputs(); changed(); return;
   }
@@ -530,10 +542,14 @@ $("pick").onchange = () => {
   if (dirty && !$("pick").dataset.confirm) { showMsg("warn", `Имате незапазени промени. Изберете „${id}“ пак, за да ги откажете.`); $("pick").dataset.confirm = id; refreshPick(); return; }
   delete $("pick").dataset.confirm; showMsg("", ""); load(saved[id]);
 };
-$("btnNew").onclick = () => { load(blank()); };
-$("btnDup").onclick = () => { const c = JSON.parse(JSON.stringify(S)); c.id = nextId(c.kind); c.issued = TODAY; load(c); markDirty(true); };
+$("btnDup").onclick = () => {
+  if (!S.calcNumber) { showMsg("warn", "Тази оферта не е към запитване. Нова оферта се прави от „Записи“ → отворете запитването → „Оферта“."); return; }
+  const c = JSON.parse(JSON.stringify(S)); c.id = idForCalc(c.kind, c.calcNumber); c.issued = TODAY; load(c); markDirty(true);
+};
 
 $("btnSave").onclick = async () => {
+  // оферта се прави само от запитване (стари оферти без запитване могат да се дозаписват)
+  if (!S.calcNumber && !saved[S.id]) { showMsg("warn", "Оферта се прави само от запитване: „Записи“ → отворете запитването → „Оферта“."); return; }
   if (!session()) { showMsg("warn", "Не сте влезли. Влезте в калкулатора и отворете „Оферти“ оттам."); return; }
   const id = (S.id || "").trim();
   if (!/^[A-Za-z0-9_.~:@+-]{1,60}$/.test(id)) { showMsg("warn", "Номерът може да съдържа само латински букви, цифри и тире, напр. INT-2026-0148."); $("f-id").focus(); return; }
