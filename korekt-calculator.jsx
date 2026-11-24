@@ -3164,6 +3164,7 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
             <div>
               <div className="text-sm opacity-80">Прогнозна цена — по опит</div>
               <div className="text-4xl font-extrabold mt-1">≈ {r.total} {p?.currency}</div>
+              <div className="text-sm opacity-90 mt-0.5">без ДДС · <b>{Math.round((Number(r.total) || 0) * 1.2)} {p?.currency} с ДДС</b> (цената за клиента)</div>
             </div>
             <div className="text-right">
               <div className="text-sm opacity-80">Обем · тегло</div>
@@ -3389,6 +3390,20 @@ function LogPanel({ onClose, p, session, onEdit, notify }) {
     if (p?.supabaseUrl && p?.supabaseKey && !res?.ok) setConfirmError(key);
   };
 
+  // Оценка на калкулацията от колега: 👍 = отговаря на реалността (влиза в самообучението),
+  // 👎 = разминава се (не се ползва за самообучение). Второ натискане на същата оценка я маха.
+  const [rating, setRating] = useState(null);
+  const rateRow = async (row, verdict) => {
+    setRating(row.key);
+    const { key, ...record } = row;
+    if (record.review?.verdict === verdict) delete record.review;
+    else record.review = { verdict, by: session?.email || null, at: new Date().toISOString() };
+    await pushCalcToSupabase(record, p?.supabaseUrl, p?.supabaseKey, true, true, session);
+    await saveCalc(key, record);
+    await refresh();
+    setRating(null);
+  };
+
   const download = () => {
     const blob = new Blob(["\uFEFF" + toCSV(sortedRows || [])], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
@@ -3512,7 +3527,7 @@ function LogPanel({ onClose, p, session, onEdit, notify }) {
                   <th className="py-1.5 px-1 font-medium">Кой</th>
                   <th className="py-1.5 px-1 font-medium">Маршрут</th>
                   <th className="py-1.5 px-1 font-medium text-right cursor-pointer select-none" onClick={() => toggleSort("volumeM3")}>м³{sortArrow("volumeM3")}</th>
-                  <th className="py-1.5 px-1 font-medium text-right cursor-pointer select-none" onClick={() => toggleSort("total")}>Цена{sortArrow("total")}</th>
+                  <th className="py-1.5 px-1 font-medium text-right cursor-pointer select-none" onClick={() => toggleSort("total")} title="Крайна цена с ДДС — както я вижда клиентът; отдолу е без ДДС">Цена с ДДС{sortArrow("total")}</th>
                   <th className="py-1.5 px-1 font-medium">Статус</th>
                   <th className="py-1.5 px-1 font-medium"></th>
                 </tr>
@@ -3528,7 +3543,10 @@ function LogPanel({ onClose, p, session, onEdit, notify }) {
                     <td className="py-1.5 px-1 text-slate-500 whitespace-nowrap">{r.createdBy || "—"}</td>
                     <td className="py-1.5 px-1 text-slate-700">{recordRouteLabel(r)}</td>
                     <td className="py-1.5 px-1 text-right text-slate-600">{r.volumeM3}</td>
-                    <td className="py-1.5 px-1 text-right font-semibold whitespace-nowrap" style={{ color: ink }}>{r.total} €</td>
+                    <td className="py-1.5 px-1 text-right whitespace-nowrap" style={{ color: ink }}>
+                      <div className="font-semibold">{Math.round((Number(r.total) || 0) * 1.2)} €</div>
+                      <div className="text-[10px] text-slate-400">{r.total} € без ДДС</div>
+                    </td>
                     <td className="py-1.5 px-1 whitespace-nowrap">
                       <span className="px-2 py-0.5 rounded-full text-[11px]" style={{
                         background: r.status === "потвърдена" ? "#dcfce7" : r.status === "заявка" ? "#fff8ef" : "#f1f5f9",
@@ -3556,7 +3574,15 @@ function LogPanel({ onClose, p, session, onEdit, notify }) {
                           </button>
                         </div>
                       ) : (
-                        <div className="flex gap-1 justify-end">
+                        <div className="flex gap-1 justify-end items-center">
+                          {[["ok", "👍", "Калкулацията е вярна — ползва се за самообучение", "#dcfce7", "#16a34a"], ["bad", "👎", "Калкулацията се разминава — не се ползва за самообучение", "#fee2e2", "#dc2626"]].map(([v, icon, title, bg, border]) => (
+                            <button key={v} onClick={() => rateRow(r, v)} disabled={rating === r.key} title={title + (r.review?.verdict === v && r.review.by ? ` (оценил: ${r.review.by})` : "")}
+                              aria-pressed={r.review?.verdict === v}
+                              className="text-sm px-1.5 py-0.5 rounded-full border disabled:opacity-40"
+                              style={r.review?.verdict === v ? { background: bg, borderColor: border } : { borderColor: "#e2e8f0", opacity: r.review ? 0.35 : 1 }}>
+                              {icon}
+                            </button>
+                          ))}
                           <button onClick={() => setSelected(r)}
                             className="text-[11px] font-semibold px-2 py-1 rounded-full text-white" style={{ background: ink }}>
                             Отвори
@@ -4266,6 +4292,7 @@ export default function KorektCalculator() {
     if (c.source) rec.source = c.source;
     if (c.site) rec.site = c.site;                                   // запитване от сайта: показана цена, обещана отстъпка, съгласие
     if (c.oldCalcNumber != null) rec.oldCalcNumber = c.oldCalcNumber; // номерът преди преномерирането от 24.11.2026
+    if (c.review) rec.review = c.review;                             // оценката 👍/👎 от колега
     if (!rec.contact && c.contact) rec.contact = c.contact;
     return rec;
   };
@@ -4280,7 +4307,7 @@ export default function KorektCalculator() {
     setS({ ...INITIAL_S, ...rec.formState });
     // неща извън формата (разговор с гласовия асистент, бележка, източник, контакт) —
     // пренасят се при всяко презаписване на записа и в офертата, иначе редакцията ги трие
-    carryRef.current = { transcript: rec.transcript || null, notes: rec.notes || null, source: rec.source || null, contact: rec.contact || null, site: rec.site || null, oldCalcNumber: rec.oldCalcNumber ?? null };
+    carryRef.current = { transcript: rec.transcript || null, notes: rec.notes || null, source: rec.source || null, contact: rec.contact || null, site: rec.site || null, oldCalcNumber: rec.oldCalcNumber ?? null, review: rec.review || null };
     recordKey.current = rec.key || null;
     recordNumber.current = rec.calcNumber ?? null;
     pushedRef.current = !!rec.key; // вече съществува ред в Supabase — следващият autosave трябва да е PATCH, не нов POST
