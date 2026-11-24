@@ -71,6 +71,32 @@ function Select({ value, onChange, options, placeholder }) {
     </select>
   );
 }
+const OFFICE_CITIES = Object.keys(NEIGHBORHOODS);
+function CityPicker({ value, onChange, exclude, others }) {
+  const isOther = !!value && !OFFICE_CITIES.includes(value);
+  return (
+    <div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {OFFICE_CITIES.filter((c) => c !== exclude).map((c) => {
+          const on = value === c;
+          return (
+            <button key={c} type="button" aria-pressed={on} onClick={() => onChange(c)}
+              className={"rounded-xl border-2 px-1 py-2.5 text-sm font-semibold transition active:scale-95 " + (on ? "text-white" : "bg-white text-slate-700 border-slate-200")}
+              style={on ? { background: BLUE, borderColor: BLUE } : undefined}>{c}</button>
+          );
+        })}
+      </div>
+      {others && (
+        <select value={isOther ? value : ""} onChange={(e) => onChange(e.target.value)} aria-label="Друг град"
+          className={"mt-1.5 w-full rounded-xl border-2 bg-white px-3 py-2.5 text-sm focus:outline-none " + (isOther ? "font-semibold" : "text-slate-500 border-slate-200")}
+          style={isOther ? { borderColor: BLUE, color: BLUE } : undefined}>
+          <option value="">Друг град…</option>
+          {others.filter((c) => c !== exclude && !OFFICE_CITIES.includes(c)).map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      )}
+    </div>
+  );
+}
 function Stepper({ value, onChange, min = 0, max = 99 }) {
   const btn = "w-10 h-10 rounded-full border border-slate-300 text-xl font-semibold text-slate-700 active:bg-slate-100 disabled:opacity-30";
   return (
@@ -235,8 +261,10 @@ function KlientCalculator() {
     <button type="button" disabled={disabled} onClick={onClick}
       className="w-full rounded-xl py-4 text-base font-bold text-white disabled:opacity-40" style={{ background: BLUE }}>{children}</button>
   );
-  const Back = () => step > 0 && !done && (
-    <button type="button" onClick={() => setStep(step - 1)} className="text-sm text-slate-500 underline mb-3">← Назад</button>
+  const Back = ({ bottom }) => step > 0 && !done && (
+    <button type="button" onClick={() => setStep(step - 1)}
+      className={"rounded-xl border-2 font-bold transition active:scale-95 bg-white " + (bottom ? "px-5 py-4 text-base" : "px-4 py-2 text-sm mb-4")}
+      style={{ borderColor: BLUE, color: BLUE }}>← Назад</button>
   );
   const input = "w-full rounded-xl border border-slate-300 px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500";
 
@@ -300,23 +328,23 @@ function KlientCalculator() {
             <div className="text-lg font-bold mb-4">2. Адреси</div>
             {s.service === "local" ? (
               <div className="space-y-3">
-                <div><Label>Град</Label><Select value={s.city} onChange={(v) => set({ city: v, pickupHood: "", dropoffHood: "" })} options={Object.keys(NEIGHBORHOODS)} placeholder="Изберете град" /></div>
+                <div><Label>Град</Label><CityPicker value={s.city} onChange={(v) => set({ city: v, pickupHood: "", dropoffHood: "" })} /></div>
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div><Label>От квартал</Label><Select value={s.pickupHood} onChange={(v) => set({ pickupHood: v })} options={hoods} placeholder="Изберете" /></div>
                   <div><Label>До квартал</Label><Select value={s.dropoffHood} onChange={(v) => set({ dropoffHood: v })} options={hoods} placeholder="Изберете" /></div>
                 </div>
               </div>
             ) : (
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div><Label>От град</Label><Select value={s.pickupCity} onChange={(v) => set({ pickupCity: v })} options={cities} placeholder="Изберете" /></div>
-                <div><Label>До град</Label><Select value={s.dropoffCity} onChange={(v) => set({ dropoffCity: v })} options={cities.filter((c) => c !== s.pickupCity)} placeholder="Изберете" /></div>
+              <div className="space-y-4">
+                <div><Label>От град</Label><CityPicker value={s.pickupCity} onChange={(v) => set({ pickupCity: v, dropoffCity: v === s.dropoffCity ? "" : s.dropoffCity })} others={cities} /></div>
+                <div><Label>До град</Label><CityPicker value={s.dropoffCity} onChange={(v) => set({ dropoffCity: v })} exclude={s.pickupCity} others={cities} /></div>
               </div>
             )}
             <div className="grid sm:grid-cols-2 gap-3 mt-4">
               <Address title="Откъде взимаме" a={s.pickup} set={(a) => set({ pickup: a })} />
               <Address title="Къде доставяме" a={s.dropoff} set={(a) => set({ dropoff: a })} />
             </div>
-            <div className="mt-5"><Next disabled={!addressOk} onClick={() => setStep(2)}>Напред</Next></div>
+            <div className="mt-5 flex gap-2"><Back bottom /><div className="flex-1"><Next disabled={!addressOk} onClick={() => setStep(2)}>Напред</Next></div></div>
           </Card>
         )}
 
@@ -352,7 +380,7 @@ function KlientCalculator() {
               <Label>Нещо, което го няма в списъка? <span className="font-normal text-slate-400">(по желание)</span></Label>
               <textarea className={input} rows={2} maxLength={500} placeholder="Напр. пиано, сейф, аквариум 300 л" value={other} onChange={(e) => setOther(e.target.value)} />
             </div>
-            <div className="mt-5"><Next disabled={!itemCount} onClick={() => setStep(3)}>Виж цената</Next></div>
+            <div className="mt-5 flex gap-2"><Back bottom /><div className="flex-1"><Next disabled={!itemCount} onClick={() => setStep(3)}>Виж цената</Next></div></div>
           </Card>
         )}
 
