@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-Qn1u6cN1C6hwHP9GXASV+Y5d9luk17/T+56epwoG2NM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-v2B9ZuTbmDJ8GdrxezPmQNh4kAqxwJDQu2M2RG2DAMk='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -3133,7 +3133,8 @@ function computePrice(s, p) {
   // Ако е в самия град на базата, няма път и няма кола.
   const labourAutoBase = usesFieldCrew && s.city ? nearestBase(s.city, n(p.roadFactorBG || 1.25)) : null;
   const labourBaseCity = usesFieldCrew ? s.labourBase || labourAutoBase?.city || null : null;
-  const labourBaseKm = labourBaseCity && s.city ? estimateKmAny(labourBaseCity, "", s.city, "", n(p.roadFactorBG || 1.25)) : 0;
+  const labourKmManual = usesFieldCrew && Number(s.labourKmOverride) > 0 && !!s.labourBase;
+  const labourBaseKm = labourKmManual ? Number(s.labourKmOverride) : labourBaseCity && s.city ? estimateKmAny(labourBaseCity, "", s.city, "", n(p.roadFactorBG || 1.25)) : 0;
   const labourTravelKm = labourBaseKm && labourBaseKm > n(p.labourLocalRadiusKm || 15) ? labourBaseKm : 0;
   const isCourse = !isDisposalService && !usesFieldCrew && oneWayKm >= n(p.intercityThresholdKm);
 
@@ -3836,7 +3837,7 @@ function loadDraft(email) {
     return null;
   }
 }
-function saveDraftLS(email, step, s, recordKey, recordNumber, pushed) {
+function saveDraftLS(email, step, s, recordKey, recordNumber, pushed, carry) {
   if (!email) return;
   try {
     localStorage.setItem(DRAFT_KEY_PREFIX + email.trim().toLowerCase(), JSON.stringify({
@@ -3845,6 +3846,7 @@ function saveDraftLS(email, step, s, recordKey, recordNumber, pushed) {
       recordKey,
       recordNumber,
       pushed,
+      carry: carry || null,
       savedAt: Date.now()
     }));
   } catch (e) {/* без значение — просто няма да се възстанови */}
@@ -7385,6 +7387,7 @@ const INITIAL_S = {
   kmOverride: 0,
   hoursOverride: 0,
   truckHoursOverride: 0,
+  labourKmOverride: 0,
   forceCar: false,
   weFill: true,
   landfillKm: 0,
@@ -7864,13 +7867,15 @@ function KorektCalculator() {
   // иначе презареждане на страницата трупа дубликати (№2, №3...) за една и съща заявка
   const recordKey = useRef(initialDraft?.recordKey || null);
   const recordNumber = useRef(initialDraft?.recordNumber || null); // поредният номер на тази калкулация (генерира се веднъж)
-  const carryRef = useRef(null); // данни от зареден запис, които не са във формата (виж loadRecordForEditing)
+  const carryRef = useRef(initialDraft?.carry || null); // данни от зареден запис, които не са във формата (виж loadRecordForEditing)
   const withCarry = rec => {
     const c = carryRef.current;
     if (!c) return rec;
     if (c.transcript) rec.transcript = c.transcript;
     if (c.notes) rec.notes = c.notes;
     if (c.source) rec.source = c.source;
+    if (c.site) rec.site = c.site; // запитване от сайта: показана цена, обещана отстъпка, съгласие
+    if (c.oldCalcNumber != null) rec.oldCalcNumber = c.oldCalcNumber; // номерът преди преномерирането от 24.11.2026
     if (!rec.contact && c.contact) rec.contact = c.contact;
     return rec;
   };
@@ -7895,7 +7900,9 @@ function KorektCalculator() {
       transcript: rec.transcript || null,
       notes: rec.notes || null,
       source: rec.source || null,
-      contact: rec.contact || null
+      contact: rec.contact || null,
+      site: rec.site || null,
+      oldCalcNumber: rec.oldCalcNumber ?? null
     };
     recordKey.current = rec.key || null;
     recordNumber.current = rec.calcNumber ?? null;
@@ -7929,7 +7936,7 @@ function KorektCalculator() {
       clearDraftLS(authSession?.email);
       return;
     } // нищо избрано още — няма какво да пазим
-    const t = setTimeout(() => saveDraftLS(authSession?.email, step, s, recordKey.current, recordNumber.current, pushedRef.current), 400);
+    const t = setTimeout(() => saveDraftLS(authSession?.email, step, s, recordKey.current, recordNumber.current, pushedRef.current, carryRef.current), 400);
     return () => clearTimeout(t);
   }, [step, s, calcNumberState, authSession?.email]);
   useEffect(() => {

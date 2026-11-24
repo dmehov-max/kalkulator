@@ -1131,8 +1131,9 @@ function computePrice(s, p) {
   // Ако е в самия град на базата, няма път и няма кола.
   const labourAutoBase = usesFieldCrew && s.city ? nearestBase(s.city, n(p.roadFactorBG || 1.25)) : null;
   const labourBaseCity = usesFieldCrew ? (s.labourBase || labourAutoBase?.city || null) : null;
-  const labourBaseKm = labourBaseCity && s.city
-    ? estimateKmAny(labourBaseCity, "", s.city, "", n(p.roadFactorBG || 1.25))
+  const labourKmManual = usesFieldCrew && Number(s.labourKmOverride) > 0 && !!s.labourBase;
+  const labourBaseKm = labourKmManual ? Number(s.labourKmOverride)
+    : labourBaseCity && s.city ? estimateKmAny(labourBaseCity, "", s.city, "", n(p.roadFactorBG || 1.25))
     : 0;
   const labourTravelKm = labourBaseKm && labourBaseKm > n(p.labourLocalRadiusKm || 15) ? labourBaseKm : 0;
   const isCourse = !isDisposalService && !usesFieldCrew && oneWayKm >= n(p.intercityThresholdKm);
@@ -1738,9 +1739,9 @@ function loadDraft(email) {
     return parsed;
   } catch (e) { return null; }
 }
-function saveDraftLS(email, step, s, recordKey, recordNumber, pushed) {
+function saveDraftLS(email, step, s, recordKey, recordNumber, pushed, carry) {
   if (!email) return;
-  try { localStorage.setItem(DRAFT_KEY_PREFIX + email.trim().toLowerCase(), JSON.stringify({ step, s, recordKey, recordNumber, pushed, savedAt: Date.now() })); }
+  try { localStorage.setItem(DRAFT_KEY_PREFIX + email.trim().toLowerCase(), JSON.stringify({ step, s, recordKey, recordNumber, pushed, carry: carry || null, savedAt: Date.now() })); }
   catch (e) { /* без значение — просто няма да се възстанови */ }
 }
 function clearDraftLS(email) {
@@ -3897,7 +3898,7 @@ function ProfilePanel({ session, userName, onSaved, notify, p }) {
 // начално състояние на калкулацията (стъпка 1) — извадено извън компонента, за да служи и като
 // база при сливане с възстановена чернова (schema-safe, ако по-късно добавим ново поле)
 const INITIAL_S = {
-  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, truckHoursOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, deviationOverride: 0, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {}, floorFeeOff: {}, fill: {}, buyBox: {}, stretchRollsManual: 0, stretchRollPriceManual: 0,
+  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, truckHoursOverride: 0, labourKmOverride: 0, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, deviationOverride: 0, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {}, floorFeeOff: {}, fill: {}, buyBox: {}, stretchRollsManual: 0, stretchRollPriceManual: 0,
   pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   extras: { packing: false, materials: false, disassembly: false },
@@ -4181,13 +4182,15 @@ export default function KorektCalculator() {
   // иначе презареждане на страницата трупа дубликати (№2, №3...) за една и съща заявка
   const recordKey = useRef(initialDraft?.recordKey || null);
   const recordNumber = useRef(initialDraft?.recordNumber || null); // поредният номер на тази калкулация (генерира се веднъж)
-  const carryRef = useRef(null); // данни от зареден запис, които не са във формата (виж loadRecordForEditing)
+  const carryRef = useRef(initialDraft?.carry || null); // данни от зареден запис, които не са във формата (виж loadRecordForEditing)
   const withCarry = (rec) => {
     const c = carryRef.current;
     if (!c) return rec;
     if (c.transcript) rec.transcript = c.transcript;
     if (c.notes) rec.notes = c.notes;
     if (c.source) rec.source = c.source;
+    if (c.site) rec.site = c.site;                                   // запитване от сайта: показана цена, обещана отстъпка, съгласие
+    if (c.oldCalcNumber != null) rec.oldCalcNumber = c.oldCalcNumber; // номерът преди преномерирането от 24.11.2026
     if (!rec.contact && c.contact) rec.contact = c.contact;
     return rec;
   };
@@ -4202,7 +4205,7 @@ export default function KorektCalculator() {
     setS({ ...INITIAL_S, ...rec.formState });
     // неща извън формата (разговор с гласовия асистент, бележка, източник, контакт) —
     // пренасят се при всяко презаписване на записа и в офертата, иначе редакцията ги трие
-    carryRef.current = { transcript: rec.transcript || null, notes: rec.notes || null, source: rec.source || null, contact: rec.contact || null };
+    carryRef.current = { transcript: rec.transcript || null, notes: rec.notes || null, source: rec.source || null, contact: rec.contact || null, site: rec.site || null, oldCalcNumber: rec.oldCalcNumber ?? null };
     recordKey.current = rec.key || null;
     recordNumber.current = rec.calcNumber ?? null;
     pushedRef.current = !!rec.key; // вече съществува ред в Supabase — следващият autosave трябва да е PATCH, не нов POST
@@ -4232,7 +4235,7 @@ export default function KorektCalculator() {
   // пазим и ключа/номера на записа, за да не се трупат дубликати (№2, №3...) при презареждане
   useEffect(() => {
     if (!s.service) { clearDraftLS(authSession?.email); return; } // нищо избрано още — няма какво да пазим
-    const t = setTimeout(() => saveDraftLS(authSession?.email, step, s, recordKey.current, recordNumber.current, pushedRef.current), 400);
+    const t = setTimeout(() => saveDraftLS(authSession?.email, step, s, recordKey.current, recordNumber.current, pushedRef.current, carryRef.current), 400);
     return () => clearTimeout(t);
   }, [step, s, calcNumberState, authSession?.email]);
 

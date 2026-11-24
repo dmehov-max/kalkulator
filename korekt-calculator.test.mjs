@@ -2369,6 +2369,16 @@ test("само хамали: стълбите се смятат по работ�
   eq(stairAmount(calc(plochki)), Math.round(4 * 40 * P.boxPerFloor), "40 кашона × 4 етажа:");
 });
 
+test("само хамали: зададени км до бригадата (от Google Maps) за непознато населено място", () => {
+  const без = calc({ service: "labour", city: "Равда", qty: { boxM: 10 } });
+  eq(без.labourTravelKm, 0, "непознато място без зададени км — няма път:");
+  const r = calc({ service: "labour", city: "Равда", labourBase: "Бургас", labourKmOverride: 33, qty: { boxM: 10 } });
+  eq(r.labourBaseCity, "Бургас"); eq(r.labourTravelKm, 33, "км в едната посока:");
+  ok(r.lines.some((l) => l.label.startsWith("Път на бригадата (Бургас → Равда)")), "липсва път на бригадата");
+  ok(r.lines.some((l) => l.label.startsWith("Кола за бригадата — 66 км")), "колата е по километри");
+  eq(calc({ service: "labour", city: "Равда", labourBase: "Бургас", labourKmOverride: 9, qty: { boxM: 10 } }).labourTravelKm, 0, "под радиуса без път — без път:");
+});
+
 /* ---------- Синтактична проверка на целия файл (вкл. интерфейса) ---------- */
 test("файлът е синтактично валиден JSX", () => {
   let parse;

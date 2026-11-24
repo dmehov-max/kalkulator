@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Калкулатор за преместване — Корект преместване</title>
 <meta name="description" content="Вижте ориентировъчна цена за Вашето преместване за една минута — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-1htRfqanVniTyzeGh2/yfRn2vlnSSTeYUld63LsYDW8='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-9XtbnsCCXyDbHjpdW8ngc+Nx+P6+l5boYeWAYITnzj0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="robots" content="noindex">
 <script src="vendor/tailwind-play-3.4.17.js" integrity="sha384-igm5BeiBt36UU4gqwWS7imYmelpTsZlQ45FZf+XBn9MuJbn4nQr7yx1yFydocC/K"></script>
@@ -3094,7 +3094,8 @@ function computePrice(s, p) {
   // Ако е в самия град на базата, няма път и няма кола.
   const labourAutoBase = usesFieldCrew && s.city ? nearestBase(s.city, n(p.roadFactorBG || 1.25)) : null;
   const labourBaseCity = usesFieldCrew ? s.labourBase || labourAutoBase?.city || null : null;
-  const labourBaseKm = labourBaseCity && s.city ? estimateKmAny(labourBaseCity, "", s.city, "", n(p.roadFactorBG || 1.25)) : 0;
+  const labourKmManual = usesFieldCrew && Number(s.labourKmOverride) > 0 && !!s.labourBase;
+  const labourBaseKm = labourKmManual ? Number(s.labourKmOverride) : labourBaseCity && s.city ? estimateKmAny(labourBaseCity, "", s.city, "", n(p.roadFactorBG || 1.25)) : 0;
   const labourTravelKm = labourBaseKm && labourBaseKm > n(p.labourLocalRadiusKm || 15) ? labourBaseKm : 0;
   const isCourse = !isDisposalService && !usesFieldCrew && oneWayKm >= n(p.intercityThresholdKm);
 
@@ -3797,7 +3798,7 @@ function loadDraft(email) {
     return null;
   }
 }
-function saveDraftLS(email, step, s, recordKey, recordNumber, pushed) {
+function saveDraftLS(email, step, s, recordKey, recordNumber, pushed, carry) {
   if (!email) return;
   try {
     localStorage.setItem(DRAFT_KEY_PREFIX + email.trim().toLowerCase(), JSON.stringify({
@@ -3806,6 +3807,7 @@ function saveDraftLS(email, step, s, recordKey, recordNumber, pushed) {
       recordKey,
       recordNumber,
       pushed,
+      carry: carry || null,
       savedAt: Date.now()
     }));
   } catch (e) {/* без значение — просто няма да се възстанови */}
