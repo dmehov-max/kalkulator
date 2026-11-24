@@ -1790,6 +1790,19 @@ test("оферта: само от запитване с номер, цена, и
   eq(E.offerPayloadFromRecord({ ...rec, site: { discountPct: 5 } }).discountPct, 5, "отстъпката от формата");
   eq(pay.calcNumber, 111); eq(pay.clientName, "Тест Клиент"); eq(pay.clientPhone, "0888 000 101"); eq(pay.total, 538); eq(pay.fromCity, "София");
 });
+test("оферта: към всяка вещ излиза уточнение — разглобяване, сглобяване, опаковане", () => {
+  const rec = { calcNumber: 111, total: 538, service: "local", contact: { name: "Тест", phone: "0888" },
+    items: [{ id: "wardrobe3", label: "Гардероб 3-крилен", qty: 1 }, { id: "tvstand", label: "ТВ", qty: 1 }, { id: "boxM", label: "Кашон среден", qty: 20 }, { id: "chair", label: "Стол", qty: 4 }],
+    formState: { city: "София", dis: { wardrobe3: true }, asm: { wardrobe3: true }, buyBox: { boxM: true }, fill: { boxM: true } } };
+  const note = Object.fromEntries(E.offerPayloadFromRecord(rec).items.map((i) => [i.label, i.note]));
+  ok(/разглобяваме и сглобяваме/.test(note["Гардероб 3-крилен"]) && /стреч фолио/.test(note["Гардероб 3-крилен"]), note["Гардероб 3-крилен"]);
+  ok(/стреч фолио и велпапе/.test(note["ТВ"]), "телевизорът се пази със стреч и велпапе: " + note["ТВ"]);
+  ok(/от нас/.test(note["Кашон среден"]) && /пълним/.test(note["Кашон среден"]), note["Кашон среден"]);
+  const self = E.offerPayloadFromRecord({ ...rec, formState: { ...rec.formState, selfPack: { wardrobe3: true } } }).items[0].note;
+  ok(/опаковано от Вас/.test(self) && !/стреч/.test(self), "опаковано от клиента: " + self);
+  const asmOnly = E.offerPayloadFromRecord({ ...rec, service: "assembly" }).items[0].note;
+  ok(!/стреч|велпапе/.test(asmOnly), "при само монтаж няма опаковане: " + asmOnly);
+});
 test("монтаж/ТРД: няма транспортно перо — стоката не е наша грижа", () => {
   const r = calc({ service: "assembly", city: "София", manualHours: 4 });
   ok(!r.lines.some((l) => l.label.startsWith("Транспорт")), "не бива да има транспорт");

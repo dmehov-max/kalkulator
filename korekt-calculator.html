@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-9bdHUp10sIzu7JqITLDYjp2FHzjl/9deKVm5hrN0tn8='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-TwDIh69hgDirdKX4dfjqtl5nasduo7LX0swEDJcW/CE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -4557,6 +4557,29 @@ function offerBlockers(rec) {
   if (!String(c.phone || "").trim() && !String(c.email || "").trim()) miss.push("телефон или имейл на клиента");
   return miss;
 }
+// Уточнение към вещ в списъка на офертата: разглобява ли се, сглобява ли се, с какво се опакова
+// (Додо, 25.11.2026). Чете същите отметки, по които е сметната цената.
+function offerItemNote(id, cnt, fs, service) {
+  const it = ITEM_INDEX[id];
+  if (!it) return "";
+  const parts = [],
+    dis = it.dis && fs.dis?.[id],
+    asm = it.asm && fs.asm?.[id];
+  if (dis && asm) parts.push("разглобяваме и сглобяваме");else if (dis) parts.push("разглобяваме");else if (asm) parts.push("сглобяваме");
+  const self = pickCount(fs.selfPack?.[id], cnt);
+  if (service !== "assembly") {
+    const pack = [];
+    if (it.wrap && pickCount(fs.wrap?.[id] ?? wrapDefault(it), cnt) - self > 0) pack.push("стреч фолио");
+    if (it.protect && pickCount(fs.protect?.[id] ?? (it.protectReq ? true : false), cnt) - self > 0) pack.push("велпапе");
+    if (pack.length) parts.push("опаковаме със " + pack.join(" и "));
+    if (self > 0) parts.push(self >= cnt ? "опаковано от Вас" : `${self} бр. опаковани от Вас`);
+  }
+  if (it.kind === "box") {
+    if (fs.buyBox?.[id]) parts.push("кашоните са от нас");
+    if (fs.fill?.[id]) parts.push("пълним ги ние");
+  }
+  return parts.join(" · ");
+}
 // какво минава от запитването в офертата (oferti.html → fromCalc)
 function offerPayloadFromRecord(rec) {
   const fs = rec.formState || {},
@@ -4580,7 +4603,8 @@ function offerPayloadFromRecord(rec) {
     truck: rec.truck,
     items: (rec.items || []).map(i => ({
       label: i.label,
-      qty: i.qty
+      qty: i.qty,
+      note: offerItemNote(i.id, i.qty, fs, rec.service)
     })),
     // вътрешно за офертата (клиентът не го вижда): разговорът с гласовия асистент и бележката
     transcript: rec.transcript || null,

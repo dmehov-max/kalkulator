@@ -2228,6 +2228,26 @@ function offerBlockers(rec) {
   if (!String(c.phone || "").trim() && !String(c.email || "").trim()) miss.push("телефон или имейл на клиента");
   return miss;
 }
+// Уточнение към вещ в списъка на офертата: разглобява ли се, сглобява ли се, с какво се опакова
+// (Додо, 25.11.2026). Чете същите отметки, по които е сметната цената.
+function offerItemNote(id, cnt, fs, service) {
+  const it = ITEM_INDEX[id]; if (!it) return "";
+  const parts = [], dis = it.dis && fs.dis?.[id], asm = it.asm && fs.asm?.[id];
+  if (dis && asm) parts.push("разглобяваме и сглобяваме"); else if (dis) parts.push("разглобяваме"); else if (asm) parts.push("сглобяваме");
+  const self = pickCount(fs.selfPack?.[id], cnt);
+  if (service !== "assembly") {
+    const pack = [];
+    if (it.wrap && pickCount(fs.wrap?.[id] ?? wrapDefault(it), cnt) - self > 0) pack.push("стреч фолио");
+    if (it.protect && pickCount(fs.protect?.[id] ?? (it.protectReq ? true : false), cnt) - self > 0) pack.push("велпапе");
+    if (pack.length) parts.push("опаковаме със " + pack.join(" и "));
+    if (self > 0) parts.push(self >= cnt ? "опаковано от Вас" : `${self} бр. опаковани от Вас`);
+  }
+  if (it.kind === "box") {
+    if (fs.buyBox?.[id]) parts.push("кашоните са от нас");
+    if (fs.fill?.[id]) parts.push("пълним ги ние");
+  }
+  return parts.join(" · ");
+}
 // какво минава от запитването в офертата (oferti.html → fromCalc)
 function offerPayloadFromRecord(rec) {
   const fs = rec.formState || {}, intl = rec.service === "international", c = rec.contact || {};
@@ -2239,7 +2259,7 @@ function offerPayloadFromRecord(rec) {
     toCountry: intl ? fs.country || "" : "България",
     from: rec.from, to: rec.to, pickup: rec.pickup, dropoff: rec.dropoff,
     km: rec.km, volumeM3: rec.volumeM3, weightKg: rec.weightKg, truck: rec.truck,
-    items: (rec.items || []).map((i) => ({ label: i.label, qty: i.qty })),
+    items: (rec.items || []).map((i) => ({ label: i.label, qty: i.qty, note: offerItemNote(i.id, i.qty, fs, rec.service) })),
     // вътрешно за офертата (клиентът не го вижда): разговорът с гласовия асистент и бележката
     transcript: rec.transcript || null, notes: rec.notes || null,
     clientName: c.name || "", clientPhone: c.phone || "", clientEmail: c.email || "",
