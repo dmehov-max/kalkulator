@@ -278,6 +278,8 @@ function translitBG(str) {
  * редове се показват на потребителя за ръчен избор, вместо да се гадае тихо. */
 // Разговорни думи → вещ от каталога (поставен списък и гласовият асистент). Първото съвпадение печели.
 const ITEM_SYNONYMS = [
+  // строителни материали на пакети се носят и таксуват като тежък кашон (решение на Додо за №88 и №110)
+  [/плочк|теракот|фаянс|гранитогрес|ламинат|паркет/, "books"],
   [/^(кашон\S*|кутия|кутии)$/, "boxM"], [/кашон\S* (с|за) книги|книги/, "books"],
   [/спалн/, "bedDouble"], [/персон и половина|приста/, "bedDouble"],
   [/телевизор|^тв$|плазма/, "tvstand"], [/секци/, "wallUnit"],
@@ -1513,6 +1515,9 @@ function computePrice(s, p) {
   // работа, не само такса — времето за изпълнение трябва да я отразява (виж stairsManHours по-долу),
   // иначе 5 етажа без асансьор излизат само по-скъпи, но не и по-бавни от партер.
   const boxes = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "box" || it.kind === "sack"); // чувалите се носят като кашони
+  // тежки кашони/чували (плочки, книги, строителни — 20+ кг): стълбите им се таксуват ВИНАГИ,
+  // не влизат в минимума от 2 ч (решение на Додо, 24.11.2026 — №88 и №110)
+  const heavyBoxes = netFloorQty(s.qty, s.floorFeeOff, (it) => (it.kind === "box" || it.kind === "sack") && n(it.kg) >= 20);
   const appNormal = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "appliance");
   const appHeavy = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "appliance_heavy");
   const oversized = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "oversized");
@@ -1535,11 +1540,12 @@ function computePrice(s, p) {
   // превръща таксата за стълби в реални човекочасове по стандартната работническа ставка —
   // екипът реално отделя толкова допълнително време, не само плаща толкова допълнително
   const stairsManHoursAll = workerRate > 0 ? stairs / workerRate : 0;
+  const stairsHeavyManHours = workerRate > 0 ? floorsStdTot * heavyBoxes * n(p.boxPerFloor) / workerRate : 0;
   // Стълбите при дребна задача влизат в платения минимум от 2 ч (решение 18.11.2026): бригадата
   // и без това е платена за 2 ч, а реалната работа е под час. Опаковането заема свободното
   // време първо, стълбите — каквото остане; доплаща се само частта извън минимума.
   const stairsAbsorbedManHours = !isCourse && !usesFieldCrew && !isDisposal && !hoursManual && crew > 0
-    ? Math.min(stairsManHoursAll, Math.max(0, localMinSlack - packAbsorbedClock) * crew) : 0;
+    ? Math.min(stairsManHoursAll - stairsHeavyManHours, Math.max(0, localMinSlack - packAbsorbedClock) * crew) : 0;
   const stairsManHours = stairsManHoursAll - stairsAbsorbedManHours;   // таксуваната част
   const stairsCharged = stairsManHoursAll > 0 ? stairs * (stairsManHours / stairsManHoursAll) : 0;
 
@@ -1577,7 +1583,7 @@ function computePrice(s, p) {
 
   if (stairsCharged > 1e-6) {
     const parts = [];
-    if (floorsStdTot && boxes) parts.push(`${boxes} каш.`);
+    if (floorsStdTot && boxes) parts.push(`${boxes} каш.${heavyBoxes ? ` (${heavyBoxes} тежки)` : ""}`);
     if (floorsStdTot && appNormal) parts.push(`${appNormal} уред`);
     if (floorsStdTot && appHeavy) parts.push(`${appHeavy} спец.`);
     if (floorsStdTot && small) parts.push(`${small} дребни`);
@@ -3018,7 +3024,8 @@ function proNoteText(r, currency = "€") {
   const org = [`бригада ${r.crew} души`, r.trips ? `${r.trips} курс${r.trips === 1 ? "" : "а"}` : "", r.truck || "", r.hours ? `≈ ${(+r.hours).toFixed(1)} ч` : "", r.workDays > 1 ? `${r.workDays} дни` : "", r.courseMode || ""].filter(Boolean);
   lines.push(`Организация: ${org.join(", ")}`);
   const total = Number(r.total) || 0;
-  lines.push(`Цена: ${total} ${currency} без ДДС / ${Math.round(total * 1.2)} ${currency} с ДДС (ориентировъчна)`);
+  lines.push(r.noPrice ? "Цена: НЕ е казана на клиента — определя я колега."
+    : `Цена: ${total} ${currency} без ДДС / ${Math.round(total * 1.2)} ${currency} с ДДС (ориентировъчна)`);
   if (r.storage) lines.push(`Складиране: ${storageLabel(r.storage, currency)}`);
   if (r.notes) lines.push(`Бележка: ${r.notes}`);
   return lines.join("\n");
@@ -3163,8 +3170,13 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
           <div className="flex justify-between items-start">
             <div>
               <div className="text-sm opacity-80">Прогнозна цена — по опит</div>
-              <div className="text-4xl font-extrabold mt-1">≈ {r.total} {p?.currency}</div>
-              <div className="text-sm opacity-90 mt-0.5">без ДДС · <b>{Math.round((Number(r.total) || 0) * 1.2)} {p?.currency} с ДДС</b> (цената за клиента)</div>
+              {r.noPrice ? (<>
+                <div className="text-3xl font-extrabold mt-1">няма цена</div>
+                <div className="text-sm opacity-90 mt-0.5">На клиента <b>не е казана цена</b>. Отворете записа с ✏️, за да я определите.</div>
+              </>) : (<>
+                <div className="text-4xl font-extrabold mt-1">≈ {r.total} {p?.currency}</div>
+                <div className="text-sm opacity-90 mt-0.5">без ДДС · <b>{Math.round((Number(r.total) || 0) * 1.2)} {p?.currency} с ДДС</b> (цената за клиента)</div>
+              </>)}
             </div>
             <div className="text-right">
               <div className="text-sm opacity-80">Обем · тегло</div>
@@ -3443,7 +3455,7 @@ function LogPanel({ onClose, p, session, onEdit, notify }) {
   const byStatus = (st) => (rows || []).filter((r) => (r.status || "калкулация") === st);
   const requests = byStatus("заявка");
   const confirmed = byStatus("потвърдена");
-  const requestsSum = requests.reduce((t, r) => t + (r.total || 0), 0);
+  const requestsSum = requests.reduce((t, r) => t + (r.noPrice ? 0 : r.total || 0), 0);
   const confirmedSum = confirmed.reduce((t, r) => t + (r.total || 0), 0);
   const withContact = (rows || []).filter((r) => r.contact).length;
   const conversionBase = requests.length + confirmed.length;
@@ -3619,8 +3631,10 @@ function LogPanel({ onClose, p, session, onEdit, notify }) {
                     <td className="py-1.5 px-1 text-slate-700">{recordRouteLabel(r)}</td>
                     <td className="py-1.5 px-1 text-right text-slate-600">{r.volumeM3}</td>
                     <td className="py-1.5 px-1 text-right whitespace-nowrap" style={{ color: ink }}>
-                      <div className="font-semibold">{Math.round((Number(r.total) || 0) * 1.2)} €</div>
-                      <div className="text-[10px] text-slate-400">{r.total} € без ДДС</div>
+                      {r.noPrice ? <div className="text-slate-400" title="На клиента не е казана цена — определя я колега">—</div> : (<>
+                        <div className="font-semibold">{Math.round((Number(r.total) || 0) * 1.2)} €</div>
+                        <div className="text-[10px] text-slate-400">{r.total} € без ДДС</div>
+                      </>)}
                     </td>
                     <td className="py-1.5 px-1 whitespace-nowrap">
                       <span className="px-2 py-0.5 rounded-full text-[11px]" style={{

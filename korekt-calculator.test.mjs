@@ -840,6 +840,22 @@ test("списък: кратки думи не съвпадат тривиалн
   const hits = E.matchCatalogItem("маса за хранене");
   ok(!hits.some((h) => h.id === "boxS"), "не бива да съвпадне с кашон само заради къса дума:");
 });
+test("списък: пакети плочки се смятат като тежък кашон (№88, №110)", () => {
+  for (const t of ["плочки", "пакета плочки за баня", "кашони с плочки", "ламинат"]) {
+    eq(E.matchCatalogItem(t)[0]?.id, "books", t);
+  }
+});
+test("стълби: тежките кашони (плочки) се таксуват винаги, леките влизат в минимума (№110)", () => {
+  const job = { service: "local", city: "София", pickupHood: "Красно село", dropoffHood: "Овча купел 2",
+    dropoff: { floor: 5, elevator: false, elevatorType: "passenger", carryDistanceM: 0 } };
+  const heavy = calc({ ...job, qty: { books: 25 } });
+  const stairsLine = heavy.lines.find((l) => /Стълби/.test(l.label));
+  near(stairsLine.amount, 25 * 5 * P.boxPerFloor, 1, "25 пакета × 5 етажа × ставката за кашон");
+  ok(/тежки/.test(stairsLine.label), "редът казва, че са тежки");
+  const light = calc({ ...job, qty: { boxS: 5 } });
+  eq(light.lines.find((l) => /Стълби/.test(l.label)).amount, 0, "леките кашони остават в минимума");
+  ok(heavy.total > light.total, "плочките излизат по-скъпо от леките кашони");
+});
 test("списък: неразпозната вещ връща 0 кандидата, не грешен избор", () => {
   const hits = E.matchCatalogItem("абсолютно неразпознаваем текст xyz123");
   eq(hits.length, 0);

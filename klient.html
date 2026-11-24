@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Калкулатор за преместване — Корект преместване</title>
 <meta name="description" content="Вижте ориентировъчна цена за Вашето преместване за една минута — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-zWQdij3YjYsSpmfBFlMEdy3SqlWXu242FVuRc03gbgM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-qphjIwo7O0M5ock8kAR97IafzOEkehevMsWbrt0iYiE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="robots" content="noindex">
 <script src="vendor/tailwind-play-3.4.17.js" integrity="sha384-igm5BeiBt36UU4gqwWS7imYmelpTsZlQ45FZf+XBn9MuJbn4nQr7yx1yFydocC/K"></script>
@@ -1149,7 +1149,9 @@ function translitBG(str) {
  * латиница и кирилица. Разпознава повечето директно копирани списъци; неясните
  * редове се показват на потребителя за ръчен избор, вместо да се гадае тихо. */
 // Разговорни думи → вещ от каталога (поставен списък и гласовият асистент). Първото съвпадение печели.
-const ITEM_SYNONYMS = [[/^(кашон\S*|кутия|кутии)$/, "boxM"], [/кашон\S* (с|за) книги|книги/, "books"], [/спалн/, "bedDouble"], [/персон и половина|приста/, "bedDouble"], [/телевизор|^тв$|плазма/, "tvstand"], [/секци/, "wallUnit"], [/^печка$|готварск/, "stove"], [/фурн/, "ovenBuiltIn"], [/микровълн/, "microwave"], [/трапезн\S* маса|маса\S* за хранене|^маса$|^маси$/, "table"], [/холна маса|масичк/, "tableSmall"], [/плъзг/, "wardrobe4"], [/етажерк|библиотек|рафт/, "shelf"], [/скрин|комод/, "dresser"], [/нощн/, "nightstand"], [/огледал|картин/, "art"], [/сакси|цвет|растени/, "plant"], [/колел|велосипед/, "bike"], [/климатик/, "ac"], [/компютър|монитор|лаптоп/, "computer"], [/ъглов/, "sofaL"], [/матра/, "mattress"], [/фотьойл|кресло/, "armchair"], [/куфар|сак$|сакове/, "suitcase"], [/чувал/, "clothesBag"]];
+const ITEM_SYNONYMS = [
+// строителни материали на пакети се носят и таксуват като тежък кашон (решение на Додо за №88 и №110)
+[/плочк|теракот|фаянс|гранитогрес|ламинат|паркет/, "books"], [/^(кашон\S*|кутия|кутии)$/, "boxM"], [/кашон\S* (с|за) книги|книги/, "books"], [/спалн/, "bedDouble"], [/персон и половина|приста/, "bedDouble"], [/телевизор|^тв$|плазма/, "tvstand"], [/секци/, "wallUnit"], [/^печка$|готварск/, "stove"], [/фурн/, "ovenBuiltIn"], [/микровълн/, "microwave"], [/трапезн\S* маса|маса\S* за хранене|^маса$|^маси$/, "table"], [/холна маса|масичк/, "tableSmall"], [/плъзг/, "wardrobe4"], [/етажерк|библиотек|рафт/, "shelf"], [/скрин|комод/, "dresser"], [/нощн/, "nightstand"], [/огледал|картин/, "art"], [/сакси|цвет|растени/, "plant"], [/колел|велосипед/, "bike"], [/климатик/, "ac"], [/компютър|монитор|лаптоп/, "computer"], [/ъглов/, "sofaL"], [/матра/, "mattress"], [/фотьойл|кресло/, "armchair"], [/куфар|сак$|сакове/, "suitcase"], [/чувал/, "clothesBag"]];
 // „трикрилен“, „3 крилен“, „три крила“ → „3-крилен“; „тройка“, „триместен“ → „3-местен“
 function normalizeItemText(text) {
   const NUM = {
@@ -3456,6 +3458,9 @@ function computePrice(s, p) {
   // работа, не само такса — времето за изпълнение трябва да я отразява (виж stairsManHours по-долу),
   // иначе 5 етажа без асансьор излизат само по-скъпи, но не и по-бавни от партер.
   const boxes = netFloorQty(s.qty, s.floorFeeOff, it => it.kind === "box" || it.kind === "sack"); // чувалите се носят като кашони
+  // тежки кашони/чували (плочки, книги, строителни — 20+ кг): стълбите им се таксуват ВИНАГИ,
+  // не влизат в минимума от 2 ч (решение на Додо, 24.11.2026 — №88 и №110)
+  const heavyBoxes = netFloorQty(s.qty, s.floorFeeOff, it => (it.kind === "box" || it.kind === "sack") && n(it.kg) >= 20);
   const appNormal = netFloorQty(s.qty, s.floorFeeOff, it => it.kind === "appliance");
   const appHeavy = netFloorQty(s.qty, s.floorFeeOff, it => it.kind === "appliance_heavy");
   const oversized = netFloorQty(s.qty, s.floorFeeOff, it => it.kind === "oversized");
@@ -3478,10 +3483,11 @@ function computePrice(s, p) {
   // превръща таксата за стълби в реални човекочасове по стандартната работническа ставка —
   // екипът реално отделя толкова допълнително време, не само плаща толкова допълнително
   const stairsManHoursAll = workerRate > 0 ? stairs / workerRate : 0;
+  const stairsHeavyManHours = workerRate > 0 ? floorsStdTot * heavyBoxes * n(p.boxPerFloor) / workerRate : 0;
   // Стълбите при дребна задача влизат в платения минимум от 2 ч (решение 18.11.2026): бригадата
   // и без това е платена за 2 ч, а реалната работа е под час. Опаковането заема свободното
   // време първо, стълбите — каквото остане; доплаща се само частта извън минимума.
-  const stairsAbsorbedManHours = !isCourse && !usesFieldCrew && !isDisposal && !hoursManual && crew > 0 ? Math.min(stairsManHoursAll, Math.max(0, localMinSlack - packAbsorbedClock) * crew) : 0;
+  const stairsAbsorbedManHours = !isCourse && !usesFieldCrew && !isDisposal && !hoursManual && crew > 0 ? Math.min(stairsManHoursAll - stairsHeavyManHours, Math.max(0, localMinSlack - packAbsorbedClock) * crew) : 0;
   const stairsManHours = stairsManHoursAll - stairsAbsorbedManHours; // таксуваната част
   const stairsCharged = stairsManHoursAll > 0 ? stairs * (stairsManHours / stairsManHoursAll) : 0;
 
@@ -3517,7 +3523,7 @@ function computePrice(s, p) {
   });
   if (stairsCharged > 1e-6) {
     const parts = [];
-    if (floorsStdTot && boxes) parts.push(`${boxes} каш.`);
+    if (floorsStdTot && boxes) parts.push(`${boxes} каш.${heavyBoxes ? ` (${heavyBoxes} тежки)` : ""}`);
     if (floorsStdTot && appNormal) parts.push(`${appNormal} уред`);
     if (floorsStdTot && appHeavy) parts.push(`${appHeavy} спец.`);
     if (floorsStdTot && small) parts.push(`${small} дребни`);
