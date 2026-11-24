@@ -72,6 +72,8 @@ const DEFAULTS = {
   // Стълби без асансьор — такси на етаж без асансьор, на адрес (товарене + разтоварване)
   floorFeeNoElevator: 0, // €/етаж плоска база (изкл. — пробваме per-кашон)
   boxPerFloor: 0.3,      // €/етаж на кашон без асансьор
+  heavyBoxPerFloor: 0.2, // € на ТЕЖЪК кашон/чувал (20+ кг: плочки, книги, строителни) на етаж — добавка „тежко“ ОТГОРЕ на часовете (Додо, 25.11.2026)
+  heavyMinPerFloor: 2,   // минути труд за качване на ЕДИН тежък пакет с ЕДИН етаж (25 пакета × 5 ет. ≈ 2 ч за двама)
   appliancePerFloor: 3,  // €/етаж на нормален уред (пералня/хладилник)
   heavyAppliancePerFloor: 5, // €/етаж на нестандартен уред (двуврат хлад., Miele)
   heavyWorkerSharePct: 40, // % от таксата „тежко“ по стълбите, който се дава на работниците (реално 30–50%; решение на Додо, 24.11.2026)
@@ -436,7 +438,7 @@ const FLOOR_FEE_LABEL = { box: "кашон", sack: "кашон", appliance: "у�
 const floorFeeRateFor = (it, p) => {
   if (!it) return 0;
   switch (it.kind) {
-    case "box": case "sack": return n(p.boxPerFloor);
+    case "box": case "sack": return n(it.kg) >= 20 ? n(p.heavyBoxPerFloor ?? p.boxPerFloor) : n(p.boxPerFloor);
     case "appliance": return n(p.appliancePerFloor);
     case "appliance_heavy": return n(p.heavyAppliancePerFloor);
     // едрогабаритни (диван 3-ка, ъглов диван...) са си МЕБЕЛИ — просто не влизат в пътнически
@@ -1248,6 +1250,8 @@ function computePrice(s, p) {
   const minCrewH = n(p.minCrewHours || 2);
   const loadClock = Math.max(n(p.loadHours) * trips, minCrewH);      // мин. 2 ч на изпратена бригада
   const unloadClock = Math.max(n(p.unloadHours) * trips, minCrewH);
+  const heavyBoxes = netFloorQty(s.qty, s.floorFeeOff, (it) => (it.kind === "box" || it.kind === "sack") && n(it.kg) >= 20);
+  let heavyCarryClock = 0;
   let localMinSlack = 0; // градско: незаетото време до минимума — в него влиза дребното опаковане
   if (isCourse) {
     handlingClock = loadClock + unloadClock;
@@ -1269,7 +1273,9 @@ function computePrice(s, p) {
     const loadCarryClock = legClock(vol / 2, pickupNoElevFloors);
     const unloadCarryClock = legClock(vol / 2, dropoffNoElevFloors);
 
-    handlingClock = loadCarryClock + unloadCarryClock + driveHours;
+    // тежките пакети (плочки и под.) не се носят „на кубик“: всеки е отделен курс по стълбите
+    heavyCarryClock = crew > 0 ? heavyBoxes * (pickupNoElevFloors + dropoffNoElevFloors) * n(p.heavyMinPerFloor ?? 2) / 60 / crew : 0;
+    handlingClock = loadCarryClock + unloadCarryClock + driveHours + heavyCarryClock;
     // свободното време до минимума се мери БЕЗ стълбите — те се таксуват отделно като перо и не
     // бива да изяждат минимума (иначе опаковането на 5-и етаж би оскъпило камиона, а на партер не)
     const flatClock = legClock(vol / 2, 0) + legClock(vol / 2, 0) + driveHours;
@@ -1378,7 +1384,7 @@ function computePrice(s, p) {
   } else if (isLabourOnly) {
     // само хамали — клиентът осигурява транспорта за багажа.
     // Ако работата е в друг град, се плаща кола за хората + времето за път.
-    const carryClock = vol / n(p.m3PerManHour || 1.6) / crew;
+    const carryClock = vol / n(p.m3PerManHour || 1.6) / crew + heavyCarryClock; // + качването на тежките пакети
     let jobClock = carryClock;
     if (jobClock < n(p.minLocalHours)) jobClock = n(p.minLocalHours); // мин. 2 ч
 
@@ -1518,7 +1524,6 @@ function computePrice(s, p) {
   const boxes = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "box" || it.kind === "sack"); // чувалите се носят като кашони
   // тежки кашони/чували (плочки, книги, строителни — 20+ кг): стълбите им се таксуват ВИНАГИ,
   // не влизат в минимума от 2 ч (решение на Додо, 24.11.2026 — №88 и №110)
-  const heavyBoxes = netFloorQty(s.qty, s.floorFeeOff, (it) => (it.kind === "box" || it.kind === "sack") && n(it.kg) >= 20);
   const appNormal = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "appliance");
   const appHeavy = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "appliance_heavy");
   const oversized = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "oversized");
@@ -1528,7 +1533,9 @@ function computePrice(s, p) {
   const floorsStd = (a) => (a.floor >= 1 && !a.elevator ? a.floor : 0);
   // едрогабаритни (диван 3-ка и под.): не влизат в пътнически асансьор → стълби, освен при товарен
   const floorsOvr = (a) => (a.floor >= 1 && !(a.elevator && a.elevatorType === "cargo") ? a.floor : 0);
-  const perFloorStd = n(p.floorFeeNoElevator) + boxes * n(p.boxPerFloor) + appNormal * n(p.appliancePerFloor) + appHeavy * n(p.heavyAppliancePerFloor) + small * n(p.smallItemPerFloor) + furniture * n(p.furniturePerFloor);
+  // тежките кашони НЕ влизат в таксата-време по-долу: часовете им са в handlingClock (heavyCarryClock),
+  // а добавката „тежко“ е отделен ред (heavyFee)
+  const perFloorStd = n(p.floorFeeNoElevator) + (boxes - heavyBoxes) * n(p.boxPerFloor) + appNormal * n(p.appliancePerFloor) + appHeavy * n(p.heavyAppliancePerFloor) + small * n(p.smallItemPerFloor) + furniture * n(p.furniturePerFloor);
   // едрогабаритните (диван 3-ка, ъглов диван) са мебели, не "спец. уред" — носят мебелната
   // ставка; отделната категория oversized съществува само заради асансьора (не влизат в
   // пътнически), не заради по-скъпа такса
@@ -1541,12 +1548,12 @@ function computePrice(s, p) {
   // превръща таксата за стълби в реални човекочасове по стандартната работническа ставка —
   // екипът реално отделя толкова допълнително време, не само плаща толкова допълнително
   const stairsManHoursAll = workerRate > 0 ? stairs / workerRate : 0;
-  const stairsHeavyManHours = workerRate > 0 ? floorsStdTot * heavyBoxes * n(p.boxPerFloor) / workerRate : 0;
+  const heavyFee = floorsStdTot * heavyBoxes * n(p.heavyBoxPerFloor ?? 0.2);
   // Стълбите при дребна задача влизат в платения минимум от 2 ч (решение 18.11.2026): бригадата
   // и без това е платена за 2 ч, а реалната работа е под час. Опаковането заема свободното
   // време първо, стълбите — каквото остане; доплаща се само частта извън минимума.
   const stairsAbsorbedManHours = !isCourse && !usesFieldCrew && !isDisposal && !hoursManual && crew > 0
-    ? Math.min(stairsManHoursAll - stairsHeavyManHours, Math.max(0, localMinSlack - packAbsorbedClock) * crew) : 0;
+    ? Math.min(stairsManHoursAll, Math.max(0, localMinSlack - packAbsorbedClock) * crew) : 0;
   const stairsManHours = stairsManHoursAll - stairsAbsorbedManHours;   // таксуваната част
   const stairsCharged = stairsManHoursAll > 0 ? stairs * (stairsManHours / stairsManHoursAll) : 0;
 
@@ -1582,9 +1589,10 @@ function computePrice(s, p) {
     if (it?.surcharge && cnt > 0) add(`${it.label} — спец. обработка ×${cnt}`, it.surcharge * cnt);
   });
 
+  if (heavyFee > 1e-6) add(`Тежко по стълбите — ${heavyBoxes} тежки пак. × ${floorsStdTot} ет. × ${n(p.heavyBoxPerFloor ?? 0.2)} ${p.currency}`, heavyFee);
   if (stairsCharged > 1e-6) {
     const parts = [];
-    if (floorsStdTot && boxes) parts.push(`${boxes} каш.${heavyBoxes ? ` (${heavyBoxes} тежки)` : ""}`);
+    if (floorsStdTot && boxes - heavyBoxes) parts.push(`${boxes - heavyBoxes} каш.`);
     if (floorsStdTot && appNormal) parts.push(`${appNormal} уред`);
     if (floorsStdTot && appHeavy) parts.push(`${appHeavy} спец.`);
     if (floorsStdTot && small) parts.push(`${small} дребни`);
@@ -1708,11 +1716,11 @@ function computePrice(s, p) {
   // costCity/workerCostRate вече са изчислени най-отгоре (общи и за цената към клиента).
   // „Тежко“ по стълбите (тежки кашони + спец. уреди, таксуваната част): работниците получават
   // p.heavyWorkerSharePct % от таксата. Това Е разходът за тази част — не се брои и по часове.
-  const heavyAppCharged = stairsManHoursAll - stairsHeavyManHours > 1e-9
-    ? floorsStdTot * appHeavy * n(p.heavyAppliancePerFloor) * (stairsManHours - stairsHeavyManHours) / (stairsManHoursAll - stairsHeavyManHours) : 0;
-  const heavyFee = floorsStdTot * heavyBoxes * n(p.boxPerFloor) + heavyAppCharged;
-  const heavyWorkerBonus = heavyFee * n(p.heavyWorkerSharePct ?? 40) / 100;
-  const laborCost = (manHours - (workerRate > 0 ? heavyFee / workerRate : 0)) * workerCostRate + heavyWorkerBonus;
+  const heavyAppCharged = stairsManHoursAll > 1e-9 ? floorsStdTot * appHeavy * n(p.heavyAppliancePerFloor) * stairsManHours / stairsManHoursAll : 0;
+  const heavyTotal = heavyFee + heavyAppCharged;
+  const heavyWorkerBonus = heavyTotal * n(p.heavyWorkerSharePct ?? 40) / 100;
+  // часовете за качване на тежкото се плащат на хората като часове; за спец. уредите таксата е и времето
+  const laborCost = (manHours - (workerRate > 0 ? heavyAppCharged / workerRate : 0)) * workerCostRate + heavyWorkerBonus;
   const truckCostRate = usesFieldCrew ? 0 : n(isCourse || isDisposal ? p.truckCostPerKm : p.truckCostPerHour);
   // градско: СЪЩИТЕ часове като перото "Транспорт" към клиента (truckClockHours, закръглени) —
   // без стълбите: по стълбите носят хората, камионът не участва (виж калк. №143 — 3.0 ч към
@@ -1727,7 +1735,7 @@ function computePrice(s, p) {
 
   return { total: Math.round(total), lines, boxFillManHours, boxBuy,
     materialsCost: Math.round(materialsCost * 100) / 100, otherCost: Math.round((extraCostTotal - materialsCost) * 100) / 100,
-    costCity, workerCostRate, workerRate, deviationFactor, deviationManual, floorsStdTot, floorsOvrTot, laborCost: Math.round(laborCost), heavyFee: Math.round(heavyFee * 100) / 100, heavyWorkerBonus: Math.round(heavyWorkerBonus * 100) / 100, truckCost: Math.round(truckCost),
+    costCity, workerCostRate, workerRate, deviationFactor, deviationManual, floorsStdTot, floorsOvrTot, laborCost: Math.round(laborCost), heavyFee: Math.round(heavyTotal * 100) / 100, heavyWorkerBonus: Math.round(heavyWorkerBonus * 100) / 100, truckCost: Math.round(truckCost),
     totalCost: Math.round(totalCost), margin: Math.round(margin), marginPercent, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, autoHandlingClock, hoursManual, autoTruckHours, truckHoursManual, truckH, truckHWork, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours, storage };
 }
 
@@ -2754,6 +2762,8 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify, sessi
           <Num label="Хора на сглобяване" value={p.asmCrew} step={1} onChange={(v) => upd({ asmCrew: v })} suffix="души" />
           <Num label="Ставка монтаж/демонтаж" value={p.disAsmRate} step={1} onChange={(v) => upd({ disAsmRate: v })} suffix="€/ч" />
           <Num label="Кашон/етаж" value={p.boxPerFloor} step={0.05} onChange={(v) => upd({ boxPerFloor: v })} suffix="€" />
+          <Num label="Тежък кашон/етаж" value={p.heavyBoxPerFloor ?? 0.2} step={0.05} onChange={(v) => upd({ heavyBoxPerFloor: v })} suffix="€" />
+          <Num label="Тежък пакет: мин/етаж" value={p.heavyMinPerFloor ?? 2} step={0.5} onChange={(v) => upd({ heavyMinPerFloor: v })} suffix="мин" />
           <Num label="Дребна вещ/етаж" value={p.smallItemPerFloor} step={0.5} onChange={(v) => upd({ smallItemPerFloor: v })} suffix="€" />
           <Num label="Уред/етаж" value={p.appliancePerFloor} step={0.5} onChange={(v) => upd({ appliancePerFloor: v })} suffix="€" />
           <Num label="Мебел/етаж" value={p.furniturePerFloor} step={0.5} onChange={(v) => upd({ furniturePerFloor: v })} suffix="€" />

@@ -845,16 +845,19 @@ test("списък: пакети плочки се смятат като теж�
     eq(E.matchCatalogItem(t)[0]?.id, "books", t);
   }
 });
-test("стълби: тежките кашони (плочки) се таксуват винаги, леките влизат в минимума (№110)", () => {
+test("тежко: 25 пакета плочки до 5-и етаж = 3 ч бригада, 3 ч камион и 0,20 € на пакет на етаж (№110)", () => {
   const job = { service: "local", city: "София", pickupHood: "Красно село", dropoffHood: "Овча купел 2",
     dropoff: { floor: 5, elevator: false, elevatorType: "passenger", carryDistanceM: 0 } };
   const heavy = calc({ ...job, qty: { books: 25 } });
-  const stairsLine = heavy.lines.find((l) => /Стълби/.test(l.label));
-  near(stairsLine.amount, 25 * 5 * P.boxPerFloor, 1, "25 пакета × 5 етажа × ставката за кашон");
-  ok(/тежки/.test(stairsLine.label), "редът казва, че са тежки");
-  const light = calc({ ...job, qty: { boxS: 5 } });
+  const line = (re) => heavy.lines.find((l) => re.test(l.label));
+  ok(/3\.0 ч × 2 души/.test(line(/^Пренасяне и път/).label), "бригада 3 ч: " + line(/^Пренасяне и път/).label);
+  ok(/3\.0 ч/.test(line(/^Транспорт/).label), "камион 3 ч: " + line(/^Транспорт/).label);
+  near(line(/^Тежко по стълбите/).amount, 25 * 5 * P.heavyBoxPerFloor, 0.6, "25 пакета × 5 етажа × 0,20 €");
+  const light = calc({ ...job, qty: { boxS: 25 } });
+  ok(!light.lines.some((l) => /^Тежко/.test(l.label)), "леките кашони нямат добавка тежко");
   eq(light.lines.find((l) => /Стълби/.test(l.label)).amount, 0, "леките кашони остават в минимума");
   ok(heavy.total > light.total, "плочките излизат по-скъпо от леките кашони");
+  ok(calc({ ...job, qty: { books: 5 } }).total < heavy.total, "малко тежки пакети остават в минимума от 2 ч");
 });
 test("списък: неразпозната вещ връща 0 кандидата, не грешен избор", () => {
   const hits = E.matchCatalogItem("абсолютно неразпознаваем текст xyz123");
@@ -1036,10 +1039,10 @@ test("марж: 40% от таксата „тежко“ по стълбите �
   const job = { service: "local", city: "София", pickupHood: "Красно село", dropoffHood: "Овча купел 2",
     dropoff: { floor: 5, elevator: false, elevatorType: "passenger", carryDistanceM: 0 }, qty: { books: 25 } };
   const r = calc(job);
-  const fee = 25 * 5 * P.boxPerFloor;
+  const fee = 25 * 5 * P.heavyBoxPerFloor;
   near(r.heavyFee, fee, 0.01); near(r.heavyWorkerBonus, fee * 0.4, 0.01, "40% от тежкото");
   const noStairs = calc({ ...job, dropoff: { ...job.dropoff, floor: 0 } });
-  near(r.laborCost - noStairs.laborCost, fee * 0.4, 1, "разходът за тежкото е точно бонусът, не и часове отгоре");
+  near(r.laborCost - noStairs.laborCost, fee * 0.4 + (r.manHours - noStairs.manHours) * r.workerCostRate, 1, "хората получават часовете си + 40% от тежкото");
   eq(noStairs.heavyWorkerBonus, 0, "без стълби няма тежко");
   near(calc(job, { ...P, heavyWorkerSharePct: 50 }).heavyWorkerBonus, fee * 0.5, 0.01, "процентът се взима от параметрите");
 });
@@ -2392,7 +2395,7 @@ test("само хамали: Черноморец е познато място �
   ok(r.lines.some((l) => l.label.startsWith("Кола за бригадата — 50 км")), "колата е по километри, не минимална такса");
 });
 test("само хамали: стълбите се смятат по работния адрес (първия)", () => {
-  eq(stairAmount(calc(plochki)), Math.round(4 * 40 * P.boxPerFloor), "40 кашона × 4 етажа:");
+  near(calc(plochki).lines.find((l) => l.label.startsWith("Тежко по стълбите")).amount, 4 * 40 * P.heavyBoxPerFloor, 0.6, "40 тежки кашона × 4 етажа:");
 });
 
 test("само хамали: зададени км до бригадата (от Google Maps) за непознато населено място", () => {
