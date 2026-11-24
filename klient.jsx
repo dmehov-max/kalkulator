@@ -179,6 +179,8 @@ function KlientCalculator() {
   const [done, setDone] = useState(null);   // { number } след запис
   const [error, setError] = useState("");
   const idRef = useRef("calc:site-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8));
+  // ПИН на запитването: с номера и него клиентът се връща към поръчката си по телефона
+  const pinRef = useRef(String(crypto.getRandomValues(new Uint16Array(1))[0] % 10000).padStart(4, "0"));
 
   useEffect(() => { loadLiveParams().then(setP); }, []);
   useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [step]);
@@ -244,7 +246,7 @@ function KlientCalculator() {
     const rec = buildRecord(withContact ? { ...s, name, phone: contact.phone.trim(), email: contact.email.trim() } : s, p, r, idRef.current, null, "Сайт (клиент)");
     const until = new Date(Date.now() + DISCOUNT_DAYS * 864e5).toISOString().slice(0, 10);
     return Object.assign(rec, {
-      status: withContact ? "заявка" : "калкулация", source: "сайт",
+      status: withContact ? "заявка" : "калкулация", source: "сайт", pin: pinRef.current,
       contact: withContact ? { name, phone: contact.phone.trim(), email: contact.email.trim() || null } : null,
       notes: [kind === "office" ? "Вид: преместване на офис." : "Вид: преместване на дом.",
         withContact ? "" : "Клиентът видя цената във формата на сайта, но (още) не е оставил данни за контакт.",
@@ -323,6 +325,11 @@ function KlientCalculator() {
             <p className="mt-2 text-slate-700">Запитването е получено{done.number ? <> под № <b>{done.number}</b></> : null}. Наш колега ще Ви се обади на <b>{contact.phone}</b> в работно време, за да уточни подробностите{needsSurvey ? " и да уговори оглед" : " и да потвърди крайната цена"}.</p>
             {!needsSurvey && <p className="mt-3 rounded-xl bg-green-50 border border-green-200 p-3 text-green-900 text-sm">Получихте своята <b>{DISCOUNT_PCT}% отстъпка</b> от крайната цена. Важи {DISCOUNT_DAYS} дни.</p>}
             {!needsSurvey && <p className="mt-3 rounded-xl bg-blue-50 border border-blue-200 p-3 text-blue-900 text-sm">Имайте предвид: може да получите <b>още {FLEX_DISCOUNT_PCT}% отстъпка</b>, ако се съобразите с дата и час, които ние Ви предложим. Колегата ще Ви ги предложи по телефона.</p>}
+            {done.number && (
+              <div className="mt-3 rounded-xl bg-slate-50 border border-slate-200 p-3 text-sm text-slate-700">
+                Запазете си: <b>№ {done.number}</b> и ПИН код <b className="tracking-widest">{pinRef.current}</b>. С тях можете да се върнете към запитването по телефона.
+              </div>
+            )}
             <p className="mt-3 text-sm text-slate-500">Бързате? Обадете се на {PHONE}.</p>
           </Card>
         )}

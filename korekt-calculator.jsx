@@ -3238,6 +3238,13 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit }) {
             )}
           </div>
 
+          {r.pin && <p className="mt-3 text-xs text-slate-500">ПИН на клиента за връщане към поръчката: <b className="tracking-widest">{r.pin}</b></p>}
+          {r.clientNotes?.length > 0 && (
+            <div className="mt-3 text-sm rounded-xl px-3 py-2" style={{ background: "#fff8ef", color: ink }}>
+              <div className="font-semibold mb-1">📞 Клиентът се обади пак ({r.clientNotes.length}):</div>
+              {r.clientNotes.map((n, i) => <div key={i}>{n.at} — {n.text}</div>)}
+            </div>
+          )}
           {r.notes && (
             <p className="mt-3 text-sm rounded-xl px-3 py-2 bg-slate-50 whitespace-pre-line" style={{ color: ink }}>{r.notes}</p>
           )}
@@ -4361,6 +4368,8 @@ export default function KorektCalculator() {
     if (c.site) rec.site = c.site;                                   // запитване от сайта: показана цена, обещана отстъпка, съгласие
     if (c.oldCalcNumber != null) rec.oldCalcNumber = c.oldCalcNumber; // номерът преди преномерирането от 24.11.2026
     if (c.review) rec.review = c.review;                             // оценката 👍/👎 от колега
+    if (c.pin) rec.pin = c.pin;                                      // ПИН-ът, с който клиентът се връща към поръчката
+    if (c.clientNotes) rec.clientNotes = c.clientNotes;              // бележки, добавени от клиента по телефона
     if (!rec.contact && c.contact) rec.contact = c.contact;
     return rec;
   };
@@ -4379,7 +4388,7 @@ export default function KorektCalculator() {
     setS({ ...INITIAL_S, ...rec.formState, ...(keepDev ? { deviationOverride: oldDev } : {}) });
     // неща извън формата (разговор с гласовия асистент, бележка, източник, контакт) —
     // пренасят се при всяко презаписване на записа и в офертата, иначе редакцията ги трие
-    carryRef.current = { transcript: rec.transcript || null, notes: rec.notes || null, source: rec.source || null, contact: rec.contact || null, site: rec.site || null, oldCalcNumber: rec.oldCalcNumber ?? null, review: rec.review || null };
+    carryRef.current = { transcript: rec.transcript || null, notes: rec.notes || null, source: rec.source || null, contact: rec.contact || null, site: rec.site || null, oldCalcNumber: rec.oldCalcNumber ?? null, review: rec.review || null, pin: rec.pin || null, clientNotes: rec.clientNotes || null };
     recordKey.current = rec.key || null;
     recordNumber.current = rec.calcNumber ?? null;
     pushedRef.current = !!rec.key; // вече съществува ред в Supabase — следващият autosave трябва да е PATCH, не нов POST
