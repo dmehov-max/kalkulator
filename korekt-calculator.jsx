@@ -3285,17 +3285,6 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit, onOffer 
                 title="Копира калкулацията като текст за поле „Забележка“ в pro и Description в ERP">
                 📋 За Pro
               </button>
-              {onOffer && (() => {
-                const miss = offerBlockers(r);
-                return (
-                  <button onClick={() => onOffer(r)} disabled={miss.length > 0}
-                    className="text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap"
-                    style={{ background: "#fff", color: ink, opacity: miss.length ? 0.45 : 1, cursor: miss.length ? "not-allowed" : "pointer" }}
-                    title={miss.length ? "За оферта липсва: " + miss.join("; ") + "." : "Прави оферта от това запитване."}>
-                    📄 Оферта
-                  </button>
-                );
-              })()}
               {onEdit && (
                 r.formState ? (
                   <button onClick={() => onEdit(r)} className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: accent, color: ink }}>
@@ -3838,6 +3827,17 @@ function LogPanel({ onClose, p, session, onEdit, onOffer, notify }) {
                             className="text-[11px] font-semibold px-2 py-1 rounded-full text-white" style={{ background: ink }}>
                             Отвори
                           </button>
+                          {onOffer && (() => {
+                            const miss = offerBlockers(r);
+                            return (
+                              <button onClick={() => onOffer(r)} disabled={miss.length > 0}
+                                className="text-[11px] font-semibold px-2 py-1 rounded-full border whitespace-nowrap"
+                                style={{ borderColor: accent, color: ink, background: "#fff8ef", opacity: miss.length ? 0.4 : 1, cursor: miss.length ? "not-allowed" : "pointer" }}
+                                title={miss.length ? "За оферта липсва: " + miss.join("; ") + "." : "Прави оферта от това запитване."}>
+                                📄 Оферта
+                              </button>
+                            );
+                          })()}
                           {r.status !== "потвърдена" && (
                             <button onClick={() => setConfirmingWhich(r.key)}
                               className="text-[11px] font-medium px-2 py-1 rounded-full border border-slate-200 text-slate-600">

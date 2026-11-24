@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-STgIMZl9r0aG53jI2PuA8dBF3Eid8DBFPTgT6w+JeVE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-EHA6YUMk+JmowZ+x81kI0nVR6XxKJMPAD/wvs5NTW+8='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -6626,21 +6626,7 @@ function RecordDetail({
       color: ink
     },
     title: "Копира калкулацията като текст за поле „Забележка“ в pro и Description в ERP"
-  }, "📋 За Pro"), onOffer && (() => {
-    const miss = offerBlockers(r);
-    return /*#__PURE__*/React.createElement("button", {
-      onClick: () => onOffer(r),
-      disabled: miss.length > 0,
-      className: "text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap",
-      style: {
-        background: "#fff",
-        color: ink,
-        opacity: miss.length ? 0.45 : 1,
-        cursor: miss.length ? "not-allowed" : "pointer"
-      },
-      title: miss.length ? "За оферта липсва: " + miss.join("; ") + "." : "Прави оферта от това запитване."
-    }, "📄 Оферта");
-  })(), onEdit && (r.formState ? /*#__PURE__*/React.createElement("button", {
+  }, "📋 За Pro"), onEdit && (r.formState ? /*#__PURE__*/React.createElement("button", {
     onClick: () => onEdit(r),
     className: "text-xs font-semibold px-3 py-1 rounded-full",
     style: {
@@ -7397,7 +7383,22 @@ function LogPanel({
     style: {
       background: ink
     }
-  }, "Отвори"), r.status !== "потвърдена" && /*#__PURE__*/React.createElement("button", {
+  }, "Отвори"), onOffer && (() => {
+    const miss = offerBlockers(r);
+    return /*#__PURE__*/React.createElement("button", {
+      onClick: () => onOffer(r),
+      disabled: miss.length > 0,
+      className: "text-[11px] font-semibold px-2 py-1 rounded-full border whitespace-nowrap",
+      style: {
+        borderColor: accent,
+        color: ink,
+        background: "#fff8ef",
+        opacity: miss.length ? 0.4 : 1,
+        cursor: miss.length ? "not-allowed" : "pointer"
+      },
+      title: miss.length ? "За оферта липсва: " + miss.join("; ") + "." : "Прави оферта от това запитване."
+    }, "📄 Оферта");
+  })(), r.status !== "потвърдена" && /*#__PURE__*/React.createElement("button", {
     onClick: () => setConfirmingWhich(r.key),
     className: "text-[11px] font-medium px-2 py-1 rounded-full border border-slate-200 text-slate-600"
   }, "Потвърди")))))))), sortedRows.length > PAGE_SIZE && /*#__PURE__*/React.createElement("div", {
