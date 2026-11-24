@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Калкулатор за преместване — Корект преместване</title>
 <meta name="description" content="Вижте ориентировъчна цена за Вашето преместване за една минута — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-XqtCOobl+sirZhmpkRR714qLpX3d4qygwPFkGzUjlQc='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-cEaDiGoRz13QjLvgwPzZnTW/kpeMX6W5SkiirbV/e1Q='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="robots" content="noindex">
 <script src="vendor/tailwind-play-3.4.17.js" integrity="sha384-igm5BeiBt36UU4gqwWS7imYmelpTsZlQ45FZf+XBn9MuJbn4nQr7yx1yFydocC/K"></script>
@@ -4974,7 +4974,53 @@ function KlientCalculator() {
   const found = q ? CLIENT_GROUPS.flatMap(g => g.items).filter(i => i.label.toLowerCase().includes(q)).slice(0, 12) : [];
   const phoneOk = contact.phone.replace(/\D/g, "").length >= 9;
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email.trim());
-  const formOk = contact.first.trim() && contact.last.trim() && phoneOk && (needsSurvey || emailOk) && contact.consent;
+  // имейлът е по желание (ако е попълнен, трябва да е валиден); бутонът казва какво липсва
+  const emailBad = !!contact.email.trim() && !emailOk;
+  const missing = [!contact.first.trim() && "име", !contact.last.trim() && "фамилия", !phoneOk && "телефон", emailBad && "валиден имейл", !contact.consent && "съгласие"].filter(Boolean);
+  const formOk = missing.length === 0;
+
+  // Записът на запитването. Без данни за контакт (withContact=false) влиза като „калкулация“ —
+  // всяко запитване се пази, дори клиентът да не остави име и телефон (решение на Додо, 24.11.2026).
+  function buildInquiry(withContact) {
+    const name = `${contact.first.trim()} ${contact.last.trim()}`.trim();
+    const rec = buildRecord(withContact ? {
+      ...s,
+      name,
+      phone: contact.phone.trim(),
+      email: contact.email.trim()
+    } : s, p, r, idRef.current, null, "Сайт (клиент)");
+    const until = new Date(Date.now() + DISCOUNT_DAYS * 864e5).toISOString().slice(0, 10);
+    return Object.assign(rec, {
+      status: withContact ? "заявка" : "калкулация",
+      source: "сайт",
+      contact: withContact ? {
+        name,
+        phone: contact.phone.trim(),
+        email: contact.email.trim() || null
+      } : null,
+      notes: [withContact ? "" : "Клиентът видя цената във формата на сайта, но (още) не е оставил данни за контакт.", other.trim() ? "Клиентът добавя (извън списъка): " + other.trim() : "", needsSurvey ? "ЗА ОГЛЕД — на клиента не е показана цена (" + reasons.join("; ") + ")." : ""].filter(Boolean).join("\n") || null,
+      site: {
+        shownPriceVat: needsSurvey ? null : priceVat,
+        // какво е видял клиентът — не се променя при редакция
+        needsSurvey,
+        surveyReasons: reasons,
+        discountPct: withContact && !needsSurvey ? DISCOUNT_PCT : 0,
+        discountUntil: withContact && !needsSurvey ? until : null,
+        flexDiscountOfferedPct: withContact && !needsSurvey ? FLEX_DISCOUNT_PCT : 0,
+        // казано на клиента: още толкова %, ако приеме дата и час, предложени от нас
+        consentAt: withContact ? new Date().toISOString() : null,
+        consentText: withContact ? "Съгласие за обработка на лични данни за изготвяне на оферта" : null
+      }
+    });
+  }
+  // щом клиентът стигне до цената, запитването се записва тихо; ако после смени нещо и се върне — обновява се
+  useEffect(() => {
+    if (step !== 3 || !r || done) return;
+    const t = setTimeout(() => {
+      saveInquiry(idRef.current, buildInquiry(false)).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [step, r, other]);
   async function submit() {
     if (!formOk || sending) return;
     if (contact.website) {
@@ -4986,36 +5032,7 @@ function KlientCalculator() {
     setSending(true);
     setError("");
     try {
-      const rec = buildRecord({
-        ...s,
-        name: `${contact.first.trim()} ${contact.last.trim()}`,
-        phone: contact.phone.trim(),
-        email: contact.email.trim()
-      }, p, r, idRef.current, null, "Сайт (клиент)");
-      const until = new Date(Date.now() + DISCOUNT_DAYS * 864e5).toISOString().slice(0, 10);
-      Object.assign(rec, {
-        status: "заявка",
-        source: "сайт",
-        contact: {
-          name: `${contact.first.trim()} ${contact.last.trim()}`,
-          phone: contact.phone.trim(),
-          email: contact.email.trim() || null
-        },
-        notes: [other.trim() ? "Клиентът добавя (извън списъка): " + other.trim() : "", needsSurvey ? "ЗА ОГЛЕД — на клиента не е показана цена (" + reasons.join("; ") + ")." : ""].filter(Boolean).join("\n") || null,
-        site: {
-          shownPriceVat: needsSurvey ? null : priceVat,
-          // какво е видял клиентът — не се променя при редакция
-          needsSurvey,
-          surveyReasons: reasons,
-          discountPct: needsSurvey ? 0 : DISCOUNT_PCT,
-          discountUntil: needsSurvey ? null : until,
-          flexDiscountOfferedPct: needsSurvey ? 0 : FLEX_DISCOUNT_PCT,
-          // казано на клиента: още толкова %, ако приеме дата и час, предложени от нас
-          consentAt: new Date().toISOString(),
-          consentText: "Съгласие за обработка на лични данни за изготвяне на оферта"
-        }
-      });
-      const number = await saveInquiry(idRef.current, rec);
+      const number = await saveInquiry(idRef.current, buildInquiry(true));
       setDone({
         number
       });
@@ -5365,9 +5382,9 @@ function KlientCalculator() {
       ...contact,
       phone: e.target.value
     })
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Имейл", needsSurvey && /*#__PURE__*/React.createElement("span", {
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Label, null, "Имейл ", /*#__PURE__*/React.createElement("span", {
     className: "font-normal text-slate-400"
-  }, " (по желание)")), /*#__PURE__*/React.createElement("input", {
+  }, "(по желание)")), /*#__PURE__*/React.createElement("input", {
     className: input,
     type: "email",
     autoComplete: "email",
@@ -5410,7 +5427,12 @@ function KlientCalculator() {
   }, /*#__PURE__*/React.createElement(Next, {
     disabled: !formOk || sending,
     onClick: submit
-  }, sending ? "Изпращане…" : needsSurvey ? "Обадете ми се" : `Запази ${DISCOUNT_PCT}% отстъпка`)))))), /*#__PURE__*/React.createElement("footer", {
+  }, sending ? "Изпращане…" : needsSurvey ? "Обадете ми се" : `Запази ${DISCOUNT_PCT}% отстъпка`)), !formOk && /*#__PURE__*/React.createElement("p", {
+    className: "mt-2 text-sm text-center",
+    style: {
+      color: RED
+    }
+  }, "Остава да попълните: ", missing.join(", "), "."))))), /*#__PURE__*/React.createElement("footer", {
     className: "max-w-2xl mx-auto px-4 pb-8 text-xs text-slate-400"
   }, "Корект преместване ООД · ", PHONE, " · ", PHONE2));
 }

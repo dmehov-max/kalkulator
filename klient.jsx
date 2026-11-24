@@ -220,28 +220,45 @@ function KlientCalculator() {
 
   const phoneOk = contact.phone.replace(/\D/g, "").length >= 9;
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email.trim());
-  const formOk = contact.first.trim() && contact.last.trim() && phoneOk && (needsSurvey || emailOk) && contact.consent;
+  // имейлът е по желание (ако е попълнен, трябва да е валиден); бутонът казва какво липсва
+  const emailBad = !!contact.email.trim() && !emailOk;
+  const missing = [!contact.first.trim() && "име", !contact.last.trim() && "фамилия", !phoneOk && "телефон", emailBad && "валиден имейл", !contact.consent && "съгласие"].filter(Boolean);
+  const formOk = missing.length === 0;
+
+  // Записът на запитването. Без данни за контакт (withContact=false) влиза като „калкулация“ —
+  // всяко запитване се пази, дори клиентът да не остави име и телефон (решение на Додо, 24.11.2026).
+  function buildInquiry(withContact) {
+    const name = `${contact.first.trim()} ${contact.last.trim()}`.trim();
+    const rec = buildRecord(withContact ? { ...s, name, phone: contact.phone.trim(), email: contact.email.trim() } : s, p, r, idRef.current, null, "Сайт (клиент)");
+    const until = new Date(Date.now() + DISCOUNT_DAYS * 864e5).toISOString().slice(0, 10);
+    return Object.assign(rec, {
+      status: withContact ? "заявка" : "калкулация", source: "сайт",
+      contact: withContact ? { name, phone: contact.phone.trim(), email: contact.email.trim() || null } : null,
+      notes: [withContact ? "" : "Клиентът видя цената във формата на сайта, но (още) не е оставил данни за контакт.",
+        other.trim() ? "Клиентът добавя (извън списъка): " + other.trim() : "",
+        needsSurvey ? "ЗА ОГЛЕД — на клиента не е показана цена (" + reasons.join("; ") + ")." : ""].filter(Boolean).join("\n") || null,
+      site: {
+        shownPriceVat: needsSurvey ? null : priceVat,           // какво е видял клиентът — не се променя при редакция
+        needsSurvey, surveyReasons: reasons,
+        discountPct: withContact && !needsSurvey ? DISCOUNT_PCT : 0, discountUntil: withContact && !needsSurvey ? until : null,
+        flexDiscountOfferedPct: withContact && !needsSurvey ? FLEX_DISCOUNT_PCT : 0, // казано на клиента: още толкова %, ако приеме дата и час, предложени от нас
+        consentAt: withContact ? new Date().toISOString() : null, consentText: withContact ? "Съгласие за обработка на лични данни за изготвяне на оферта" : null,
+      },
+    });
+  }
+  // щом клиентът стигне до цената, запитването се записва тихо; ако после смени нещо и се върне — обновява се
+  useEffect(() => {
+    if (step !== 3 || !r || done) return;
+    const t = setTimeout(() => { saveInquiry(idRef.current, buildInquiry(false)).catch(() => {}); }, 1500);
+    return () => clearTimeout(t);
+  }, [step, r, other]);
 
   async function submit() {
     if (!formOk || sending) return;
     if (contact.website) { setDone({ number: null }); return; } // скрито поле — попълват го само ботове
     setSending(true); setError("");
     try {
-      const rec = buildRecord({ ...s, name: `${contact.first.trim()} ${contact.last.trim()}`, phone: contact.phone.trim(), email: contact.email.trim() }, p, r, idRef.current, null, "Сайт (клиент)");
-      const until = new Date(Date.now() + DISCOUNT_DAYS * 864e5).toISOString().slice(0, 10);
-      Object.assign(rec, {
-        status: "заявка", source: "сайт",
-        contact: { name: `${contact.first.trim()} ${contact.last.trim()}`, phone: contact.phone.trim(), email: contact.email.trim() || null },
-        notes: [other.trim() ? "Клиентът добавя (извън списъка): " + other.trim() : "", needsSurvey ? "ЗА ОГЛЕД — на клиента не е показана цена (" + reasons.join("; ") + ")." : ""].filter(Boolean).join("\n") || null,
-        site: {
-          shownPriceVat: needsSurvey ? null : priceVat,           // какво е видял клиентът — не се променя при редакция
-          needsSurvey, surveyReasons: reasons,
-          discountPct: needsSurvey ? 0 : DISCOUNT_PCT, discountUntil: needsSurvey ? null : until,
-          flexDiscountOfferedPct: needsSurvey ? 0 : FLEX_DISCOUNT_PCT, // казано на клиента: още толкова %, ако приеме дата и час, предложени от нас
-          consentAt: new Date().toISOString(), consentText: "Съгласие за обработка на лични данни за изготвяне на оферта",
-        },
-      });
-      const number = await saveInquiry(idRef.current, rec);
+      const number = await saveInquiry(idRef.current, buildInquiry(true));
       setDone({ number });
     } catch (e) {
       setError(`Не успяхме да запишем запитването. Моля, обадете се на ${PHONE}.`);
@@ -433,7 +450,7 @@ function KlientCalculator() {
                     <div><Label>Име</Label><input className={input} autoComplete="given-name" maxLength={60} value={contact.first} onChange={(e) => setContact({ ...contact, first: e.target.value })} /></div>
                     <div><Label>Фамилия</Label><input className={input} autoComplete="family-name" maxLength={60} value={contact.last} onChange={(e) => setContact({ ...contact, last: e.target.value })} /></div>
                     <div><Label>Телефон</Label><input className={input} type="tel" autoComplete="tel" maxLength={20} value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} /></div>
-                    <div><Label>Имейл{needsSurvey && <span className="font-normal text-slate-400"> (по желание)</span>}</Label><input className={input} type="email" autoComplete="email" maxLength={120} value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })} /></div>
+                    <div><Label>Имейл <span className="font-normal text-slate-400">(по желание)</span></Label><input className={input} type="email" autoComplete="email" maxLength={120} value={contact.email} onChange={(e) => setContact({ ...contact, email: e.target.value })} /></div>
                   </div>
                   <input type="text" tabIndex={-1} autoComplete="off" value={contact.website} onChange={(e) => setContact({ ...contact, website: e.target.value })} style={{ position: "absolute", left: "-9999px" }} aria-hidden="true" />
                   <label className="flex items-start gap-3 mt-4 cursor-pointer">
@@ -442,6 +459,7 @@ function KlientCalculator() {
                   </label>
                   {error && <div className="mt-3 rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-800">{error}</div>}
                   <div className="mt-4"><Next disabled={!formOk || sending} onClick={submit}>{sending ? "Изпращане…" : needsSurvey ? "Обадете ми се" : `Запази ${DISCOUNT_PCT}% отстъпка`}</Next></div>
+                  {!formOk && <p className="mt-2 text-sm text-center" style={{ color: RED }}>Остава да попълните: {missing.join(", ")}.</p>}
                 </>
               )}
             </Card>
