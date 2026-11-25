@@ -1,5 +1,5 @@
 <!doctype html><html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-9qVj7hTLWGhhQ/TRVI+tEi1zQgUem5nOp6uAb2VgptE=' 'sha256-aid4EgVc6wLFZBBkUSSBZ0scA8B98iNCQyQYrVqqHYA='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-dgaVrh+gQPhC5N85TSNLqi8stO64BF+rXVFSxEcY3B4=' 'sha256-aid4EgVc6wLFZBBkUSSBZ0scA8B98iNCQyQYrVqqHYA='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
 </head><body style="margin:0">
@@ -909,7 +909,9 @@ $("btnAsk").onclick = () => openAct("ask");
 if (window.KOREKT_PREVIEW) {
   window.addEventListener("message", e => {
     const d = e.data;
-    if (e.source !== parent || e.origin !== location.origin) return; // само от админ панела над прегледа
+    // само от админ панела над прегледа; прегледът е srcdoc и location.origin му е "null", затова се сравнява с произхода на родителя
+    let po = ""; try { po = parent.location.origin; } catch (x) { /* чужд родител — не приемаме */ }
+    if (e.source !== parent || !po || e.origin !== po) return;
     if (!d || d.type !== "korekt-offer" || !d.offer) return;
     Object.keys(OFFER).forEach(k => delete OFFER[k]);
     Object.assign(OFFER, d.offer);

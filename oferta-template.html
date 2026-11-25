@@ -963,7 +963,9 @@ $("btnAsk").onclick = () => openAct("ask");
 if (window.KOREKT_PREVIEW) {
   window.addEventListener("message", e => {
     const d = e.data;
-    if (e.source !== parent || e.origin !== location.origin) return; // само от админ панела над прегледа
+    // само от админ панела над прегледа; прегледът е srcdoc и location.origin му е "null", затова се сравнява с произхода на родителя
+    let po = ""; try { po = parent.location.origin; } catch (x) { /* чужд родител — не приемаме */ }
+    if (e.source !== parent || !po || e.origin !== po) return;
     if (!d || d.type !== "korekt-offer" || !d.offer) return;
     Object.keys(OFFER).forEach(k => delete OFFER[k]);
     Object.assign(OFFER, d.offer);
