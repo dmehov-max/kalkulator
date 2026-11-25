@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Калкулатор за преместване — Корект преместване</title>
 <meta name="description" content="Вижте ориентировъчна цена за Вашето преместване за една минута — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-cUuQOG8FzB5kFnGHU+F8+ubAIZ43IQb/8BJ9bruo4BM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-k2ikxjQti5EaNhrBJ8Ar/lhQ5Ukf/RbMxsULIFOvwrk='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="robots" content="noindex">
 <script src="vendor/tailwind-play-3.4.17.js" integrity="sha384-igm5BeiBt36UU4gqwWS7imYmelpTsZlQ45FZf+XBn9MuJbn4nQr7yx1yFydocC/K"></script>
@@ -4507,6 +4507,157 @@ async function pushCalcToSupabase(record, url, key, isUpdate, touchStatus = true
 
 // изтегля всички калкулации от Supabase (видими за всички устройства) — праща логнатата
 // сесия; от 08.11.2026 RLS пуска calculations само на authenticated, anon вижда празно
+// ОФЕРТА СЕ ПРАВИ САМО ОТ ЗАПИТВАНЕ (решение на Додо, 25.11.2026): трябва да има номер на запитването,
+// определена цена, име на клиента и телефон или имейл. Връща списък с липсващото (празен = може).
+function offerBlockers(rec) {
+  const c = rec?.contact || {},
+    miss = [];
+  if (!rec?.calcNumber) miss.push("запитването още няма номер (изчакайте да се запише)");
+  if (!(Number(rec?.total) > 0) || rec?.noPrice) miss.push("цена (отворете записа с „Редактирай“ и я определете)");
+  if (!String(c.name || "").trim()) miss.push("име на клиента");
+  if (!String(c.phone || "").trim() && !String(c.email || "").trim()) miss.push("телефон или имейл на клиента");
+  return miss;
+}
+// Уточнение към вещ в списъка на офертата: разглобява ли се, сглобява ли се, с какво се опакова
+// (Додо, 25.11.2026). Чете същите отметки, по които е сметната цената.
+function offerItemNote(id, cnt, fs, service) {
+  const it = ITEM_INDEX[id];
+  if (!it) return "";
+  const parts = [],
+    dis = it.dis && fs.dis?.[id],
+    asm = it.asm && fs.asm?.[id];
+  if (dis && asm) parts.push("разглобяваме и сглобяваме");else if (dis) parts.push("разглобяваме");else if (asm) parts.push("сглобяваме");
+  const self = pickCount(fs.selfPack?.[id], cnt);
+  if (service !== "assembly") {
+    const pack = [];
+    if (it.wrap && pickCount(fs.wrap?.[id] ?? wrapDefault(it), cnt) - self > 0) pack.push("стреч фолио");
+    if (it.protect && pickCount(fs.protect?.[id] ?? (it.protectReq ? true : false), cnt) - self > 0) pack.push("велпапе");
+    if (pack.length) parts.push("опаковаме със " + pack.join(" и "));
+    if (self > 0) parts.push(self >= cnt ? "опаковано от Вас" : `${self} бр. опаковани от Вас`);
+  }
+  if (it.kind === "box") {
+    if (fs.buyBox?.[id]) parts.push("кашоните са от нас");
+    if (fs.fill?.[id]) parts.push("пълним ги ние");
+  }
+  return parts.join(" · ");
+}
+// Допълнителни услуги, които офертата предлага сама според багажа (Додо, 25.11.2026): ако има
+// кашони/чували, които клиентът не купува от нас — кашони и чували от нас; ако не пълним ние —
+// опаковане на вещите. Сумите са без ДДС, по ставките, с които е сметнато запитването.
+function offerAddonsFromRecord(rec) {
+  if (["assembly", "trd", "disposal"].includes(rec.service)) return [];
+  const fs = rec.formState || {},
+    p = {
+      ...DEFAULTS,
+      ...(rec.paramsSnapshot || {})
+    },
+    prices = {
+      ...DEFAULTS.boxPrices,
+      ...(p.boxPrices || {})
+    };
+  const out = [],
+    r2 = x => Math.round(x * 100) / 100;
+  let boxN = 0,
+    boxSum = 0,
+    bagN = 0,
+    bagSum = 0,
+    fillMin = 0,
+    fillN = 0;
+  const names = [];
+  for (const i of rec.items || []) {
+    const it = ITEM_INDEX[i.id];
+    if (!it || it.kind !== "box" || !(i.qty > 0)) continue;
+    if (!fs.buyBox?.[i.id] && prices[i.id] != null) {
+      if (it.bag) {
+        bagN += i.qty;
+        bagSum += i.qty * prices[i.id];
+      } else {
+        boxN += i.qty;
+        boxSum += i.qty * prices[i.id];
+        names.push(`${i.qty} × ${it.label}`);
+      }
+    }
+    if (!fs.fill?.[i.id]) {
+      fillN += i.qty;
+      fillMin += i.qty * n(it.bag ? p.fillMinPerBag : p.fillMinPerBox);
+    }
+  }
+  if (boxN) out.push({
+    name: `Кашони от нас — ${boxN} бр.`,
+    desc: `Нови здрави кашони: ${names.join(", ")}.`,
+    amount: r2(boxSum)
+  });
+  if (bagN) out.push({
+    name: `Чували от нас — ${bagN} бр.`,
+    desc: "Здрави чували за дрехи и меки вещи.",
+    amount: r2(bagSum)
+  });
+  if (fillN) {
+    const h = roundHalf(fillMin / 60);
+    out.push({
+      name: "Опаковаме вещите вместо Вас",
+      desc: `Нашият екип подрежда вещите в ${fillN} кашона и чувала — около ${h} ч труд.`,
+      amount: r2(h * n(rec.rates?.worker || p.workerRate))
+    });
+  }
+  return out;
+}
+// какво минава от запитването в офертата (oferti.html → fromCalc)
+function offerPayloadFromRecord(rec) {
+  const fs = rec.formState || {},
+    intl = rec.service === "international",
+    c = rec.contact || {};
+  return {
+    service: rec.service,
+    serviceLabel: typeof SERVICE_LABELS !== "undefined" && SERVICE_LABELS[rec.service] || rec.service,
+    calcNumber: rec.calcNumber || null,
+    total: rec.total,
+    fromCity: rec.service === "local" ? fs.city || rec.city : fs.pickupCity || fs.city || rec.city || "",
+    toCity: rec.service === "local" ? fs.city || rec.city : intl ? "" : fs.dropoffCity || "",
+    toCountry: intl ? fs.country || "" : "България",
+    from: rec.from,
+    to: rec.to,
+    pickup: rec.pickup,
+    dropoff: rec.dropoff,
+    km: rec.km,
+    volumeM3: rec.volumeM3,
+    weightKg: rec.weightKg,
+    truck: rec.truck,
+    items: (rec.items || []).map(i => ({
+      label: i.label,
+      qty: i.qty,
+      note: offerItemNote(i.id, i.qty, fs, rec.service)
+    })),
+    // вътрешно за офертата (клиентът не го вижда): разговорът с гласовия асистент и бележката
+    transcript: rec.transcript || null,
+    notes: rec.notes || null,
+    addons: offerAddonsFromRecord(rec),
+    clientName: c.name || "",
+    clientPhone: c.phone || "",
+    clientEmail: c.email || "",
+    // отстъпката, обещана при запитването: формата я пази в site.discountPct, асистентът — в бележката
+    discountPct: Number(rec.site?.discountPct) || Number((String(rec.notes || "").match(/Обещана отстъпка (\d+)%/) || [])[1]) || 0
+  };
+}
+// офертите към запитванията: { "111": [{ id, shared, accepted }] } — за колоната „Статус“ в Записи
+async function fetchOffersByCalc(url, key, session) {
+  if (!url || !key || !session) return {};
+  try {
+    const res = await fetch(`${url}/rest/v1/offers?select=id,shared_at,accepted_at,calc:data->>calcNumber&order=updated_at.desc`, {
+      headers: authHeaders(session, key)
+    });
+    if (!res.ok) return {};
+    const out = {};
+    for (const o of await res.json()) if (o.calc) (out[o.calc] ||= []).push({
+      id: o.id,
+      shared: !!o.shared_at,
+      accepted: !!o.accepted_at
+    });
+    return out;
+  } catch (e) {
+    return {};
+  }
+}
 async function fetchCalcsFromSupabase(url, key, session) {
   if (!url || !key) return [];
   try {

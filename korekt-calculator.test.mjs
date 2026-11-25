@@ -1803,6 +1803,19 @@ test("оферта: към всяка вещ излиза уточнение —
   const asmOnly = E.offerPayloadFromRecord({ ...rec, service: "assembly" }).items[0].note;
   ok(!/стреч|велпапе/.test(asmOnly), "при само монтаж няма опаковане: " + asmOnly);
 });
+test("оферта: при кашони и чували сама предлага кашони от нас, чували от нас и опаковане (#4589)", () => {
+  const rec = { calcNumber: 121, total: 113, service: "local", rates: { worker: 18 }, contact: { name: "Тест", phone: "0888" },
+    items: [{ id: "dresser", label: "Скрин / шкаф", qty: 1 }, { id: "boxM", label: "Кашон среден", qty: 10 }, { id: "clothesBag", label: "Чувал с дрехи", qty: 10 }],
+    formState: { city: "София" }, paramsSnapshot: { boxPrices: { boxM: 1.79, clothesBag: 0.4 }, fillMinPerBox: 10, fillMinPerBag: 5, workerRate: 18 } };
+  const a = E.offerPayloadFromRecord(rec).addons;
+  eq(a.length, 3);
+  near(a[0].amount, 17.9, 0.01, "10 средни кашона × 1,79 €"); ok(/10 бр/.test(a[0].name));
+  near(a[1].amount, 4, 0.01, "10 чувала × 0,40 €");
+  near(a[2].amount, 2.5 * 18, 0.01, "150 мин пълнене = 2,5 ч × 18 €");
+  const mine = E.offerPayloadFromRecord({ ...rec, formState: { city: "София", buyBox: { boxM: true, clothesBag: true }, fill: { boxM: true, clothesBag: true } } }).addons;
+  eq(mine.length, 0, "ако вече са от нас и ги пълним ние — нищо не се предлага");
+  eq(E.offerPayloadFromRecord({ ...rec, items: [rec.items[0]] }).addons.length, 0, "без кашони и чували няма предложения");
+});
 test("монтаж/ТРД: няма транспортно перо — стоката не е наша грижа", () => {
   const r = calc({ service: "assembly", city: "София", manualHours: 4 });
   ok(!r.lines.some((l) => l.label.startsWith("Транспорт")), "не бива да има транспорт");

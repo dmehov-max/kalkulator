@@ -4,6 +4,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400&display=swap">
 <style>
+/* скритите раздели наистина да не се виждат (празната червена рамка беше скритият панел за отговор) */
+[hidden] { display: none !important; }
 /* Layout: brand header strip, route hero, then two columns — details left, sticky price card right; one column on phones. */
 :root {
   --bg: #f3f5f6;
@@ -90,6 +92,20 @@ button { font: inherit; cursor: pointer; }
 main .wrap { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 28px; padding-block: 28px 48px; align-items: start; }
 @media (max-width: 880px) { main .wrap { grid-template-columns: minmax(0,1fr); } }
 .col { display: grid; gap: 26px; min-width: 0; }
+/* България: първо чия е офертата и защо да ни вярват, после задание → какво включва → багаж →
+   по избор → какво гарантираме → как протича → важна информация → координатор */
+body.dom .route { display: none; }
+body.dom .col { display: flex; flex-direction: column; }
+body.dom #actPanel { order: 0; } body.dom #detailsPanel { order: 1; } body.dom #inclPanel { order: 2; }
+body.dom #invPanel { order: 3; } body.dom #addPanel { order: 4; } body.dom #guarPanel { order: 5; }
+body.dom #stepsPanel { order: 6; } body.dom #infoPanel { order: 7; } body.dom #coordPanel { order: 8; }
+body.dom #trustPanel { display: none; }
+.herotitle { font-family: var(--f-display); font-size: clamp(1.6rem, 4.4vw, 2.6rem); line-height: 1.1; }
+.herotrust { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.herotrust .ht { border: 1px solid rgba(255,255,255,.28); border-radius: 10px; padding: 12px 14px; color: inherit; text-decoration: none; display: block; }
+.herotrust .ht b { display: block; font-family: var(--f-display); font-size: 1.45rem; line-height: 1.15; }
+.herotrust .ht span { display: block; font-size: .84rem; opacity: .8; margin-top: 3px; }
+.herotrust .ht.main { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.5); }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 22px; display: grid; gap: 16px; min-width: 0; }
 .panel > header { display: grid; gap: 4px; }
 .panel > header p { color: var(--muted); font-size: .92rem; }
@@ -244,8 +260,10 @@ footer .sig { font-style: italic; }
 
 <section class="hero">
   <div class="wrap">
+    <div class="herotitle" id="heroTitle" hidden></div>
     <p class="greet" id="greet"></p>
     <p class="autonote" id="autoNote" hidden></p>
+    <div class="herotrust" id="heroTrust" hidden></div>
     <div class="route">
       <div><div class="city" id="fromCity"></div><div class="country" id="fromCountry"></div></div>
       <div class="mid">
@@ -276,7 +294,7 @@ footer .sig { font-style: italic; }
 
       <section class="panel act" id="actPanel" hidden></section>
 
-      <section class="panel" aria-labelledby="h-details">
+      <section class="panel" aria-labelledby="h-details" id="detailsPanel">
         <header><span class="eyebrow" data-t="detailsEyebrow"></span><h2 id="h-details" data-t="detailsTitle"></h2></header>
         <div class="facts" id="facts"></div>
       </section>
@@ -286,7 +304,7 @@ footer .sig { font-style: italic; }
         <div class="invwrap"><table class="inv" id="inv"></table></div>
       </section>
 
-      <section class="panel" aria-labelledby="h-coord">
+      <section class="panel" aria-labelledby="h-coord" id="coordPanel">
         <header><span class="eyebrow" data-t="coordEyebrow"></span><h2 id="h-coord" data-t="coordTitle"></h2></header>
         <div class="coord">
           <div class="avatar" id="coordInit"></div>
@@ -298,28 +316,33 @@ footer .sig { font-style: italic; }
         </div>
       </section>
 
-      <section class="panel" aria-labelledby="h-incl">
+      <section class="panel" aria-labelledby="h-incl" id="inclPanel">
         <header><span class="eyebrow" data-t="inclEyebrow"></span><h2 id="h-incl" data-t="inclTitle"></h2></header>
         <ul class="incl" id="incl"></ul>
       </section>
 
-      <section class="panel" aria-labelledby="h-add">
+      <section class="panel" aria-labelledby="h-add" id="addPanel">
         <header><span class="eyebrow" data-t="addEyebrow"></span><h2 id="h-add" data-t="addTitle"></h2><p data-t="addLead"></p></header>
         <div class="addons" id="addons"></div>
       </section>
 
-      <section class="panel" aria-labelledby="h-steps">
+      <section class="panel" aria-labelledby="h-guar" id="guarPanel" hidden>
+        <header><span class="eyebrow" id="guarEyebrow"></span><h2 id="h-guar"></h2></header>
+        <ul class="incl" id="guar"></ul>
+      </section>
+
+      <section class="panel" aria-labelledby="h-steps" id="stepsPanel">
         <header><span class="eyebrow" data-t="stepsEyebrow"></span><h2 id="h-steps" data-t="stepsTitle"></h2></header>
         <ol class="steps" id="steps"></ol>
       </section>
 
-      <section class="panel" aria-labelledby="h-info">
+      <section class="panel" aria-labelledby="h-info" id="infoPanel">
         <header><span class="eyebrow" data-t="infoEyebrow"></span><h2 id="h-info" data-t="infoTitle"></h2></header>
         <div class="info" id="info"></div>
         <p><a class="link" href="https://www.korekt-bg.com/obshti-usloviya-za-premestvane" target="_blank" rel="noopener" data-t="terms"></a></p>
       </section>
 
-      <section class="panel" aria-labelledby="h-trust">
+      <section class="panel" aria-labelledby="h-trust" id="trustPanel">
         <header><span class="eyebrow" data-t="trustEyebrow"></span><h2 id="h-trust" data-t="trustTitle"></h2></header>
         <div class="trust" id="trust"></div>
         <a class="bap" href="https://bulgarian-movers.org/" target="_blank" rel="noopener">
@@ -437,6 +460,12 @@ const T = {
     fFrom: "Товарене от", fTo: "Доставка до", fLoad: "Дата на товарене", fDel: "Очаквана доставка", fVol: "Обем и тегло", fSvc: "Вид услуга", fVeh: "Превозно средство", fDist: "Разстояние",
     coordEyebrow: "Един човек от началото до края", coordTitle: "Вашият координатор",
     phone: "Телефон", office: "Офис", email: "Имейл", copy: "Копирай", copied: "Копирано",
+    heroTitle: "Оферта за преместване от Корект",
+    heroTrust: [["От 1999 г.", "местим домове и офиси"], ["Член на БАП", "Българска асоциация за премествания"], ["4.9 ★", "393 отзива в Google"], ["ISO 9001", "плюс 14001 и 45001, ТЮФ НОРД"]],
+    inclTitleDom: "Какво включва офертата",
+    inclDom: { move: ["Транспорт и екип", "Камион и хора за товарене, пренасяне и разтоварване"], asm: ["Разглобяване и сглобяване", "На мебелите, отбелязани в списъка на багажа"], pack: ["Опаковане и защита", "Със стреч фолио и велпапе — за вещите, отбелязани в списъка"] },
+    guarEyebrow: "Нашият ангажимент", guarTitle: "Какво гарантираме",
+    guar: [["Застраховка", "Годишна полица за щети по вещите по време на преместването"], ["Приемо-предавателен протокол", "Описваме вещите при товарене и при разтоварване"], ["Цената не се променя", "Ако всичко е по задание, сумата остава същата"], ["Един координатор", "Тодор следи преместването и отговаря на въпросите Ви"]],
     inclEyebrow: "В цената", inclTitle: "Какво е включено",
     incl: [
       ["Застраховка", "Годишна полица за щети по вещите по време на преместването"],
@@ -525,6 +554,12 @@ const T = {
     fFrom: "Loading from", fTo: "Delivery to", fLoad: "Loading date", fDel: "Expected delivery", fVol: "Volume and weight", fSvc: "Service type", fVeh: "Vehicle", fDist: "Distance",
     coordEyebrow: "One person from start to finish", coordTitle: "Your moving coordinator",
     phone: "Phone", office: "Office", email: "Email", copy: "Copy", copied: "Copied",
+    heroTitle: "Moving quote from Korekt",
+    heroTrust: [["Since 1999", "moving homes and offices"], ["BAP member", "Bulgarian Association of Movers"], ["4.9 ★", "393 Google reviews"], ["ISO 9001", "plus 14001 and 45001, TÜV NORD"]],
+    inclTitleDom: "What the quote includes",
+    inclDom: { move: ["Transport and crew", "Truck and movers for loading, carrying and unloading"], asm: ["Disassembly and assembly", "For the furniture marked in the list of items"], pack: ["Packing and protection", "Stretch film and cardboard for the items marked in the list"] },
+    guarEyebrow: "Our commitment", guarTitle: "What we guarantee",
+    guar: [["Insurance", "Annual policy for damage to your items during the move"], ["Handover protocol", "We list the items at loading and at unloading"], ["The price does not change", "If the job matches the brief, the total stays the same"], ["One coordinator", "Todor follows your move and answers your questions"]],
     inclEyebrow: "In the price", inclTitle: "What is included",
     incl: [
       ["Insurance", "Annual policy covering damage to your belongings during the move"],
@@ -613,6 +648,12 @@ const T = {
     fFrom: "Погрузка по адресу", fTo: "Доставка по адресу", fLoad: "Дата погрузки", fDel: "Ожидаемая доставка", fVol: "Объём и вес", fSvc: "Вид услуги", fVeh: "Транспорт", fDist: "Расстояние",
     coordEyebrow: "Один человек от начала до конца", coordTitle: "Ваш координатор",
     phone: "Телефон", office: "Офис", email: "Эл. почта", copy: "Копировать", copied: "Скопировано",
+    heroTitle: "Предложение по переезду от Корект",
+    heroTrust: [["С 1999 года", "перевозим дома и офисы"], ["Член БАП", "Болгарская ассоциация перевозчиков"], ["4.9 ★", "393 отзыва в Google"], ["ISO 9001", "плюс 14001 и 45001, TÜV NORD"]],
+    inclTitleDom: "Что входит в предложение",
+    inclDom: { move: ["Транспорт и бригада", "Грузовик и грузчики для погрузки, переноски и разгрузки"], asm: ["Разборка и сборка", "Мебели, отмеченной в списке вещей"], pack: ["Упаковка и защита", "Стрейч-плёнка и картон для вещей, отмеченных в списке"] },
+    guarEyebrow: "Наши обязательства", guarTitle: "Что мы гарантируем",
+    guar: [["Страховка", "Годовой полис на случай повреждения вещей при переезде"], ["Акт приёма-передачи", "Описываем вещи при погрузке и при разгрузке"], ["Цена не меняется", "Если всё по заданию, сумма остаётся прежней"], ["Один координатор", "Тодор следит за переездом и отвечает на Ваши вопросы"]],
     inclEyebrow: "В цене", inclTitle: "Что включено",
     incl: [
       ["Страховка", "Годовой полис на случай повреждения вещей во время переезда"],
@@ -709,7 +750,8 @@ const $ = id => document.getElementById(id);
 const LOC = { bg: "bg-BG", en: "en-GB", ru: "ru-RU" };
 const L = v => (v && typeof v === "object" && "bg" in v) ? (v[lang] ?? v.bg) : v;
 const LT = o => o[lang] ?? o.bg;   // липсващ превод → български
-const eur = n => new Intl.NumberFormat(LOC[lang] || "en-GB", { style: "currency", currency: "EUR", minimumFractionDigits: 2 }).format(n);
+// целите суми се пишат без стотинки („136 €“), останалите с две
+const eur = n => new Intl.NumberFormat(LOC[lang] || "en-GB", { style: "currency", currency: "EUR", minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 }).format(n);
 const date = s => new Date(s + "T12:00:00").toLocaleDateString(LOC[lang] || "en-GB", { day: "numeric", month: "long", year: "numeric" });
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -732,15 +774,19 @@ function totals() {
   const full = Math.round((base + extra) * 100) / 100;
   const net = Math.round(full * (1 - pct / 100) * 100) / 100;
   const vat = Math.round(net * OFFER.vatRate * 100) / 100;
-  const gross = Math.round((net + vat) * 100) / 100;
-  return { net, vat, gross, pct, discount: Math.round((full * (1 + OFFER.vatRate) - gross) * 100) / 100 };
+  // офертите в България: една крайна цена, закръглена НАГОРЕ до цяло евро (135,60 → 136) — Додо, 25.11.2026
+  const up = (x) => isIntl() ? Math.round(x * 100) / 100 : Math.ceil(Math.round(x * 100) / 100 - 1e-9);
+  const gross = up(net + vat), fullGross = up(full * (1 + OFFER.vatRate));
+  return { net, vat, gross, pct, discount: Math.round((fullGross - gross) * 100) / 100 };
 }
 
 function renderPrice() {
   const t = T[lang], s = totals(), ind = isInd(), intl = isIntl();
   $("h-price").textContent = !intl ? t.priceDom : ind ? t.priceInd : t.priceFix;
   $("grandTop").textContent = (ind ? "≈ " : "") + eur(intl ? s.net : s.gross);
-  $("vatNote").textContent = (intl ? t.vatLine(eur(s.vat)) : t.vatDom) + (s.pct ? " · " + t.discLine(s.pct, eur(intl ? s.discount / (1 + OFFER.vatRate) : s.discount)) : "");
+  // в България клиентът вижда само „Крайна цена“ — без да се споменава ДДС
+  $("vatNote").textContent = intl ? t.vatLine(eur(s.vat)) + (s.pct ? " · " + t.discLine(s.pct, eur(s.discount / (1 + OFFER.vatRate))) : "")
+    : (s.pct ? t.discLine(s.pct, eur(s.discount)) : "");
   $("stageBox").innerHTML = !intl ? `<p class="why">${t.whyDom}</p>` : `<div class="track"><span class="${ind ? "on" : "done"}">${ind ? "1" : "✓"} · ${t.track1}</span><span class="${ind ? "" : "on"}">2 · ${t.track2}</span></div>` +
     `<p class="why">${ind ? t.whyInd : t.whyFix(date(OFFER.loadDate))}</p>`;
   $("btnAccept").textContent = ind ? t.askDates : t.accept;
@@ -805,9 +851,27 @@ function render() {
 $("coordName").textContent = L(c.name); $("coordRole").textContent = L(c.role);
   const contacts = [[t.phone, c.phone], [t.office, c.phone2], [t.email, c.email]].filter(x => x[1]);
   $("coordContacts").innerHTML = contacts.map(([k, v], i) => `<div class="contact-row"><span class="lbl">${k}</span><span class="mono" id="ct-${i}">${esc(v)}</span><button type="button" class="copy" data-copy="${esc(v)}">${t.copy}</button></div>`).join("");
-  $("incl").innerHTML = t.incl.map(([b, s]) => `<li><span class="tick">✓</span><div><b>${b}</b><span>${s}</span></div></li>`).join("");
+  const tick = ([b, s]) => `<li><span class="tick">✓</span><div><b>${b}</b><span>${s}</span></div></li>`;
+  document.body.classList.toggle("dom", !intl);
+  $("heroTitle").hidden = $("heroTrust").hidden = $("guarPanel").hidden = intl;
+  if (intl) $("incl").innerHTML = t.incl.map(tick).join("");
+  else {
+    $("heroTitle").textContent = t.heroTitle;
+    $("heroTrust").innerHTML = t.heroTrust.map(([b, s], i) => i === 1
+      ? `<a class="ht main" href="https://bulgarian-movers.org/" target="_blank" rel="noopener"><b>${b}</b><span>${s}</span></a>`
+      : `<div class="ht${i === 0 ? " main" : ""}"><b>${b}</b><span>${s}</span></div>`).join("");
+    // „какво включва“ следва списъка: разглобяване и опаковане се показват само ако ги има при някоя вещ
+    const notes = (o.inventory || []).map(r => String((r.note && r.note.bg) || "")).join(" ");
+    const inc = [t.inclDom.move];
+    if (/разглоб|сглоб/i.test(notes)) inc.push(t.inclDom.asm);
+    if (/опаков/i.test(notes)) inc.push(t.inclDom.pack);
+    $("h-incl").textContent = t.inclTitleDom;
+    $("incl").innerHTML = inc.map(tick).join("");
+    $("guarEyebrow").textContent = t.guarEyebrow; $("h-guar").textContent = t.guarTitle;
+    $("guar").innerHTML = t.guar.map(tick).join("");
+  }
   $("addons").closest("section").hidden = !o.addons.length;
-  $("addons").innerHTML = o.addons.map(a => `<label class="addon" for="${a.id}"><input type="checkbox" id="${a.id}" ${picked.has(a.id) ? "checked" : ""}><span><span class="t">${esc(LT(a))}</span><br><span class="d">${esc(L(a.d))}</span></span></label>`).join("");
+  $("addons").innerHTML = o.addons.map(a => `<label class="addon" for="${a.id}"><input type="checkbox" id="${a.id}" ${picked.has(a.id) ? "checked" : ""}><span><span class="t">${esc(LT(a))}${a.amount ? ` <b class="mono">+ ${eur(isIntl() ? a.amount : Math.ceil(Math.round(a.amount * (1 + o.vatRate) * 100) / 100 - 1e-9))}</b>` : ""}</span><br><span class="d">${esc(L(a.d))}</span></span></label>`).join("");
   renderInventory();
   $("steps").innerHTML = (intl ? t.steps : t.stepsDom).map(([w, h, d]) => `<li><div><div class="when">${w}</div><div class="what">${h}</div><div class="how">${d}</div></div></li>`).join("");
   $("info").innerHTML = t.info.map(([h, items]) => `<div><h3>${h}</h3><ul>${items.map(i => `<li>${i}</li>`).join("")}</ul></div>`).join("");
@@ -845,7 +909,7 @@ function openAct(kind, keep) {
   const addons = OFFER.addons.filter(a => picked.has(a.id)).map(a => LT(a)).join(", ") || t.none;
   p.innerHTML = `<header><span class="eyebrow">${OFFER.id}</span><h2>${title}</h2><p>${lead}</p></header>` +
     (kind === "accept"
-      ? `<div class="msg">${esc(t.grand)}: ${eur(s.gross)}\n${esc(t.selected)}: ${esc(addons)}</div><label class="chk" for="act-agree"><input type="checkbox" id="act-agree"> <span>${t.agree} <a class="link" href="https://www.korekt-bg.com/obshti-usloviya-za-premestvane" target="_blank" rel="noopener">→</a></span></label>`
+      ? `<div class="msg">${esc(isIntl() ? t.grand : t.priceDom)}: ${eur(s.gross)}\n${esc(t.selected)}: ${esc(addons)}</div><label class="chk" for="act-agree"><input type="checkbox" id="act-agree"> <span>${t.agree} <a class="link" href="https://www.korekt-bg.com/obshti-usloviya-za-premestvane" target="_blank" rel="noopener">→</a></span></label>`
       : `<textarea id="act-text" placeholder="${esc(kind === "change" ? t.placeholderChange : t.placeholderAsk)}">${esc(prev)}</textarea>`) +
     `<div class="btn-row"><button type="button" class="btn primary" id="act-send">${t.send}</button><button type="button" class="btn ghost" id="act-cancel">${t.cancel}</button></div><div id="act-result"></div>`;
   p.hidden = false;

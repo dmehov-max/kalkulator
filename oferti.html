@@ -40,7 +40,11 @@ button { font: inherit; cursor: pointer; }
 .tb:disabled { opacity: .5; cursor: default; }
 .pill { font-size: .78rem; padding: 3px 10px; border-radius: 999px; background: rgba(255,255,255,.12); }
 .pill.dirty { background: #fbbc04; color: #2a2100; }
-.panes-switch { display: none; }
+.work[data-edit="0"] { grid-template-columns: minmax(0,1fr); }
+.work[data-edit="0"] .form { display: none; }
+.notes { padding: 0 16px; }
+.notes:empty, .notes > :empty { display: none; }
+.notes > div:not(:empty) { margin: 10px 0; max-width: 900px; }
 
 /* Workspace */
 .work { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(360px, 520px) minmax(0, 1fr); }
@@ -52,7 +56,6 @@ button { font: inherit; cursor: pointer; }
   .work { grid-template-columns: minmax(0,1fr); }
   .form { border-right: 0; padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   .work[data-pane="form"] .preview, .work[data-pane="preview"] .form { display: none; }
-  .panes-switch { display: inline-flex; }
 }
 
 /* Form */
@@ -93,19 +96,17 @@ textarea { min-height: 54px; resize: vertical; }
   <button type="button" class="tb" id="btnDup" title="Нова версия на офертата към същото запитване (напр. BG-2026-0111-2)">Нова версия</button>
   <span class="sp"></span>
   <span class="pill" id="status">Зарежда…</span>
-  <div class="seg panes-switch" role="group" aria-label="Изглед">
-    <button type="button" data-pane="form" aria-pressed="true">Форма</button>
-    <button type="button" data-pane="preview" aria-pressed="false">Преглед</button>
-  </div>
+  <button type="button" class="tb" id="btnEdit" aria-pressed="false" title="Показва или скрива полетата за редакция на офертата">✏ Редактирай</button>
   <button type="button" class="tb" id="btnShare">Линк за клиента</button>
   <button type="button" class="tb" id="btnExport">Изтегли HTML</button>
   <button type="button" class="tb primary" id="btnSave">Запази</button>
 </header>
 
-<div class="work" id="work" data-pane="form">
+<!-- съобщенията и линкът за клиента са над офертата, за да се виждат и при скрита форма -->
+<div class="notes"><div id="dbMsg"></div><div id="sharePanel"></div></div>
+<!-- офертата се показва цяла; полетата за редакция излизат с „Редактирай“ (Додо, 25.11.2026) -->
+<div class="work" id="work" data-pane="preview" data-edit="0">
   <form class="form" id="form" autocomplete="off" onsubmit="return false">
-    <div id="dbMsg"></div>
-    <div id="sharePanel"></div>
 
     <fieldset>
       <legend>Оферта</legend>
@@ -242,7 +243,8 @@ const TEAM = [
   { name: "Сузи", role: "Запитвания, София", phone: "0882 944 098" },
   { name: "Мира Буреш", role: "Клиенти и опаковки, София", phone: "0882 944 098" },
   { name: "Християн Димитров", role: "Бургас и Черноморие", phone: "0882 944 099" },
-  { name: "Мария Келбечева", role: "Пловдив", phone: "0882 944 099" }
+  { name: "Мария Келбечева", role: "Пловдив", phone: "0882 944 099" },
+  { name: "Дойчин Мехов", role: "", phone: "0888 884 485" }
 ];
 /* ---------- Обща база: Supabase, таблица offers (виж supabase/offers.sql) ----------
    Входът е този на калкулатора: сесията се чете от localStorage „korekt:authSession“. */
@@ -293,6 +295,12 @@ function fromCalc(c) {
   if (o.calcNumber) o.id = idForCalc(kind, o.calcNumber);
   o.client = c.clientName || "";
   o.discountPct = +c.discountPct || 0;
+  // координатор по подразбиране е колегата, който прави офертата (може да се смени от списъка)
+  const first = (v) => String(v || "").trim().split(/\s+/)[0].toLowerCase();
+  const me = c.madeBy ? TEAM.find(m => first(m.name) === first(c.madeBy)) : null;
+  if (me) { o.coName = me.name; o.coRole = me.role; o.coPhone = me.phone; o.coPhoto = me.photo === "sample" ? DEFAULT_PHOTO : ""; }
+  else if (c.madeBy) { o.coName = c.madeBy; o.coRole = ""; o.coPhone = "0882 944 099"; o.coPhoto = ""; }
+  if (Array.isArray(c.addons)) o.addons = c.addons.map(a => ({ name: a.name, desc: a.desc || "", amount: +a.amount || 0 }));
   o.clientPhone = c.clientPhone || ""; o.clientEmail = c.clientEmail || "";   // вътрешни — за връзка с клиента
   o.internalNotes = c.notes || "";
   o.transcript = Array.isArray(c.transcript)
@@ -548,6 +556,12 @@ $("btnDup").onclick = () => {
   if (!S.calcNumber) { showMsg("warn", "Тази оферта не е към запитване. Нова оферта се прави от „Записи“ → отворете запитването → „Оферта“."); return; }
   const c = JSON.parse(JSON.stringify(S)); c.id = idForCalc(c.kind, c.calcNumber); c.issued = TODAY; load(c); markDirty(true);
 };
+
+const setEdit = (on) => {
+  $("work").dataset.edit = on ? "1" : "0"; $("work").dataset.pane = on ? "form" : "preview";
+  $("btnEdit").setAttribute("aria-pressed", String(on)); $("btnEdit").textContent = on ? "✕ Скрий редакцията" : "✏ Редактирай";
+};
+$("btnEdit").onclick = () => setEdit($("work").dataset.edit !== "1");
 
 $("btnSave").onclick = async () => {
   // оферта се прави само от запитване (стари оферти без запитване могат да се дозаписват)

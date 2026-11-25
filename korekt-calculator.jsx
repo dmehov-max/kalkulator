@@ -2248,6 +2248,30 @@ function offerItemNote(id, cnt, fs, service) {
   }
   return parts.join(" · ");
 }
+// Допълнителни услуги, които офертата предлага сама според багажа (Додо, 25.11.2026): ако има
+// кашони/чували, които клиентът не купува от нас — кашони и чували от нас; ако не пълним ние —
+// опаковане на вещите. Сумите са без ДДС, по ставките, с които е сметнато запитването.
+function offerAddonsFromRecord(rec) {
+  if (["assembly", "trd", "disposal"].includes(rec.service)) return [];
+  const fs = rec.formState || {}, p = { ...DEFAULTS, ...(rec.paramsSnapshot || {}) }, prices = { ...DEFAULTS.boxPrices, ...(p.boxPrices || {}) };
+  const out = [], r2 = (x) => Math.round(x * 100) / 100;
+  let boxN = 0, boxSum = 0, bagN = 0, bagSum = 0, fillMin = 0, fillN = 0;
+  const names = [];
+  for (const i of rec.items || []) {
+    const it = ITEM_INDEX[i.id]; if (!it || it.kind !== "box" || !(i.qty > 0)) continue;
+    if (!fs.buyBox?.[i.id] && prices[i.id] != null) {
+      if (it.bag) { bagN += i.qty; bagSum += i.qty * prices[i.id]; } else { boxN += i.qty; boxSum += i.qty * prices[i.id]; names.push(`${i.qty} × ${it.label}`); }
+    }
+    if (!fs.fill?.[i.id]) { fillN += i.qty; fillMin += i.qty * n(it.bag ? p.fillMinPerBag : p.fillMinPerBox); }
+  }
+  if (boxN) out.push({ name: `Кашони от нас — ${boxN} бр.`, desc: `Нови здрави кашони: ${names.join(", ")}.`, amount: r2(boxSum) });
+  if (bagN) out.push({ name: `Чували от нас — ${bagN} бр.`, desc: "Здрави чували за дрехи и меки вещи.", amount: r2(bagSum) });
+  if (fillN) {
+    const h = roundHalf(fillMin / 60);
+    out.push({ name: "Опаковаме вещите вместо Вас", desc: `Нашият екип подрежда вещите в ${fillN} кашона и чувала — около ${h} ч труд.`, amount: r2(h * n(rec.rates?.worker || p.workerRate)) });
+  }
+  return out;
+}
 // какво минава от запитването в офертата (oferti.html → fromCalc)
 function offerPayloadFromRecord(rec) {
   const fs = rec.formState || {}, intl = rec.service === "international", c = rec.contact || {};
@@ -2262,6 +2286,7 @@ function offerPayloadFromRecord(rec) {
     items: (rec.items || []).map((i) => ({ label: i.label, qty: i.qty, note: offerItemNote(i.id, i.qty, fs, rec.service) })),
     // вътрешно за офертата (клиентът не го вижда): разговорът с гласовия асистент и бележката
     transcript: rec.transcript || null, notes: rec.notes || null,
+    addons: offerAddonsFromRecord(rec),
     clientName: c.name || "", clientPhone: c.phone || "", clientEmail: c.email || "",
     // отстъпката, обещана при запитването: формата я пази в site.discountPct, асистентът — в бележката
     discountPct: Number(rec.site?.discountPct) || Number((String(rec.notes || "").match(/Обещана отстъпка (\d+)%/) || [])[1]) || 0,
@@ -4619,7 +4644,8 @@ export default function KorektCalculator() {
   const openOfferFor = (rec) => {
     const miss = offerBlockers(rec);
     if (miss.length) { notify("За оферта липсва: " + miss.join("; ") + ".", "error"); return; }
-    try { localStorage.setItem("korekt:offerFromCalc", JSON.stringify(offerPayloadFromRecord(rec))); } catch (e) { /* без значение */ }
+    // madeBy: колегата, който прави офертата — става неин координатор по подразбиране
+    try { localStorage.setItem("korekt:offerFromCalc", JSON.stringify({ ...offerPayloadFromRecord(rec), madeBy: userName || "" })); } catch (e) { /* без значение */ }
     guardAdmin(() => {
       setShowLog(false); setShowSettings(false); setShowUsers(false); setShowProfile(false);
       setOffersFrameKey((k) => k + 1); setShowOffers(true);
