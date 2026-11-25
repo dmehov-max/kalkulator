@@ -1,5 +1,5 @@
 <!doctype html><html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-dgaVrh+gQPhC5N85TSNLqi8stO64BF+rXVFSxEcY3B4=' 'sha256-aid4EgVc6wLFZBBkUSSBZ0scA8B98iNCQyQYrVqqHYA='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-OpUNhg9ckfVQxVXo+RlkUeTdDb1UuggOsvoet3DjsXg=' 'sha256-aid4EgVc6wLFZBBkUSSBZ0scA8B98iNCQyQYrVqqHYA='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
 </head><body style="margin:0">
@@ -7,27 +7,27 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap">
 <style>
 /* скритите раздели наистина да не се виждат (празната червена рамка беше скритият панел за отговор) */
 [hidden] { display: none !important; }
 /* Layout: brand header strip, route hero, then two columns — details left, sticky price card right; one column on phones. */
 :root {
-  --bg: #f3f5f6;
+  --bg: #f9f9f9;
   --surface: #ffffff;
-  --ink: #232e33;
+  --ink: #37474f;
   --muted: #5d6c73;
   --line: #dde3e6;
-  --brand: #c8191f;
+  --brand: #ca1920;
   --brand-ink: #ffffff;
-  --slate: #37474f;
-  --slate-ink: #ffffff;
+  --slate: #ffffff;
+  --slate-ink: #37474f;
   --soft: #fbecec;
   --ok: #1e7a46;
   --ok-soft: #e5f3ea;
-  --f-display: "Times New Roman", Tinos, Times, serif;
-  --f-body: "Times New Roman", Tinos, Times, serif;
-  --f-mono: "Times New Roman", Tinos, Times, serif;
+  --f-display: "Open Sans", Arial, sans-serif;
+  --f-body: "Open Sans", Arial, sans-serif;
+  --f-mono: "Open Sans", Arial, sans-serif;
   --r: 10px;
 }
 @media (prefers-color-scheme: dark) {
@@ -99,6 +99,15 @@ main .wrap { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 28
 .col { display: grid; gap: 26px; min-width: 0; }
 /* България: първо чия е офертата и защо да ни вярват, после задание → какво включва → багаж →
    по избор → какво гарантираме → как протича → важна информация → координатор */
+/* Вид като korekt-bg.com (Додо, 25.11.2026): Open Sans, светъл фон, червени заглавия,
+   бутони с ъгли 3/16 px и главни букви, светла лента с червени градове */
+.top { background: #f9f9f9; }
+.hero { border-bottom: 1px solid var(--line); }
+.hero .greet { opacity: 1; color: var(--muted); }
+.route .city { color: var(--brand); font-weight: 600; text-transform: none; }
+.panel h2 { color: var(--brand); font-weight: 600; }
+.btn { border-radius: 3px 16px; text-transform: uppercase; font-weight: 600; letter-spacing: .02em; }
+.lang button[aria-pressed="true"] { background: var(--brand); color: var(--brand-ink); }
 body.dom .route { display: none; }
 body.dom .hero { background: var(--brand); color: var(--brand-ink); }  /* Додо, 25.11.2026: началото в червено, не сиво */
 body.dom .col { display: flex; flex-direction: column; }
@@ -801,9 +810,12 @@ $("coordName").textContent = L(c.name); $("coordRole").textContent = L(c.role);
   const contacts = [[t.phone, c.phone], [t.office, c.phone2], [t.email, c.email]].filter(x => x[1]);
   $("coordContacts").innerHTML = contacts.map(([k, v], i) => `<div class="contact-row"><span class="lbl">${k}</span><span class="mono" id="ct-${i}">${esc(v)}</span><button type="button" class="copy" data-copy="${esc(v)}">${t.copy}</button></div>`).join("");
   const tick = ([b, s]) => `<li><span class="tick">✓</span><div><b>${b}</b><span>${s}</span></div></li>`;
-  document.body.classList.toggle("dom", !intl);
-  $("heroTitle").hidden = $("heroTrust").hidden = $("guarPanel").hidden = intl;
-  if (intl) $("incl").innerHTML = t.incl.map(tick).join("");
+  // Додо, 25.11.2026: върнат първоначалният вид (сива лента с маршрута, стария ред на разделите).
+  // Новото начало (заглавие, плочки, „Какво гарантираме“, червено) е тук и се пуска с NEW_LOOK = true.
+  const NEW_LOOK = false, newLook = NEW_LOOK && !intl;
+  document.body.classList.toggle("dom", newLook);
+  $("heroTitle").hidden = $("heroTrust").hidden = $("guarPanel").hidden = !newLook;
+  if (!newLook) { $("h-incl").textContent = t.inclTitle; $("incl").innerHTML = t.incl.map(tick).join(""); }
   else {
     $("heroTitle").textContent = t.heroTitle;
     $("heroTrust").innerHTML = t.heroTrust.map(([b, s], i) => i === 1
