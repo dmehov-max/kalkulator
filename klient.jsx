@@ -15,7 +15,7 @@ const DISCOUNT_PCT = 5;
 const DISCOUNT_DAYS = 14;
 const FLEX_DISCOUNT_PCT = 5; // още толкова %, ако клиентът приеме дата и час, предложени от нас
 const PHONE = "0882 944 099";
-const VAT = 1.2;
+const VAT = 1; // цената от калкулатора е крайната — ДДС не се добавя (Додо, 25.11.2026)
 const RED = "#d92027", BLUE = "#1d5fc2", INK = "#0f172a";
 
 const K_INITIAL = {

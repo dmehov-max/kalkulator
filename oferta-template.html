@@ -533,7 +533,7 @@ const T = {
     invEyebrow: "Опис", invTitle: "Списък на багажа", invLead: "Цената е изчислена за тези вещи. Ако нещо липсва, натиснете „Искам промени“.",
     fDate: "Дата на преместване", invItem: "Предмет", invQty: "Брой", invNote: "Бележка", invTotal: "Общо",
     greetDom: n => n ? `Здравейте, ${n}, ето Вашата оферта за преместване` : "Здравейте, ето Вашата оферта за преместване",
-    priceDom: "Крайна цена", vatDom: "с включен ДДС", discLine: (pct, sum) => `включена отстъпка ${pct}%: −${sum}`,
+    priceDom: "Крайна цена", priceDomCo: "Цена без ДДС", vatLineCo: v => `+ ДДС 20%: ${v}`, discLine: (pct, sum) => `включена отстъпка ${pct}%: −${sum}`,
     whyDom: "Цената не се променя, ако всичко е по задание и по списъка на багажа.",
     stepsDom: [
       ["При потвърждение", "Потвърждавате офертата", "Записваме поръчката и Ви казваме номера ѝ."],
@@ -627,7 +627,7 @@ const T = {
     invEyebrow: "Inventory", invTitle: "List of items", invLead: "The price is calculated for these items. If something is missing, press “Request changes”.",
     fDate: "Moving date", invItem: "Item", invQty: "Qty", invNote: "Note", invTotal: "Total",
     greetDom: n => n ? `Hello ${n}, here is your moving quote` : "Hello, here is your moving quote",
-    priceDom: "Final price", vatDom: "VAT included", discLine: (pct, sum) => `includes ${pct}% discount: −${sum}`,
+    priceDom: "Final price", priceDomCo: "Price excl. VAT", vatLineCo: v => `+ VAT 20%: ${v}`, discLine: (pct, sum) => `includes ${pct}% discount: −${sum}`,
     whyDom: "The price does not change if the job matches the brief and the list of items.",
     stepsDom: [
       ["On confirmation", "You confirm the quote", "We record the order and give you its number."],
@@ -721,7 +721,7 @@ const T = {
     invEyebrow: "Опись", invTitle: "Список вещей", invLead: "Цена рассчитана для этих вещей. Если чего-то не хватает, нажмите «Хочу изменения».",
     fDate: "Дата переезда", invItem: "Предмет", invQty: "Кол-во", invNote: "Примечание", invTotal: "Итого",
     greetDom: n => n ? `Здравствуйте, ${n}, вот Ваше предложение по переезду` : "Здравствуйте, вот Ваше предложение по переезду",
-    priceDom: "Итоговая цена", vatDom: "НДС включён", discLine: (pct, sum) => `включена скидка ${pct}%: −${sum}`,
+    priceDom: "Итоговая цена", priceDomCo: "Цена без НДС", vatLineCo: v => `+ НДС 20%: ${v}`, discLine: (pct, sum) => `включена скидка ${pct}%: −${sum}`,
     whyDom: "Цена не меняется, если всё соответствует заданию и списку вещей.",
     stepsDom: [
       ["При подтверждении", "Вы подтверждаете предложение", "Мы записываем заказ и сообщаем Вам его номер."],
@@ -776,17 +776,19 @@ function totals() {
   const vat = Math.round(net * OFFER.vatRate * 100) / 100;
   // офертите в България: една крайна цена, закръглена НАГОРЕ до цяло евро (135,60 → 136) — Додо, 25.11.2026
   const up = (x) => isIntl() ? Math.round(x * 100) / 100 : Math.ceil(Math.round(x * 100) / 100 - 1e-9);
-  const gross = up(net + vat), fullGross = up(full * (1 + OFFER.vatRate));
+  // в България цената от калкулатора е крайната — ДДС не се добавя отгоре (Додо, 25.11.2026)
+  const gross = isIntl() ? up(net + vat) : up(net), fullGross = isIntl() ? up(full * (1 + OFFER.vatRate)) : up(full);
   return { net, vat, gross, pct, discount: Math.round((fullGross - gross) * 100) / 100 };
 }
 
 function renderPrice() {
   const t = T[lang], s = totals(), ind = isInd(), intl = isIntl();
-  $("h-price").textContent = !intl ? t.priceDom : ind ? t.priceInd : t.priceFix;
+  const co = !intl && OFFER.clientType === "company";   // юридическо лице: същата сума, но „без ДДС“ и ред за данъка
+  $("h-price").textContent = co ? t.priceDomCo : !intl ? t.priceDom : ind ? t.priceInd : t.priceFix;
   $("grandTop").textContent = (ind ? "≈ " : "") + eur(intl ? s.net : s.gross);
   // в България клиентът вижда само „Крайна цена“ — без да се споменава ДДС
   $("vatNote").textContent = intl ? t.vatLine(eur(s.vat)) + (s.pct ? " · " + t.discLine(s.pct, eur(s.discount / (1 + OFFER.vatRate))) : "")
-    : (s.pct ? t.discLine(s.pct, eur(s.discount)) : "");
+    : [co ? t.vatLineCo(eur(Math.round(s.gross * OFFER.vatRate * 100) / 100)) : "", s.pct ? t.discLine(s.pct, eur(s.discount)) : ""].filter(Boolean).join(" · ");
   $("stageBox").innerHTML = !intl ? `<p class="why">${t.whyDom}</p>` : `<div class="track"><span class="${ind ? "on" : "done"}">${ind ? "1" : "✓"} · ${t.track1}</span><span class="${ind ? "" : "on"}">2 · ${t.track2}</span></div>` +
     `<p class="why">${ind ? t.whyInd : t.whyFix(date(OFFER.loadDate))}</p>`;
   $("btnAccept").textContent = ind ? t.askDates : t.accept;
@@ -909,7 +911,7 @@ function openAct(kind, keep) {
   const addons = OFFER.addons.filter(a => picked.has(a.id)).map(a => LT(a)).join(", ") || t.none;
   p.innerHTML = `<header><span class="eyebrow">${OFFER.id}</span><h2>${title}</h2><p>${lead}</p></header>` +
     (kind === "accept"
-      ? `<div class="msg">${esc(isIntl() ? t.grand : t.priceDom)}: ${eur(s.gross)}\n${esc(t.selected)}: ${esc(addons)}</div><label class="chk" for="act-agree"><input type="checkbox" id="act-agree"> <span>${t.agree} <a class="link" href="https://www.korekt-bg.com/obshti-usloviya-za-premestvane" target="_blank" rel="noopener">→</a></span></label>`
+      ? `<div class="msg">${esc(isIntl() ? t.grand : OFFER.clientType === "company" ? t.priceDomCo : t.priceDom)}: ${eur(s.gross)}\n${esc(t.selected)}: ${esc(addons)}</div><label class="chk" for="act-agree"><input type="checkbox" id="act-agree"> <span>${t.agree} <a class="link" href="https://www.korekt-bg.com/obshti-usloviya-za-premestvane" target="_blank" rel="noopener">→</a></span></label>`
       : `<textarea id="act-text" placeholder="${esc(kind === "change" ? t.placeholderChange : t.placeholderAsk)}">${esc(prev)}</textarea>`) +
     `<div class="btn-row"><button type="button" class="btn primary" id="act-send">${t.send}</button><button type="button" class="btn ghost" id="act-cancel">${t.cancel}</button></div><div id="act-result"></div>`;
   p.hidden = false;

@@ -3152,7 +3152,7 @@ function proNoteText(r, currency = "€") {
   lines.push(`Организация: ${org.join(", ")}`);
   const total = Number(r.total) || 0;
   lines.push(r.noPrice ? "Цена: НЕ е казана на клиента — определя я колега."
-    : `Цена: ${total} ${currency} без ДДС / ${Math.round(total * 1.2)} ${currency} с ДДС (ориентировъчна)`);
+    : `Крайна цена: ${total} ${currency} (ориентировъчна)`);
   if (r.storage) lines.push(`Складиране: ${storageLabel(r.storage, currency)}`);
   if (r.notes) lines.push(`Бележка: ${r.notes}`);
   return lines.join("\n");
@@ -3332,7 +3332,7 @@ function RecordDetail({ record: r, p, session, notify, onClose, onEdit, onOffer 
                 <div className="text-sm opacity-90 mt-0.5">На клиента <b>не е казана цена</b>. Отворете записа с ✏️, за да я определите.</div>
               </>) : (<>
                 <div className="text-4xl font-extrabold mt-1">≈ {r.total} {p?.currency}</div>
-                <div className="text-sm opacity-90 mt-0.5">без ДДС · <b>{Math.round((Number(r.total) || 0) * 1.2)} {p?.currency} с ДДС</b> (цената за клиента)</div>
+                <div className="text-sm opacity-90 mt-0.5">крайна цена за клиента</div>
               </>)}
             </div>
             <div className="text-right">
@@ -3802,8 +3802,7 @@ function LogPanel({ onClose, p, session, onEdit, onOffer, notify }) {
                     <td className="py-1.5 px-1 text-right text-slate-600">{r.volumeM3}</td>
                     <td className="py-1.5 px-1 text-right whitespace-nowrap" style={{ color: ink }}>
                       {r.noPrice ? <div className="text-slate-400" title="На клиента не е казана цена — определя я колега">—</div> : (<>
-                        <div className="font-semibold">{Math.round((Number(r.total) || 0) * 1.2)} €</div>
-                        <div className="text-[10px] text-slate-400">{r.total} € без ДДС</div>
+                        <div className="font-semibold">{r.total} €</div>
                       </>)}
                     </td>
                     <td className="py-1.5 px-1 whitespace-nowrap">

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-HgJyBHkgLRPbtd2oNCDU02bPzTvnhZ4cTC2pQVfVmmM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-Us2KEbX77vkU376maCkjqIXtEyQ9u56E7iKctVayNmc='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -6424,7 +6424,7 @@ function proNoteText(r, currency = "€") {
   const org = [`бригада ${r.crew} души`, r.trips ? `${r.trips} курс${r.trips === 1 ? "" : "а"}` : "", r.truck || "", r.hours ? `≈ ${(+r.hours).toFixed(1)} ч` : "", r.workDays > 1 ? `${r.workDays} дни` : "", r.courseMode || ""].filter(Boolean);
   lines.push(`Организация: ${org.join(", ")}`);
   const total = Number(r.total) || 0;
-  lines.push(r.noPrice ? "Цена: НЕ е казана на клиента — определя я колега." : `Цена: ${total} ${currency} без ДДС / ${Math.round(total * 1.2)} ${currency} с ДДС (ориентировъчна)`);
+  lines.push(r.noPrice ? "Цена: НЕ е казана на клиента — определя я колега." : `Крайна цена: ${total} ${currency} (ориентировъчна)`);
   if (r.storage) lines.push(`Складиране: ${storageLabel(r.storage, currency)}`);
   if (r.notes) lines.push(`Бележка: ${r.notes}`);
   return lines.join("\n");
@@ -6713,7 +6713,7 @@ function RecordDetail({
     className: "text-4xl font-extrabold mt-1"
   }, "≈ ", r.total, " ", p?.currency), /*#__PURE__*/React.createElement("div", {
     className: "text-sm opacity-90 mt-0.5"
-  }, "без ДДС · ", /*#__PURE__*/React.createElement("b", null, Math.round((Number(r.total) || 0) * 1.2), " ", p?.currency, " с ДДС"), " (цената за клиента)"))), /*#__PURE__*/React.createElement("div", {
+  }, "крайна цена за клиента"))), /*#__PURE__*/React.createElement("div", {
     className: "text-right"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-sm opacity-80"
@@ -7378,9 +7378,7 @@ function LogPanel({
     title: "На клиента не е казана цена — определя я колега"
   }, "—") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "font-semibold"
-  }, Math.round((Number(r.total) || 0) * 1.2), " €"), /*#__PURE__*/React.createElement("div", {
-    className: "text-[10px] text-slate-400"
-  }, r.total, " € без ДДС"))), /*#__PURE__*/React.createElement("td", {
+  }, r.total, " €"))), /*#__PURE__*/React.createElement("td", {
     className: "py-1.5 px-1 whitespace-nowrap"
   }, /*#__PURE__*/React.createElement("span", {
     className: "px-2 py-0.5 rounded-full text-[11px]",

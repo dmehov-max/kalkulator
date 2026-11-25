@@ -115,6 +115,7 @@ textarea { min-height: 54px; resize: vertical; }
         <label class="f">Дата на издаване<input type="date" id="f-issued" data-k="issued"></label>
         <label class="f">Валидна (дни)<input type="number" id="f-valid" data-k="validDays" min="1"></label>
         <label class="f">Отстъпка (%) — обещаната на клиента<input type="number" id="f-discountPct" data-k="discountPct" min="0" max="50" step="1"></label>
+        <label class="f">Клиентът е<select id="f-clientType" data-k="clientType"><option value="person">Физическо лице — „Крайна цена“</option><option value="company">Юридическо лице — „Цена без ДДС“ + ДДС 20%</option></select></label>
       </div>
       <label class="f">Обръщение към клиента<input type="text" id="f-client" data-k="client" placeholder="напр. г-жо Петрова"></label>
       <div>
@@ -364,7 +365,8 @@ function fromTemplateOffer(o) {
     addons: o.addons.map(a => ({ name: a.bg, desc: b(a.d), amount: a.amount })),
     conditions: (o.conditions || []).map(c => ({ title: b(c.b), text: b(c.s) })),
     advance: o.payments && o.payments.length ? Math.round(o.payments[0].share * 100) : 0,
-    coName: b(o.coordinator.name), coRole: b(o.coordinator.role), coPhone: o.coordinator.phone, coPhone2: o.coordinator.phone2, coEmail: o.coordinator.email || "", coPhoto: o.coordinator.photo || ""
+    coName: b(o.coordinator.name), coRole: b(o.coordinator.role), coPhone: o.coordinator.phone, coPhone2: o.coordinator.phone2, coEmail: o.coordinator.email || "", coPhoto: o.coordinator.photo || "",
+    clientType: o.clientType === "company" ? "company" : "person"
   };
 }
 
@@ -376,7 +378,7 @@ function toOffer(s) {
   return {
     id: s.id || "—", example: false, demo: true, langs: ["bg"], kind: s.kind || "international",
     inventory: (s.inventory || []).filter(r => r.item).map(r => ({ item: B(r.item), qty: +r.qty || 1, note: B(r.note) })),
-    client: B(s.client), issued: s.issued || TODAY, validDays: +s.validDays || 28, vatRate: 0.2, discountPct: +s.discountPct || 0,
+    client: B(s.client), issued: s.issued || TODAY, validDays: +s.validDays || 28, vatRate: 0.2, discountPct: +s.discountPct || 0, clientType: s.clientType === "company" ? "company" : "person",
     from: { city: B(s.fromCity), country: B(s.fromCountry), addr: B(s.fromAddr) },
     to: { city: B(s.toCity || "…"), country: B(s.toCountry), addr: B(s.toAddr) },
     km: +s.km || null, stage: s.stage, preferredPeriod: B(s.period || "предстои да се уточни"),
@@ -404,6 +406,7 @@ function buildHtml(offer, preview) {
 /* ---------- Рендер на формата ---------- */
 function fillInputs() {
   document.querySelectorAll("[data-k]").forEach(el => { el.value = S[el.dataset.k] ?? ""; });
+  $("f-clientType").value = S.clientType === "company" ? "company" : "person";
   S.kind = S.kind || "international"; S.inventory = S.inventory || [];
   document.querySelectorAll("[data-stage]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.stage === S.stage)));
   document.querySelectorAll("[data-kind]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.kind === S.kind)));
@@ -446,9 +449,11 @@ function renderRows() {
 function renderTotals() {
   const net = S.lines.reduce((a, l) => a + (+l.amount || 0), 0);
   const vat = Math.round(net * 20) / 100;
-  $("totals").innerHTML = `<div><span>Крайна цена без ДДС</span><span class="mono big">${S.kind !== "domestic" && S.stage === "indicative" ? "≈ " : ""}${eur(net)}</span></div>
-    <div><span>ДДС 20% (ако е приложимо)</span><span class="mono">${eur(vat)}</span></div>
-    <div><span>С ДДС</span><span class="mono">${eur(net + vat)}</span></div>`;
+  // България: сумата е крайната цена; ДДС се показва само за юридическо лице
+  const showVat = S.kind !== "domestic" || S.clientType === "company";
+  $("totals").innerHTML = `<div><span>${showVat ? "Цена без ДДС" : "Крайна цена"}</span><span class="mono big">${S.kind !== "domestic" && S.stage === "indicative" ? "≈ " : ""}${eur(net)}</span></div>` + (showVat ? `
+    <div><span>ДДС 20%${S.kind !== "domestic" ? " (ако е приложимо)" : ""}</span><span class="mono">${eur(vat)}</span></div>
+    <div><span>С ДДС</span><span class="mono">${eur(net + vat)}</span></div>` : "");
 }
 function renderPhoto() {
   $("photoView").innerHTML = S.coPhoto ? `<img src="${esc(S.coPhoto)}" alt="Снимка на координатора">` : `<span class="ph" style="display:block"></span>`;
