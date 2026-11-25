@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Калкулатор за преместване — Корект преместване</title>
 <meta name="description" content="Вижте ориентировъчна цена за Вашето преместване за една минута — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-kOt7SvD2BhWmozQZSj8c2QA3MzB6sHkPAy7JpLPld6E='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-E2cIvDCnbx6yEDPutrZNCEsD+ZfSoQpKvLM5+Gke380='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="robots" content="noindex">
 <script src="vendor/tailwind-play-3.4.17.js" integrity="sha384-igm5BeiBt36UU4gqwWS7imYmelpTsZlQ45FZf+XBn9MuJbn4nQr7yx1yFydocC/K"></script>
@@ -170,6 +170,10 @@ const DEFAULTS = {
   // €/етаж на нормален уред (пералня/хладилник)
   heavyAppliancePerFloor: 5,
   // €/етаж на нестандартен уред (двуврат хлад., Miele)
+  heavyItemMinKg: 100,
+  // от колко кг нагоре един „спец. уред“/тежка вещ се таксува на килограм по стълбите (Додо, 25.11.2026)
+  heavyItemPerKgFloor: 0.113,
+  // € на кг на етаж без асансьор за такава вещ: 100 кг × 6 ет. ≈ 68 € (запитване #4590, болнично легло)
   heavyWorkerSharePct: 40,
   // % от таксата „тежко“ по стълбите, който се дава на работниците (реално 30–50%; решение на Додо, 24.11.2026)
   furniturePerFloor: 2,
@@ -856,6 +860,20 @@ const CATALOG = [{
     minCrew: 4,
     protect: 14
   }, {
+    id: "heavy100",
+    label: "Тежка вещ около 100 кг (в кашон, машина)",
+    m3: 0.6,
+    kg: 100,
+    kind: "appliance_heavy",
+    protect: 6
+  }, {
+    id: "heavy150",
+    label: "Тежка вещ около 150 кг (в кашон, машина)",
+    m3: 0.8,
+    kg: 150,
+    kind: "appliance_heavy",
+    protect: 8
+  }, {
     id: "washerMiele",
     label: "Пералня Miele",
     m3: 0.4,
@@ -1345,7 +1363,7 @@ const floorFeeRateFor = (it, p) => {
     case "appliance":
       return n(p.appliancePerFloor);
     case "appliance_heavy":
-      return n(p.heavyAppliancePerFloor);
+      return n(it.kg) >= n(p.heavyItemMinKg ?? 100) ? Math.round(n(it.kg) * n(p.heavyItemPerKgFloor ?? 0.113) * 100) / 100 : n(p.heavyAppliancePerFloor);
     // едрогабаритни (диван 3-ка, ъглов диван...) са си МЕБЕЛИ — просто не влизат в пътнически
     // асансьор. Не са "спец. уред" (хладилник side-by-side, Miele...) и не бива да носят
     // неговата по-висока ставка — само мебелната.
@@ -3495,7 +3513,13 @@ function computePrice(s, p) {
   // тежки кашони/чували (плочки, книги, строителни — 20+ кг): стълбите им се таксуват ВИНАГИ,
   // не влизат в минимума от 2 ч (решение на Додо, 24.11.2026 — №88 и №110)
   const appNormal = netFloorQty(s.qty, s.floorFeeOff, it => it.kind === "appliance");
-  const appHeavy = netFloorQty(s.qty, s.floorFeeOff, it => it.kind === "appliance_heavy");
+  // тежка вещ (спец. уред от heavyItemMinKg нагоре): по стълбите се таксува на КИЛОГРАМ на етаж, като „тежко“
+  const isHeavyItem = it => it.kind === "appliance_heavy" && n(it.kg) >= n(p.heavyItemMinKg ?? 100);
+  const appHeavy = netFloorQty(s.qty, s.floorFeeOff, it => it.kind === "appliance_heavy" && !isHeavyItem(it));
+  const heavyItemKg = Object.entries(s.qty).reduce((a, [id, cnt]) => {
+    const it = ITEM_INDEX[id];
+    return it && cnt > 0 && isHeavyItem(it) ? a + Math.max(0, cnt - pickCount(s.floorFeeOff?.[id], cnt)) * n(it.kg) : a;
+  }, 0);
   const oversized = netFloorQty(s.qty, s.floorFeeOff, it => it.kind === "oversized");
   const small = netFloorQty(s.qty, s.floorFeeOff, it => it.kind === "small"); // дребни/леки вещи (картина, килим, лампа, стол...)
   const furniture = netFloorQty(s.qty, s.floorFeeOff, it => !FLOOR_FEE_KINDS.has(it.kind)); // обикновени мебели — без категория
@@ -3518,7 +3542,12 @@ function computePrice(s, p) {
   // превръща таксата за стълби в реални човекочасове по стандартната работническа ставка —
   // екипът реално отделя толкова допълнително време, не само плаща толкова допълнително
   const stairsManHoursAll = workerRate > 0 ? stairs / workerRate : 0;
-  const heavyFee = floorsStdTot * heavyBoxes * n(p.heavyBoxPerFloor ?? 0.2);
+  const heavyBoxFee = floorsStdTot * heavyBoxes * n(p.heavyBoxPerFloor ?? 0.2);
+  const heavyItemFee = isAssembly ? 0 : Math.round(floorsStdTot * heavyItemKg * n(p.heavyItemPerKgFloor ?? 0.113));
+  const heavyAuto = heavyBoxFee + heavyItemFee;
+  // ръчно „тежко“ (s.heavyOverride > 0): колегата слага сумата за конкретната вещ вместо сметнатата
+  const heavyManual = Number(s.heavyOverride) > 0;
+  const heavyFee = heavyManual ? Number(s.heavyOverride) : heavyAuto;
   // Стълбите при дребна задача влизат в платения минимум от 2 ч (решение 18.11.2026): бригадата
   // и без това е платена за 2 ч, а реалната работа е под час. Опаковането заема свободното
   // време първо, стълбите — каквото остане; доплаща се само частта извън минимума.
@@ -3556,7 +3585,10 @@ function computePrice(s, p) {
     const it = ITEM_INDEX[id];
     if (it?.surcharge && cnt > 0) add(`${it.label} — спец. обработка ×${cnt}`, it.surcharge * cnt);
   });
-  if (heavyFee > 1e-6) add(`Тежко по стълбите — ${heavyBoxes} тежки пак. × ${floorsStdTot} ет. × ${n(p.heavyBoxPerFloor ?? 0.2)} ${p.currency}`, heavyFee);
+  if (heavyManual) add("Тежко по стълбите — определено ръчно", heavyFee);else {
+    if (heavyBoxFee > 1e-6) add(`Тежко по стълбите — ${heavyBoxes} тежки пак. × ${floorsStdTot} ет. × ${n(p.heavyBoxPerFloor ?? 0.2)} ${p.currency}`, heavyBoxFee);
+    if (heavyItemFee > 1e-6) add(`Тежко по стълбите — тежка вещ ${heavyItemKg} кг × ${floorsStdTot} ет. × ${n(p.heavyItemPerKgFloor ?? 0.113)} ${p.currency}`, heavyItemFee);
+  }
   if (stairsCharged > 1e-6) {
     const parts = [];
     if (floorsStdTot && boxes - heavyBoxes) parts.push(`${boxes - heavyBoxes} каш.`);
@@ -3739,6 +3771,8 @@ function computePrice(s, p) {
     floorsOvrTot,
     laborCost: Math.round(laborCost),
     heavyFee: Math.round(heavyTotal * 100) / 100,
+    heavyAuto: Math.round(heavyAuto * 100) / 100,
+    heavyManual,
     heavyWorkerBonus: Math.round(heavyWorkerBonus * 100) / 100,
     truckCost: Math.round(truckCost),
     totalCost: Math.round(totalCost),

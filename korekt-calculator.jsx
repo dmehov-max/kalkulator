@@ -76,6 +76,8 @@ const DEFAULTS = {
   heavyMinPerFloor: 2,   // минути труд за качване на ЕДИН тежък пакет с ЕДИН етаж (25 пакета × 5 ет. ≈ 2 ч за двама)
   appliancePerFloor: 2,  // €/етаж на нормален уред (пералня/хладилник)
   heavyAppliancePerFloor: 5, // €/етаж на нестандартен уред (двуврат хлад., Miele)
+  heavyItemMinKg: 100,       // от колко кг нагоре един „спец. уред“/тежка вещ се таксува на килограм по стълбите (Додо, 25.11.2026)
+  heavyItemPerKgFloor: 0.113, // € на кг на етаж без асансьор за такава вещ: 100 кг × 6 ет. ≈ 68 € (запитване #4590, болнично легло)
   heavyWorkerSharePct: 40, // % от таксата „тежко“ по стълбите, който се дава на работниците (реално 30–50%; решение на Додо, 24.11.2026)
   furniturePerFloor: 2,  // €/етаж на обикновена мебел без асансьор (гардероб, легло, маса...) —
                           // преди 2026-08-06 тези вещи изобщо не се таксуваха на етаж (мъртва настройка)
@@ -222,6 +224,8 @@ const CATALOG = [
     { id: "ovenBuiltIn", label: "Фурна за вграждане", m3: 0.15, kg: 35, wrap: 5, wrapReq: true, kind: "appliance", protect: 4 },
     { id: "stove", label: "Готварска печка", m3: 0.4, kg: 45, wrap: 8, wrapReq: true, kind: "appliance", protect: 6 },
     { id: "fridgeSxS", label: "Хладилник двуврат (side-by-side)", m3: 1.2, kg: 120, wrap: 16, wrapReq: true, kind: "appliance_heavy", minCrew: 4, protect: 14 },
+    { id: "heavy100", label: "Тежка вещ около 100 кг (в кашон, машина)", m3: 0.6, kg: 100, kind: "appliance_heavy", protect: 6 },
+    { id: "heavy150", label: "Тежка вещ около 150 кг (в кашон, машина)", m3: 0.8, kg: 150, kind: "appliance_heavy", protect: 8 },
     { id: "washerMiele", label: "Пералня Miele", m3: 0.4, kg: 85, wrap: 8, wrapReq: true, kind: "appliance_heavy", protect: 6 },
     { id: "microwave", label: "Микровълнова", m3: 0.1, kg: 15, wrap: 3, wrapReq: true, protect: 2, kind: "small" },
     { id: "ac", label: "Климатик (двете тела)", m3: 0.3, kg: 35, wrap: 4, wrapReq: true, protect: 4, kind: "small" },
@@ -442,7 +446,7 @@ const floorFeeRateFor = (it, p) => {
   switch (it.kind) {
     case "box": case "sack": return n(it.kg) >= 20 ? n(p.heavyBoxPerFloor ?? p.boxPerFloor) : n(p.boxPerFloor);
     case "appliance": return n(p.appliancePerFloor);
-    case "appliance_heavy": return n(p.heavyAppliancePerFloor);
+    case "appliance_heavy": return n(it.kg) >= n(p.heavyItemMinKg ?? 100) ? Math.round(n(it.kg) * n(p.heavyItemPerKgFloor ?? 0.113) * 100) / 100 : n(p.heavyAppliancePerFloor);
     // едрогабаритни (диван 3-ка, ъглов диван...) са си МЕБЕЛИ — просто не влизат в пътнически
     // асансьор. Не са "спец. уред" (хладилник side-by-side, Miele...) и не бива да носят
     // неговата по-висока ставка — само мебелната.
@@ -1547,7 +1551,13 @@ function computePrice(s, p) {
   // тежки кашони/чували (плочки, книги, строителни — 20+ кг): стълбите им се таксуват ВИНАГИ,
   // не влизат в минимума от 2 ч (решение на Додо, 24.11.2026 — №88 и №110)
   const appNormal = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "appliance");
-  const appHeavy = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "appliance_heavy");
+  // тежка вещ (спец. уред от heavyItemMinKg нагоре): по стълбите се таксува на КИЛОГРАМ на етаж, като „тежко“
+  const isHeavyItem = (it) => it.kind === "appliance_heavy" && n(it.kg) >= n(p.heavyItemMinKg ?? 100);
+  const appHeavy = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "appliance_heavy" && !isHeavyItem(it));
+  const heavyItemKg = Object.entries(s.qty).reduce((a, [id, cnt]) => {
+    const it = ITEM_INDEX[id];
+    return it && cnt > 0 && isHeavyItem(it) ? a + Math.max(0, cnt - pickCount(s.floorFeeOff?.[id], cnt)) * n(it.kg) : a;
+  }, 0);
   const oversized = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "oversized");
   const small = netFloorQty(s.qty, s.floorFeeOff, (it) => it.kind === "small"); // дребни/леки вещи (картина, килим, лампа, стол...)
   const furniture = netFloorQty(s.qty, s.floorFeeOff, (it) => !FLOOR_FEE_KINDS.has(it.kind)); // обикновени мебели — без категория
@@ -1570,7 +1580,12 @@ function computePrice(s, p) {
   // превръща таксата за стълби в реални човекочасове по стандартната работническа ставка —
   // екипът реално отделя толкова допълнително време, не само плаща толкова допълнително
   const stairsManHoursAll = workerRate > 0 ? stairs / workerRate : 0;
-  const heavyFee = floorsStdTot * heavyBoxes * n(p.heavyBoxPerFloor ?? 0.2);
+  const heavyBoxFee = floorsStdTot * heavyBoxes * n(p.heavyBoxPerFloor ?? 0.2);
+  const heavyItemFee = isAssembly ? 0 : Math.round(floorsStdTot * heavyItemKg * n(p.heavyItemPerKgFloor ?? 0.113));
+  const heavyAuto = heavyBoxFee + heavyItemFee;
+  // ръчно „тежко“ (s.heavyOverride > 0): колегата слага сумата за конкретната вещ вместо сметнатата
+  const heavyManual = Number(s.heavyOverride) > 0;
+  const heavyFee = heavyManual ? Number(s.heavyOverride) : heavyAuto;
   // Стълбите при дребна задача влизат в платения минимум от 2 ч (решение 18.11.2026): бригадата
   // и без това е платена за 2 ч, а реалната работа е под час. Опаковането заема свободното
   // време първо, стълбите — каквото остане; доплаща се само частта извън минимума.
@@ -1611,7 +1626,11 @@ function computePrice(s, p) {
     if (it?.surcharge && cnt > 0) add(`${it.label} — спец. обработка ×${cnt}`, it.surcharge * cnt);
   });
 
-  if (heavyFee > 1e-6) add(`Тежко по стълбите — ${heavyBoxes} тежки пак. × ${floorsStdTot} ет. × ${n(p.heavyBoxPerFloor ?? 0.2)} ${p.currency}`, heavyFee);
+  if (heavyManual) add("Тежко по стълбите — определено ръчно", heavyFee);
+  else {
+    if (heavyBoxFee > 1e-6) add(`Тежко по стълбите — ${heavyBoxes} тежки пак. × ${floorsStdTot} ет. × ${n(p.heavyBoxPerFloor ?? 0.2)} ${p.currency}`, heavyBoxFee);
+    if (heavyItemFee > 1e-6) add(`Тежко по стълбите — тежка вещ ${heavyItemKg} кг × ${floorsStdTot} ет. × ${n(p.heavyItemPerKgFloor ?? 0.113)} ${p.currency}`, heavyItemFee);
+  }
   if (stairsCharged > 1e-6) {
     const parts = [];
     if (floorsStdTot && boxes - heavyBoxes) parts.push(`${boxes - heavyBoxes} каш.`);
@@ -1757,7 +1776,7 @@ function computePrice(s, p) {
 
   return { total: Math.round(total), lines, boxFillManHours, boxBuy,
     materialsCost: Math.round(materialsCost * 100) / 100, otherCost: Math.round((extraCostTotal - materialsCost) * 100) / 100,
-    costCity, workerCostRate, workerRate, deviationFactor, deviationManual, floorsStdTot, floorsOvrTot, laborCost: Math.round(laborCost), heavyFee: Math.round(heavyTotal * 100) / 100, heavyWorkerBonus: Math.round(heavyWorkerBonus * 100) / 100, truckCost: Math.round(truckCost),
+    costCity, workerCostRate, workerRate, deviationFactor, deviationManual, floorsStdTot, floorsOvrTot, laborCost: Math.round(laborCost), heavyFee: Math.round(heavyTotal * 100) / 100, heavyAuto: Math.round(heavyAuto * 100) / 100, heavyManual, heavyWorkerBonus: Math.round(heavyWorkerBonus * 100) / 100, truckCost: Math.round(truckCost),
     totalCost: Math.round(totalCost), margin: Math.round(margin), marginPercent, vol, weight, isDisposal, isLabourOnly, isManualHoursService, usesFieldCrew, crewByWork, labourBaseCity, labourTravelKm, labourAutoBaseCity: labourAutoBase?.city || null, wasteType, sacks, fillManHours, tons, landfillKm, disposalTrucksN, disposalTotalCrew, payload, weightLimited, tripsByVol, tripsByKg, manHours, crew, clockHours, workDays, trips, cap, chosen, oneWayKm, autoOneWayKm, kmManual, totalKm, driveHours, fleet, auto: !picked, isCourse, crewByProtocol, autoCrew, crewManual, reqCrew, disHours, disManHours, disCrew, asmCrew, disOnlyHours, asmOnlyHours, disOnlyManHours, asmOnlyManHours, work, wrapMeters, wrapHours, wrapManHours, rolls, protectMeters, protectManHours, handlingClock, autoHandlingClock, hoursManual, autoTruckHours, truckHoursManual, truckH, truckHWork, handlingManHours, loadClock, unloadClock, travelDays, dayCrewMode, localCrewMode, selfUnloadMode, baseCity, baseKm, baseIsOnRoute, needCar, nights, oneWayDriveH, carryHoursTot, carryManHours, storage };
 }
 
@@ -2876,6 +2895,8 @@ function SettingsPanel({ p, setP, saveState, syncedAt: syncedAtMs, notify, sessi
           <Num label="Уред/етаж" value={p.appliancePerFloor} step={0.5} onChange={(v) => upd({ appliancePerFloor: v })} suffix="€" />
           <Num label="Мебел/етаж" value={p.furniturePerFloor} step={0.5} onChange={(v) => upd({ furniturePerFloor: v })} suffix="€" />
           <Num label="Спец. уред/етаж" value={p.heavyAppliancePerFloor} step={0.5} onChange={(v) => upd({ heavyAppliancePerFloor: v })} suffix="€" />
+          <Num label="Тежка вещ: от колко кг" value={p.heavyItemMinKg ?? 100} step={10} onChange={(v) => upd({ heavyItemMinKg: v })} suffix="кг" />
+          <Num label="Тежка вещ: € на кг на етаж" value={p.heavyItemPerKgFloor ?? 0.113} step={0.01} onChange={(v) => upd({ heavyItemPerKgFloor: v })} suffix="€" />
           <Num label="От „тежко“ към работниците" value={p.heavyWorkerSharePct ?? 40} step={5} onChange={(v) => upd({ heavyWorkerSharePct: v })} suffix="%" />
           <Num label="Плоска база/етаж" value={p.floorFeeNoElevator} step={0.5} onChange={(v) => upd({ floorFeeNoElevator: v })} suffix="€" />
           <Num label="Безплатно носене до" value={p.carryFreeDistanceM} step={5} onChange={(v) => upd({ carryFreeDistanceM: v })} suffix="м" />
@@ -4274,7 +4295,7 @@ function ProfilePanel({ session, userName, onSaved, notify, p }) {
 // начално състояние на калкулацията (стъпка 1) — извадено извън компонента, за да служи и като
 // база при сливане с възстановена чернова (schema-safe, ако по-късно добавим ново поле)
 const INITIAL_S = {
-  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, truckHoursOverride: 0, labourKmOverride: 0, storage: { on: false, months: 1, mode: "auto" }, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, deviationOverride: 0, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {}, floorFeeOff: {}, fill: {}, buyBox: {}, stretchRollsManual: 0, stretchRollPriceManual: 0,
+  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, heavyOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, truckHoursOverride: 0, labourKmOverride: 0, storage: { on: false, months: 1, mode: "auto" }, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, deviationOverride: 0, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {}, floorFeeOff: {}, fill: {}, buyBox: {}, stretchRollsManual: 0, stretchRollPriceManual: 0,
   pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   extras: { packing: false, materials: false, disassembly: false },
@@ -5438,6 +5459,26 @@ export default function KorektCalculator() {
                         className="text-xs text-slate-500 underline mt-2">
                         върни автоматичния брой
                       </button>
+                    )}
+                  </div>
+                )}
+
+                {(r.heavyAuto > 0 || r.heavyManual) && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="font-semibold" style={{ color: ink }}>Тежко по стълбите</div>
+                        <div className="text-xs text-slate-400">
+                          По правило: {r.heavyAuto} {p.currency}
+                          {r.heavyManual && <span style={{ color: accent }}> · променено ръчно</span>}
+                        </div>
+                      </div>
+                      <div className="w-32">
+                        <Num value={r.heavyManual ? s.heavyOverride : r.heavyAuto} step={5} onChange={(v) => set({ heavyOverride: v || 0 })} suffix={p.currency} />
+                      </div>
+                    </div>
+                    {r.heavyManual && (
+                      <button onClick={() => set({ heavyOverride: 0 })} className="text-xs text-slate-500 underline mt-2">върни сметнатото по правило</button>
                     )}
                   </div>
                 )}

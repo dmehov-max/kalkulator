@@ -1623,6 +1623,24 @@ test("частично: задължителното опаковане важи
 
 
 /* --- Само хамали (транспорт на клиента) --- */
+// Тежка вещ от 100 кг нагоре: на килограм на етаж без асансьор (Додо, 25.11.2026, запитване #4590)
+{
+  const ет6 = (elevator = false) => ({ building: "Апартамент", floor: 6, elevator, elevatorType: "passenger", carryDistanceM: 0 });
+  const легло = (extra = {}) => calc({ service: "labour", city: "София", pickupHood: "Хиподрума", pickup: ет6(), qty: { heavy100: 1 }, ...extra });
+  const r = легло();
+  eq(r.crew, 2, "100 кг с колани — двама:");
+  eq(r.lines.find((l) => l.label.startsWith("Тежко по стълбите")).amount, 68, "100 кг × 6 ет. × 0,113 €:");
+  const реална = (x) => (x.lines.find((l) => l.label.startsWith("Реална цена")) || { amount: x.total }).amount;
+  eq(реална(r), 150, "2 ч × 2 души + кола 10 € + тежко 68 € (преди отклонението):");
+  ok(!r.lines.some((l) => l.label.startsWith("Стълби без асансьор") && l.amount > 0), "тежката вещ не плаща и „спец. уред“ на етаж");
+  eq(легло({ pickup: ет6(true) }).lines.some((l) => l.label.startsWith("Тежко")), false, "с асансьор няма „тежко“:");
+  const ръчно = легло({ heavyOverride: 98 });
+  eq(реална(ръчно), 180, "ръчно тежко 98 €:"); eq(ръчно.heavyManual, true); eq(ръчно.heavyAuto, 68);
+  near(ръчно.heavyWorkerBonus, 98 * 0.4, 0.01, "40% от ръчното тежко към работниците:");
+  // под 100 кг остава по старото правило (спец. уред × етаж)
+  ok(calc({ service: "labour", city: "София", pickup: ет6(), qty: { washerMiele: 1 } }).lines.some((l) => l.label.includes("1 спец.")), "85 кг — по 5 € на етаж");
+}
+
 const хамали = (extra = {}) => calc({ service: "labour", city: "София", pickupHood: "Люлин", qty: { boxL: 20, wardrobe3: 1 }, ...extra });
 
 test("само хамали: няма транспортно перо", () => {
