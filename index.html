@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-hpoQRQU8SGUaXgJmzINh9uWir/nqCfbT2qItC5rK+v0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-G3uH5z3j65D4Efi3c9FC/YlTwG+BNM1OTpz8lZbh+Io='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -1141,8 +1141,11 @@ const CATALOG = [{
     m3: 1.5,
     kg: 250,
     wrap: 16,
-    surcharge: 150,
-    protect: 16
+    protect: 16,
+    kind: "appliance_heavy",
+    minCrew: 4,
+    perKgFloor: 0.1,
+    minHeavyFloors: 1
   }, {
     id: "grand",
     label: "Роял",
@@ -1402,7 +1405,7 @@ const floorFeeRateFor = (it, p) => {
     case "appliance":
       return n(p.appliancePerFloor);
     case "appliance_heavy":
-      return n(it.kg) >= n(p.heavyItemMinKg ?? 100) ? Math.round(n(it.kg) * n(p.heavyItemPerKgFloor ?? 0.113) * 100) / 100 : n(p.heavyAppliancePerFloor);
+      return n(it.kg) >= n(p.heavyItemMinKg ?? 100) ? Math.round(n(it.kg) * n(it.perKgFloor ?? p.heavyItemPerKgFloor ?? 0.113) * 100) / 100 : n(p.heavyAppliancePerFloor);
     // едрогабаритни (диван 3-ка, ъглов диван...) са си МЕБЕЛИ — просто не влизат в пътнически
     // асансьор. Не са "спец. уред" (хладилник side-by-side, Miele...) и не бива да носят
     // неговата по-висока ставка — само мебелната.
@@ -3555,10 +3558,16 @@ function computePrice(s, p) {
   // тежка вещ (спец. уред от heavyItemMinKg нагоре): по стълбите се таксува на КИЛОГРАМ на етаж, като „тежко“
   const isHeavyItem = it => it.kind === "appliance_heavy" && n(it.kg) >= n(p.heavyItemMinKg ?? 100);
   const appHeavy = netFloorQty(s.qty, s.floorFeeOff, it => it.kind === "appliance_heavy" && !isHeavyItem(it));
-  const heavyItemKg = Object.entries(s.qty).reduce((a, [id, cnt]) => {
+  const heavyItems = Object.entries(s.qty).flatMap(([id, cnt]) => {
     const it = ITEM_INDEX[id];
-    return it && cnt > 0 && isHeavyItem(it) ? a + Math.max(0, cnt - pickCount(s.floorFeeOff?.[id], cnt)) * n(it.kg) : a;
-  }, 0);
+    const q = it && cnt > 0 && isHeavyItem(it) ? Math.max(0, cnt - pickCount(s.floorFeeOff?.[id], cnt)) : 0;
+    return q ? [{
+      it,
+      kg: q * n(it.kg),
+      rate: n(it.perKgFloor ?? p.heavyItemPerKgFloor ?? 0.113)
+    }] : [];
+  });
+  const heavyItemKg = heavyItems.reduce((a, h) => a + h.kg, 0);
   const oversized = netFloorQty(s.qty, s.floorFeeOff, it => it.kind === "oversized");
   const small = netFloorQty(s.qty, s.floorFeeOff, it => it.kind === "small"); // дребни/леки вещи (картина, килим, лампа, стол...)
   const furniture = netFloorQty(s.qty, s.floorFeeOff, it => !FLOOR_FEE_KINDS.has(it.kind)); // обикновени мебели — без категория
@@ -3582,7 +3591,15 @@ function computePrice(s, p) {
   // екипът реално отделя толкова допълнително време, не само плаща толкова допълнително
   const stairsManHoursAll = workerRate > 0 ? stairs / workerRate : 0;
   const heavyBoxFee = floorsStdTot * heavyBoxes * n(p.heavyBoxPerFloor ?? 0.2);
-  const heavyItemFee = isAssembly ? 0 : Math.round(floorsStdTot * heavyItemKg * n(p.heavyItemPerKgFloor ?? 0.113));
+  const heavyItemFees = isAssembly ? [] : heavyItems.map(h => {
+    const floors = Math.max(floorsStdTot, n(h.it.minHeavyFloors)); // пианото: поне 1 етаж, и на партер
+    return {
+      ...h,
+      floors,
+      fee: Math.round(floors * h.kg * h.rate)
+    };
+  });
+  const heavyItemFee = heavyItemFees.reduce((a, h) => a + h.fee, 0);
   const heavyAuto = heavyBoxFee + heavyItemFee;
   // ръчно „тежко“ (s.heavyOverride > 0): колегата слага сумата за конкретната вещ вместо сметнатата
   const heavyManual = Number(s.heavyOverride) > 0;
@@ -3626,7 +3643,7 @@ function computePrice(s, p) {
   });
   if (heavyManual) add("Тежко по стълбите — определено ръчно", heavyFee);else {
     if (heavyBoxFee > 1e-6) add(`Тежко по стълбите — ${heavyBoxes} тежки пак. × ${floorsStdTot} ет. × ${n(p.heavyBoxPerFloor ?? 0.2)} ${p.currency}`, heavyBoxFee);
-    if (heavyItemFee > 1e-6) add(`Тежко по стълбите — тежка вещ ${heavyItemKg} кг × ${floorsStdTot} ет. × ${n(p.heavyItemPerKgFloor ?? 0.113)} ${p.currency}`, heavyItemFee);
+    for (const h of heavyItemFees) if (h.fee > 1e-6) add(`Тежко по стълбите — ${h.it.label} ${h.kg} кг × ${h.floors} ет.${h.floors > floorsStdTot ? " (минимум)" : ""} × ${h.rate} ${p.currency}`, h.fee);
   }
   if (stairsCharged > 1e-6) {
     const parts = [];
