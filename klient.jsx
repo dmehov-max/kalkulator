@@ -162,6 +162,105 @@ function TruckMeter({ vol, count }) {
   );
 }
 
+// Разговор с гласовия асистент направо от формата (Додо, 26.11.2026). Пропускът идва от
+// функцията livekit-token в режим { public: true }: без вход, до 3 разговора на час от адрес и
+// до 40 на денонощие. Библиотеката livekit-client се зарежда чак при натискане на бутона.
+function VoiceCall() {
+  const [state, setState] = useState("idle"); // idle | connecting | live
+  const [agentHere, setAgentHere] = useState(false);
+  const [err, setErr] = useState(null);
+  const [lines, setLines] = useState([]);
+  const roomRef = useRef(null), audioRef = useRef(null), waitRef = useRef(null);
+  const loadLk = () => window.LivekitClient ? Promise.resolve() : new Promise((ok, bad) => {
+    const el = document.createElement("script");
+    el.src = "vendor/livekit-client.umd.js"; el.async = true;
+    el.onload = ok; el.onerror = () => bad(new Error("Не успяхме да заредим разговора. Проверете интернета."));
+    document.head.appendChild(el);
+  });
+  const stop = () => {
+    clearTimeout(waitRef.current);
+    if (roomRef.current) roomRef.current.disconnect();
+    roomRef.current = null;
+    if (audioRef.current) audioRef.current.innerHTML = "";
+    setAgentHere(false); setState("idle");
+  };
+  useEffect(() => () => { clearTimeout(waitRef.current); if (roomRef.current) roomRef.current.disconnect(); }, []);
+  const start = async () => {
+    setErr(null); setLines([]); setState("connecting");
+    try {
+      await loadLk();
+      const LK = window.LivekitClient;
+      const res = await fetch(`${DEFAULTS.supabaseUrl}/functions/v1/livekit-token`, {
+        method: "POST",
+        headers: { apikey: DEFAULTS.supabaseKey, Authorization: `Bearer ${DEFAULTS.supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ public: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Разговорът не може да започне сега. Обадете ни се.");
+      const room = new LK.Room({ adaptiveStream: true });
+      roomRef.current = room;
+      room.on(LK.RoomEvent.TrackSubscribed, (track) => { if (track.kind === "audio" && audioRef.current) audioRef.current.appendChild(track.attach()); });
+      room.on(LK.RoomEvent.ParticipantConnected, () => { setAgentHere(true); clearTimeout(waitRef.current); });
+      room.on(LK.RoomEvent.Disconnected, () => { roomRef.current = null; setAgentHere(false); setState("idle"); });
+      room.registerTextStreamHandler("lk.transcription", async (reader, info) => {
+        const id = reader.info.attributes?.["lk.segment_id"] || reader.info.id;
+        const who = info.identity === room.localParticipant.identity ? "Вие" : "Асистент";
+        let text = "";
+        for await (const chunk of reader) {
+          text += chunk;
+          const t = text;
+          setLines((prev) => {
+            const i = prev.findIndex((l) => l.id === id);
+            if (i === -1) return [...prev, { id, who, text: t }].slice(-30);
+            const next = prev.slice(); next[i] = { id, who, text: t }; return next;
+          });
+        }
+      });
+      await room.connect(data.url, data.token);
+      await room.localParticipant.setMicrophoneEnabled(true);
+      if (room.remoteParticipants.size > 0) setAgentHere(true);
+      setState("live");
+      waitRef.current = setTimeout(() => {
+        if (roomRef.current && roomRef.current.remoteParticipants.size === 0) setErr(`Асистентът не отговаря в момента. Обадете ни се на ${PHONE}.`);
+      }, 15000);
+    } catch (e) {
+      stop();
+      const m = String(e && e.message || e);
+      setErr(/Permission|NotAllowed|denied/i.test(m) ? "Разрешете достъп до микрофона, за да говорите с асистента." : m);
+    }
+  };
+  return (
+    <Card>
+      <div className="flex items-start gap-3">
+        <div className="text-3xl leading-none">🎤</div>
+        <div className="flex-1 min-w-0">
+          <div className="font-bold" style={{ color: INK }}>Предпочитате да говорите?</div>
+          <p className="text-sm text-slate-600 mt-0.5">Кажете на асистента какво местите и откъде докъде — ще Ви каже цена за минути. Разговорът се записва.</p>
+        </div>
+      </div>
+      {state === "live" ? (
+        <button onClick={stop} className="mt-3 w-full rounded-xl py-3 font-bold text-white" style={{ background: "#dc2626" }}>⏹ Край на разговора</button>
+      ) : (
+        <button onClick={start} disabled={state === "connecting"} className="mt-3 w-full rounded-xl py-3 font-bold text-white disabled:opacity-60" style={{ background: BLUE }}>
+          {state === "connecting" ? "Свързване…" : "🎤 Говорете с асистента"}
+        </button>
+      )}
+      {state === "live" && <div className="mt-2 text-sm font-semibold" style={{ color: agentHere ? "#16a34a" : "#64748b" }}>{agentHere ? "● Асистентът е на линия — говорете" : "Свързване с асистента…"}</div>}
+      {err && <p className="mt-2 text-sm" style={{ color: "#dc2626" }}>{err}</p>}
+      {lines.length > 0 && (
+        <div className="mt-3 space-y-2 max-h-72 overflow-y-auto">
+          {lines.map((l) => (
+            <div key={l.id} className={"text-sm rounded-xl px-3 py-2 " + (l.who === "Вие" ? "bg-slate-100 ml-8" : "mr-8")} style={l.who === "Вие" ? { color: INK } : { background: "#eef4fc", color: INK }}>
+              <span className="text-[11px] font-semibold text-slate-400 block">{l.who}</span>{l.text}
+            </div>
+          ))}
+        </div>
+      )}
+      <div ref={audioRef} style={{ display: "none" }} />
+    </Card>
+  );
+}
+
 function KlientCalculator() {
   const [p, setP] = useState(null);
   const [s, setS] = useState(K_INITIAL);
@@ -316,6 +415,8 @@ function KlientCalculator() {
             </div>
           )}
         </div>
+
+        {!done && <VoiceCall />}
 
         {!p && <Card><div className="text-slate-500">Зареждане на цените…</div></Card>}
 

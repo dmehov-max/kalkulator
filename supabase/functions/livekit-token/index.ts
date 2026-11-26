@@ -1,6 +1,9 @@
 // Supabase Edge Function — пропуск (token) за гласовия асистент в LiveKit (бутонът „🎤 Разговор“).
 //
-// Калкулаторът праща Authorization: Bearer <access_token> на логнатия колега. Функцията
+// Два режима: (1) калкулаторът праща Authorization: Bearer <access_token> на логнатия колега;
+// (2) формата за клиенти праща { public: true } — без вход, до 3 разговора на час от адрес и
+// до 40 на денонощие общо (функция voice_public_allow в базата, миграция 20261126_public_voice_calls).
+// Режим (1): Функцията
 // проверява самоличността сървърно (/auth/v1/user, както admin-users) и връща краткотраен
 // LiveKit токен за нова стая. Асистентът (korekt-glasov-asistent, agent.py) влиза автоматично
 // във всяка нова стая на проекта.
@@ -78,6 +81,31 @@ Deno.serve(async (request: Request) => {
   }
 
   const accessToken = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  const body = await request.json().catch(() => ({}));
+
+  // разговор от формата за клиенти (klient.html) — без вход, с лимити в базата (Додо, 26.11.2026)
+  if (body?.public === true) {
+    if (!ALLOWED_ORIGINS.has(origin)) return json(403, { error: "Разговорът е достъпен само от сайта." }, origin);
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceKey) return json(500, { error: "Няма връзка с базата." }, origin);
+    const ip = request.headers.get("cf-connecting-ip") || (request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+    if (!ip) return json(403, { error: "Неизвестен адрес." }, origin);
+    const ipHash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("korekt-voice:" + ip))))
+      .map((b) => b.toString(16).padStart(2, "0")).join("");
+    const room = `klient-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 6)}`;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/voice_public_allow`, {
+      method: "POST",
+      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ p_ip_hash: ipHash, p_room: room }),
+    });
+    const verdict = res.ok ? await res.json().catch(() => "error") : "error";
+    if (verdict === "ip_limit") return json(429, { error: "Направихте няколко разговора за кратко. Опитайте след около час или ни се обадете." }, origin);
+    if (verdict === "day_limit") return json(429, { error: "Асистентът е зает за днес. Обадете ни се — ще Ви кажем цена веднага." }, origin);
+    if (verdict !== null) return json(503, { error: "Разговорът не може да започне сега. Обадете ни се." }, origin);
+    const token = await livekitToken(apiKey, apiSecret, `klient-${crypto.randomUUID().slice(0, 8)}`, "Клиент от сайта", room);
+    return json(200, { url, token, room }, origin);
+  }
+
   const email = await callerEmail(accessToken);
   if (!email) return json(401, { error: "Влезте в калкулатора, за да говорите с асистента." }, origin);
 
