@@ -134,6 +134,24 @@ Deno.serve(async (request: Request) => {
       return json(200, { ok: true, role }, origin);
     }
 
+    // администраторът задава нова парола на колега (Додо, 26.11.2026). Паролата идва от
+    // формата в „Потребители“, минава само през HTTPS към Supabase и не се пази никъде другаде.
+    if (action === "setPassword" && request.method === "POST") {
+      const body = await request.json().catch(() => null);
+      const id = body?.id;
+      const password = typeof body?.password === "string" ? body.password : "";
+      if (!id) return json(400, { error: "Липсва id на потребител." }, origin);
+      if (password.length < 8 || password.length > 72) return json(400, { error: "Паролата трябва да е между 8 и 72 знака." }, origin);
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        headers: serviceHeaders,
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) return json(res.status, { error: data?.msg || data?.error_description || "Грешка при смяна на паролата." }, origin);
+      return json(200, { ok: true }, origin);
+    }
+
     return json(404, { error: "Непозната заявка." }, origin);
   } catch {
     return json(500, { error: "Сървърна грешка." }, origin);

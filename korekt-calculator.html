@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Корект — калкулатор за приблизителна цена</title>
 <meta name="description" content="Изчислете приблизителната цена на Вашето преместване — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-G3uH5z3j65D4Efi3c9FC/YlTwG+BNM1OTpz8lZbh+Io='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SnWRXMQqTiNcbKVJ38VLcJqehAI7z2n1FNmaqTSCYqA=' 'sha256-h3m3Y5tSHyFU77KYRiS8NWmxTtGuBCGwVKeYHubPsqc=' 'sha256-h05qxYLITzN1+sYAuZgxw5eSx4Mt28pg50BOFaeZtXs='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; connect-src 'self' https://ncwiyhndgyssepaqyiss.supabase.co wss://ncwiyhndgyssepaqyiss.supabase.co https://routes.googleapis.com https://*.livekit.cloud wss://*.livekit.cloud ws://localhost:7880 ws://127.0.0.1:7880; frame-src 'self'; worker-src 'self' blob:; manifest-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <script>
 /* Защита от вграждане в чужд сайт (clickjacking): GitHub Pages не позволява заглавката
@@ -7649,6 +7649,40 @@ function UsersPanel({
     setBusyId(null);
     notify?.(res.ok ? `Изпратен линк за нова парола на ${u.email}.` : res.error, res.ok ? "success" : "error");
   };
+
+  // администраторът задава нова парола директно (Додо, 26.11.2026) — паролата я пише той
+  const [pwFor, setPwFor] = useState(null);
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const closePw = () => {
+    setPwFor(null);
+    setPw1("");
+    setPw2("");
+  };
+  const savePassword = async u => {
+    if (pw1.length < 8) {
+      notify?.("Паролата трябва да е поне 8 знака.", "error");
+      return;
+    }
+    if (pw1 !== pw2) {
+      notify?.("Двете пароли не съвпадат.", "error");
+      return;
+    }
+    setBusyId(u.id);
+    const res = await adminUsersCall("setPassword", session, {
+      body: {
+        id: u.id,
+        password: pw1
+      }
+    });
+    setBusyId(null);
+    if (!res.ok) {
+      notify?.(res.error, "error");
+      return;
+    }
+    closePw();
+    notify?.(`Паролата на ${u.email} е сменена. Кажете му я лично.`, "success");
+  };
   if (!isAdmin) {
     return /*#__PURE__*/React.createElement("p", {
       className: "text-xs text-slate-400 py-3"
@@ -7707,13 +7741,50 @@ function UsersPanel({
       disabled: busyId === u.id,
       className: "text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 disabled:opacity-50"
     }, "Изпрати нова парола"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => pwFor === u.id ? closePw() : (closePw(), setPwFor(u.id)),
+      disabled: busyId === u.id,
+      className: "text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 disabled:opacity-50"
+    }, "Смени паролата"), /*#__PURE__*/React.createElement("button", {
       onClick: () => toggleBan(u),
       disabled: busyId === u.id,
       className: "text-xs font-medium px-3 py-1.5 rounded-full text-white disabled:opacity-50",
       style: {
         background: banned ? "#166534" : "#dc2626"
       }
-    }, busyId === u.id ? "…" : banned ? "Пусни" : "Спри")));
+    }, busyId === u.id ? "…" : banned ? "Пусни" : "Спри")), pwFor === u.id && /*#__PURE__*/React.createElement("form", {
+      className: "w-full flex flex-wrap items-end gap-2 pt-2",
+      onSubmit: e => {
+        e.preventDefault();
+        savePassword(u);
+      }
+    }, /*#__PURE__*/React.createElement("label", {
+      className: "text-[11px] text-slate-500"
+    }, "Нова парола (поне 8 знака)", /*#__PURE__*/React.createElement("input", {
+      type: "password",
+      autoComplete: "new-password",
+      value: pw1,
+      onChange: e => setPw1(e.target.value),
+      className: "block mt-1 border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
+    })), /*#__PURE__*/React.createElement("label", {
+      className: "text-[11px] text-slate-500"
+    }, "Повтори паролата", /*#__PURE__*/React.createElement("input", {
+      type: "password",
+      autoComplete: "new-password",
+      value: pw2,
+      onChange: e => setPw2(e.target.value),
+      className: "block mt-1 border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
+    })), /*#__PURE__*/React.createElement("button", {
+      type: "submit",
+      disabled: busyId === u.id,
+      className: "text-xs font-semibold px-3 py-2 rounded-full text-white disabled:opacity-50",
+      style: {
+        background: accent
+      }
+    }, busyId === u.id ? "…" : "Запази паролата"), /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick: closePw,
+      className: "text-xs text-slate-500 underline"
+    }, "Откажи")));
   })));
 }
 

@@ -3997,6 +3997,22 @@ function UsersPanel({ session, notify, p }) {
     notify?.(res.ok ? `Изпратен линк за нова парола на ${u.email}.` : res.error, res.ok ? "success" : "error");
   };
 
+  // администраторът задава нова парола директно (Додо, 26.11.2026) — паролата я пише той
+  const [pwFor, setPwFor] = useState(null);
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const closePw = () => { setPwFor(null); setPw1(""); setPw2(""); };
+  const savePassword = async (u) => {
+    if (pw1.length < 8) { notify?.("Паролата трябва да е поне 8 знака.", "error"); return; }
+    if (pw1 !== pw2) { notify?.("Двете пароли не съвпадат.", "error"); return; }
+    setBusyId(u.id);
+    const res = await adminUsersCall("setPassword", session, { body: { id: u.id, password: pw1 } });
+    setBusyId(null);
+    if (!res.ok) { notify?.(res.error, "error"); return; }
+    closePw();
+    notify?.(`Паролата на ${u.email} е сменена. Кажете му я лично.`, "success");
+  };
+
   if (!isAdmin) {
     return <p className="text-xs text-slate-400 py-3">🔒 Само администраторът вижда списъка с потребители.</p>;
   }
@@ -4044,12 +4060,32 @@ function UsersPanel({ session, notify, p }) {
                     className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 disabled:opacity-50">
                     Изпрати нова парола
                   </button>
+                  <button onClick={() => (pwFor === u.id ? closePw() : (closePw(), setPwFor(u.id)))} disabled={busyId === u.id}
+                    className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 disabled:opacity-50">
+                    Смени паролата
+                  </button>
                   <button onClick={() => toggleBan(u)} disabled={busyId === u.id}
                     className="text-xs font-medium px-3 py-1.5 rounded-full text-white disabled:opacity-50"
                     style={{ background: banned ? "#166534" : "#dc2626" }}>
                     {busyId === u.id ? "…" : banned ? "Пусни" : "Спри"}
                   </button>
                 </div>
+                {pwFor === u.id && (
+                  <form className="w-full flex flex-wrap items-end gap-2 pt-2" onSubmit={(e) => { e.preventDefault(); savePassword(u); }}>
+                    <label className="text-[11px] text-slate-500">Нова парола (поне 8 знака)
+                      <input type="password" autoComplete="new-password" value={pw1} onChange={(e) => setPw1(e.target.value)}
+                        className="block mt-1 border border-slate-200 rounded-lg px-2 py-1.5 text-sm" />
+                    </label>
+                    <label className="text-[11px] text-slate-500">Повтори паролата
+                      <input type="password" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)}
+                        className="block mt-1 border border-slate-200 rounded-lg px-2 py-1.5 text-sm" />
+                    </label>
+                    <button type="submit" disabled={busyId === u.id} className="text-xs font-semibold px-3 py-2 rounded-full text-white disabled:opacity-50" style={{ background: accent }}>
+                      {busyId === u.id ? "…" : "Запази паролата"}
+                    </button>
+                    <button type="button" onClick={closePw} className="text-xs text-slate-500 underline">Откажи</button>
+                  </form>
+                )}
               </div>
             );
           })}
