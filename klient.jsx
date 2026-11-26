@@ -171,6 +171,48 @@ function VoiceCall() {
   const [err, setErr] = useState(null);
   const [lines, setLines] = useState([]);
   const roomRef = useRef(null), audioRef = useRef(null), waitRef = useRef(null);
+  // лента и избор на микрофон като в калкулатора: на компютър по подразбиране често е друг микрофон (Додо, 26.11.2026)
+  const [level, setLevel] = useState(0);
+  const [mics, setMics] = useState([]);
+  const [micId, setMicId] = useState("");
+  const [noSound, setNoSound] = useState(false);
+  const meterRef = useRef(null), quietRef = useRef(null);
+  const stopMeter = () => {
+    const m = meterRef.current;
+    if (m) { cancelAnimationFrame(m.raf); m.ctx.close().catch(() => {}); }
+    meterRef.current = null; clearTimeout(quietRef.current); setLevel(0); setNoSound(false);
+  };
+  const startMeter = (room) => {
+    stopMeter();
+    const track = room.localParticipant.getTrackPublication(window.LivekitClient.Track.Source.Microphone)?.track?.mediaStreamTrack;
+    if (!track) return;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    ctx.createMediaStreamSource(new MediaStream([track])).connect(analyser);
+    const buf = new Float32Array(analyser.fftSize);
+    const m = { ctx, raf: 0, last: 0, heard: false };
+    const tick = (t) => {
+      analyser.getFloatTimeDomainData(buf);
+      if (t - m.last > 100) {
+        let sum = 0; for (const v of buf) sum += v * v;
+        const lv = Math.min(1, Math.sqrt(sum / buf.length) * 6);
+        if (lv > 0.08) { m.heard = true; setNoSound(false); }
+        setLevel(lv); m.last = t;
+      }
+      m.raf = requestAnimationFrame(tick);
+    };
+    m.raf = requestAnimationFrame(tick);
+    meterRef.current = m;
+    quietRef.current = setTimeout(() => { if (meterRef.current === m && !m.heard) setNoSound(true); }, 10000);
+  };
+  const changeMic = async (id) => {
+    setMicId(id);
+    const room = roomRef.current;
+    if (!room) return;
+    try { await room.switchActiveDevice("audioinput", id); startMeter(room); }
+    catch (e) { setErr("Не успяхме да сменим микрофона."); }
+  };
   const loadLk = () => window.LivekitClient ? Promise.resolve() : new Promise((ok, bad) => {
     const el = document.createElement("script");
     el.src = "vendor/livekit-client.umd.js"; el.async = true;
@@ -178,13 +220,14 @@ function VoiceCall() {
     document.head.appendChild(el);
   });
   const stop = () => {
+    stopMeter();
     clearTimeout(waitRef.current);
     if (roomRef.current) roomRef.current.disconnect();
     roomRef.current = null;
     if (audioRef.current) audioRef.current.innerHTML = "";
     setAgentHere(false); setState("idle");
   };
-  useEffect(() => () => { clearTimeout(waitRef.current); if (roomRef.current) roomRef.current.disconnect(); }, []);
+  useEffect(() => () => { stopMeter(); clearTimeout(waitRef.current); if (roomRef.current) roomRef.current.disconnect(); }, []);
   const start = async () => {
     setErr(null); setLines([]); setState("connecting");
     try {
@@ -217,7 +260,14 @@ function VoiceCall() {
         }
       });
       await room.connect(data.url, data.token);
-      await room.localParticipant.setMicrophoneEnabled(true);
+      await room.localParticipant.setMicrophoneEnabled(true, micId ? { deviceId: micId } : undefined);
+      startMeter(room);
+      try {
+        const list = await LK.Room.getLocalDevices("audioinput");
+        setMics(list.map((d) => ({ id: d.deviceId, label: d.label || "Микрофон" })));
+        const active = room.getActiveDevice("audioinput");
+        if (active) setMicId(active);
+      } catch (e) { /* списъкът е само удобство */ }
       if (room.remoteParticipants.size > 0) setAgentHere(true);
       setState("live");
       waitRef.current = setTimeout(() => {
@@ -242,10 +292,32 @@ function VoiceCall() {
         <button onClick={stop} className="mt-3 w-full rounded-xl py-3 font-bold text-white" style={{ background: "#dc2626" }}>⏹ Край на разговора</button>
       ) : (
         <button onClick={start} disabled={state === "connecting"} className="mt-3 w-full rounded-xl py-3 font-bold text-white disabled:opacity-60" style={{ background: BLUE }}>
-          {state === "connecting" ? "Свързване…" : "🎤 Говорете с асистента"}
+          {state === "connecting" ? "Свързване… (до 20 сек)" : "🎤 Говорете с асистента"}
         </button>
       )}
       {state === "live" && <div className="mt-2 text-sm font-semibold" style={{ color: agentHere ? "#16a34a" : "#64748b" }}>{agentHere ? "● Асистентът е на линия — говорете" : "Свързване с асистента…"}</div>}
+      {state === "live" && (
+        <div className="mt-3 rounded-xl border border-slate-200 p-3 space-y-2">
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500 shrink-0 w-24">Вашият звук</span>
+            <div className="flex-1 h-2.5 rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-100"
+                style={{ width: `${Math.round(level * 100)}%`, background: level > 0.08 ? "#16a34a" : "#94a3b8" }} />
+            </div>
+          </div>
+          {mics.length > 1 && (
+            <label className="flex items-center gap-3">
+              <span className="text-xs text-slate-500 shrink-0 w-24">Микрофон</span>
+              <select value={micId} onChange={(e) => changeMic(e.target.value)}
+                className="flex-1 min-w-0 text-sm rounded-lg border border-slate-200 px-2 py-1.5 bg-white">
+                {mics.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            </label>
+          )}
+          <p className="text-[11px] text-slate-400">Когато говорите, лентата трябва да става зелена.</p>
+          {noSound && <p className="text-sm font-semibold" style={{ color: "#dc2626" }}>Асистентът не Ви чува. {mics.length > 1 ? "Изберете друг микрофон от списъка." : "Проверете микрофона."}</p>}
+        </div>
+      )}
       {err && <p className="mt-2 text-sm" style={{ color: "#dc2626" }}>{err}</p>}
       {lines.length > 0 && (
         <div className="mt-3 space-y-2 max-h-72 overflow-y-auto">

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Калкулатор за преместване — Корект преместване</title>
 <meta name="description" content="Вижте ориентировъчна цена за Вашето преместване за една минута — Корект преместване ООД">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-Tw7SloCJ1TjV1eogsMlWFnnYIgnZv303YGMpHTrhP1g='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co https://*.livekit.cloud wss://*.livekit.cloud; worker-src 'self' blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-tLTBvDuvQvZS9eFz4VgSMwneQ3nuIJmgeIv3vzFmNl0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co https://*.livekit.cloud wss://*.livekit.cloud; worker-src 'self' blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="robots" content="noindex">
 <script src="vendor/tailwind-play-3.4.17.js" integrity="sha384-igm5BeiBt36UU4gqwWS7imYmelpTsZlQ45FZf+XBn9MuJbn4nQr7yx1yFydocC/K"></script>
@@ -5225,6 +5225,71 @@ function VoiceCall() {
   const roomRef = useRef(null),
     audioRef = useRef(null),
     waitRef = useRef(null);
+  // лента и избор на микрофон като в калкулатора: на компютър по подразбиране често е друг микрофон (Додо, 26.11.2026)
+  const [level, setLevel] = useState(0);
+  const [mics, setMics] = useState([]);
+  const [micId, setMicId] = useState("");
+  const [noSound, setNoSound] = useState(false);
+  const meterRef = useRef(null),
+    quietRef = useRef(null);
+  const stopMeter = () => {
+    const m = meterRef.current;
+    if (m) {
+      cancelAnimationFrame(m.raf);
+      m.ctx.close().catch(() => {});
+    }
+    meterRef.current = null;
+    clearTimeout(quietRef.current);
+    setLevel(0);
+    setNoSound(false);
+  };
+  const startMeter = room => {
+    stopMeter();
+    const track = room.localParticipant.getTrackPublication(window.LivekitClient.Track.Source.Microphone)?.track?.mediaStreamTrack;
+    if (!track) return;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    ctx.createMediaStreamSource(new MediaStream([track])).connect(analyser);
+    const buf = new Float32Array(analyser.fftSize);
+    const m = {
+      ctx,
+      raf: 0,
+      last: 0,
+      heard: false
+    };
+    const tick = t => {
+      analyser.getFloatTimeDomainData(buf);
+      if (t - m.last > 100) {
+        let sum = 0;
+        for (const v of buf) sum += v * v;
+        const lv = Math.min(1, Math.sqrt(sum / buf.length) * 6);
+        if (lv > 0.08) {
+          m.heard = true;
+          setNoSound(false);
+        }
+        setLevel(lv);
+        m.last = t;
+      }
+      m.raf = requestAnimationFrame(tick);
+    };
+    m.raf = requestAnimationFrame(tick);
+    meterRef.current = m;
+    quietRef.current = setTimeout(() => {
+      if (meterRef.current === m && !m.heard) setNoSound(true);
+    }, 10000);
+  };
+  const changeMic = async id => {
+    setMicId(id);
+    const room = roomRef.current;
+    if (!room) return;
+    try {
+      await room.switchActiveDevice("audioinput", id);
+      startMeter(room);
+    } catch (e) {
+      setErr("Не успяхме да сменим микрофона.");
+    }
+  };
   const loadLk = () => window.LivekitClient ? Promise.resolve() : new Promise((ok, bad) => {
     const el = document.createElement("script");
     el.src = "vendor/livekit-client.umd.js";
@@ -5234,6 +5299,7 @@ function VoiceCall() {
     document.head.appendChild(el);
   });
   const stop = () => {
+    stopMeter();
     clearTimeout(waitRef.current);
     if (roomRef.current) roomRef.current.disconnect();
     roomRef.current = null;
@@ -5242,6 +5308,7 @@ function VoiceCall() {
     setState("idle");
   };
   useEffect(() => () => {
+    stopMeter();
     clearTimeout(waitRef.current);
     if (roomRef.current) roomRef.current.disconnect();
   }, []);
@@ -5306,7 +5373,19 @@ function VoiceCall() {
         }
       });
       await room.connect(data.url, data.token);
-      await room.localParticipant.setMicrophoneEnabled(true);
+      await room.localParticipant.setMicrophoneEnabled(true, micId ? {
+        deviceId: micId
+      } : undefined);
+      startMeter(room);
+      try {
+        const list = await LK.Room.getLocalDevices("audioinput");
+        setMics(list.map(d => ({
+          id: d.deviceId,
+          label: d.label || "Микрофон"
+        })));
+        const active = room.getActiveDevice("audioinput");
+        if (active) setMicId(active);
+      } catch (e) {/* списъкът е само удобство */}
       if (room.remoteParticipants.size > 0) setAgentHere(true);
       setState("live");
       waitRef.current = setTimeout(() => {
@@ -5344,12 +5423,44 @@ function VoiceCall() {
     style: {
       background: BLUE
     }
-  }, state === "connecting" ? "Свързване…" : "🎤 Говорете с асистента"), state === "live" && /*#__PURE__*/React.createElement("div", {
+  }, state === "connecting" ? "Свързване… (до 20 сек)" : "🎤 Говорете с асистента"), state === "live" && /*#__PURE__*/React.createElement("div", {
     className: "mt-2 text-sm font-semibold",
     style: {
       color: agentHere ? "#16a34a" : "#64748b"
     }
-  }, agentHere ? "● Асистентът е на линия — говорете" : "Свързване с асистента…"), err && /*#__PURE__*/React.createElement("p", {
+  }, agentHere ? "● Асистентът е на линия — говорете" : "Свързване с асистента…"), state === "live" && /*#__PURE__*/React.createElement("div", {
+    className: "mt-3 rounded-xl border border-slate-200 p-3 space-y-2"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-slate-500 shrink-0 w-24"
+  }, "Вашият звук"), /*#__PURE__*/React.createElement("div", {
+    className: "flex-1 h-2.5 rounded-full bg-slate-100 overflow-hidden"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "h-full rounded-full transition-all duration-100",
+    style: {
+      width: `${Math.round(level * 100)}%`,
+      background: level > 0.08 ? "#16a34a" : "#94a3b8"
+    }
+  }))), mics.length > 1 && /*#__PURE__*/React.createElement("label", {
+    className: "flex items-center gap-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-xs text-slate-500 shrink-0 w-24"
+  }, "Микрофон"), /*#__PURE__*/React.createElement("select", {
+    value: micId,
+    onChange: e => changeMic(e.target.value),
+    className: "flex-1 min-w-0 text-sm rounded-lg border border-slate-200 px-2 py-1.5 bg-white"
+  }, mics.map(m => /*#__PURE__*/React.createElement("option", {
+    key: m.id,
+    value: m.id
+  }, m.label)))), /*#__PURE__*/React.createElement("p", {
+    className: "text-[11px] text-slate-400"
+  }, "Когато говорите, лентата трябва да става зелена."), noSound && /*#__PURE__*/React.createElement("p", {
+    className: "text-sm font-semibold",
+    style: {
+      color: "#dc2626"
+    }
+  }, "Асистентът не Ви чува. ", mics.length > 1 ? "Изберете друг микрофон от списъка." : "Проверете микрофона.")), err && /*#__PURE__*/React.createElement("p", {
     className: "mt-2 text-sm",
     style: {
       color: "#dc2626"
