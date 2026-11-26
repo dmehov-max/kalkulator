@@ -27,6 +27,7 @@ const DEFAULTS = {
   palletM3: 1.4,         // реален багаж на едно палето място (скара 1.20×0.80 м, височина 1.80 м = 1.73 м³, ~80% запълване)
   palletPrice: 18,       // €/палето място на месец
   looseM3Price: 15,      // €/м³ на месец за насипен багаж, който не се слага на пале (мебели)
+  extraStopMin: 20,      // минути на допълнителна спирка за разтоварване (бригада и камион) — Додо, 26.11.2026
   truckWorkPct: 70,      // % от ставката на камиона, докато екипът разглобява/сглобява/опакова (камионът стои, не кара)
   truckWorkBigM3: 10,    // над толкова м³ преместването е „голямо“: камионът не стои през разглобяването/опаковането
   truckWorkPctBig: 0,    // % от ставката на камиона през разглобяване/сглобяване/опаковане при голямо преместване
@@ -209,6 +210,8 @@ const CATALOG = [
     { id: "officeCloset", label: "Офис шкаф / рафтове", m3: 0.8, kg: 50, dis: 0.3, asm: 0.8, wrap: 8, wrapReq: true, protect: 5 },
     { id: "conferenceTable", label: "Конферентна маса", m3: 1.2, kg: 55, dis: 0.4, asm: 0.9, wrap: 10, wrapReq: true, protect: 6 },
     { id: "reception", label: "Рецепционно бюро", m3: 1.0, kg: 60, dis: 0.4, asm: 1.0, wrap: 10, wrapReq: true, protect: 6 },
+    { id: "panelBoard", label: "Плот / плоскост", m3: 0.15, kg: 15, wrap: 4, wrapReq: true, protect: 3 },
+    { id: "rackStand", label: "Щендер / стелаж (разглобен)", m3: 0.1, kg: 8, protect: 2, kind: "small" },
     { id: "partition", label: "Преграда / параван", m3: 0.4, kg: 20, wrap: 5, wrapReq: true, protect: 3 },
     { id: "whiteboard", label: "Бяла дъска / флипчарт", m3: 0.2, kg: 10, wrap: 3, protect: 3, kind: "small" },
     { id: "printer", label: "Принтер / копирна машина", m3: 0.3, kg: 25, wrap: 5, protect: 3, kind: "small" },
@@ -1297,10 +1300,12 @@ function computePrice(s, p) {
 
     // тежките пакети (плочки и под.) не се носят „на кубик“: всеки е отделен курс по стълбите
     heavyCarryClock = crew > 0 ? heavyBoxes * (pickupNoElevFloors + dropoffNoElevFloors) * n(p.heavyMinPerFloor ?? 2) / 60 / crew : 0;
-    handlingClock = loadCarryClock + unloadCarryClock + driveHours + heavyCarryClock;
+    // допълнителни спирки за разтоварване (част от багажа на друг адрес) — време за спиране и разтоварване
+    const extraStopsClock = Math.max(0, Math.round(n(s.extraStops))) * n(p.extraStopMin ?? 20) / 60;
+    handlingClock = loadCarryClock + unloadCarryClock + driveHours + heavyCarryClock + extraStopsClock;
     // свободното време до минимума се мери БЕЗ стълбите — те се таксуват отделно като перо и не
     // бива да изяждат минимума (иначе опаковането на 5-и етаж би оскъпило камиона, а на партер не)
-    const flatClock = legClock(vol / 2, 0) + legClock(vol / 2, 0) + driveHours;
+    const flatClock = legClock(vol / 2, 0) + legClock(vol / 2, 0) + driveHours + extraStopsClock;
     localMinSlack = Math.max(0, n(p.minLocalHours) - flatClock);
     if (handlingClock < n(p.minLocalHours)) handlingClock = n(p.minLocalHours); // мин 2 ч
   }
@@ -1312,9 +1317,13 @@ function computePrice(s, p) {
   // камионът и без това са там. Доплаща се (като труд и като престой на камиона) само
   // опаковането, което излиза извън минимума.
   const packManHoursAll = wrapManHours + protectManHours + boxFillManHours; // вкл. пълнене на кашони/чували
+  // Додо, 26.11.2026: при градска бригада от двама опакова единият, другият чака —
+  // времето за опаковане е време на цялата бригада (и на камиона), не паралелна работа
+  const packSolo = !isCourse && !usesFieldCrew && !isDisposal && crew > 0 && crew <= 2;
+  const packClockOf = (h) => (crew > 0 ? (packSolo ? h : h / crew) : h);   // реално време от часове опаковане
   const packAbsorbedClock = !isCourse && !usesFieldCrew && !isDisposal && !hoursManual && crew > 0
-    ? Math.min(packManHoursAll / crew, localMinSlack) : 0;
-  const packAbsorbedManHours = packAbsorbedClock * crew;
+    ? Math.min(packClockOf(packManHoursAll), localMinSlack) : 0;
+  const packAbsorbedManHours = packSolo ? packAbsorbedClock : packAbsorbedClock * crew;   // в часове опаковане
   // при курс с пътуваща бригада вторият човек се плаща за РЕАЛНИТЕ часове (път + работа) × часова ставка,
   // без таван — 10 часа = 10 × ставката, 12 часа = 12 × ставката и т.н.
   const dayTotalH = handlingClock + driveHours;
@@ -1523,7 +1532,8 @@ function computePrice(s, p) {
   const packChargedManHours = packManHoursAll - packAbsorbedManHours;
   if (packChargedManHours > 1e-6) {
     const h = roundHalf(packChargedManHours);
-    add(`Опаковане${boxFillManHours ? " и пълнене на кашони" : ""} — ${h.toFixed(1)} чч × ${workerRate} ${p.currency}/ч`, h * workerRate);
+    if (packSolo) add(`Опаковане${boxFillManHours ? " и пълнене на кашони" : ""} — ${h.toFixed(1)} ч × ${crew} души × ${workerRate} ${p.currency}/ч`, h * crew * workerRate);
+    else add(`Опаковане${boxFillManHours ? " и пълнене на кашони" : ""} — ${h.toFixed(1)} чч × ${workerRate} ${p.currency}/ч`, h * workerRate);
   }
 
   // 3.5) НОСЕНЕ НА ДЪЛГО РАЗСТОЯНИЕ до/от камиона — реално добавено време, не само такса
@@ -1601,8 +1611,8 @@ function computePrice(s, p) {
   const stairsCharged = stairsManHoursAll > 0 ? stairs * (stairsManHours / stairsManHoursAll) : 0;
 
   // опаковането, побрало се в минимума, вече е в handlingManHours/handlingClock — не се брои втори път
-  const manHours = handlingManHours + disManHours + wrapManHours + protectManHours + boxFillManHours - packAbsorbedManHours + fillManHours + carryManHours + stairsManHours;
-  const clockHours = handlingClock + fillClockElapsed + disHours + carryHoursTot + (crew ? (packManHoursAll + stairsManHours) / crew : packManHoursAll + stairsManHours) - packAbsorbedClock; // общ престой на обекта — информативно (Очаквано време, бригада)
+  const manHours = handlingManHours + disManHours + packChargedManHours * (packSolo ? crew : 1) + fillManHours + carryManHours + stairsManHours;
+  const clockHours = handlingClock + fillClockElapsed + disHours + carryHoursTot + packClockOf(packChargedManHours) + (crew ? stairsManHours / crew : stairsManHours); // общ престой на обекта — информативно (Очаквано време, бригада)
   // часовете, по които се таксува КАМИОНЪТ при градско (виж truckCostBasis) — БЕЗ стълбите:
   // те вече се начисляват директно като перо "Стълби без асансьор" (парична такса на етаж
   // на вещ); ако същото забавяне се качи и в часовете на транспорта, се получава двойно
@@ -1617,7 +1627,7 @@ function computePrice(s, p) {
   const truckH = truckHoursManual ? Number(s.truckHoursOverride) : autoTruckHours;
   const bigMove = vol > n(p.truckWorkBigM3 || 1e9);
   const truckWorkPctUsed = Math.min(100, Math.max(0, n(bigMove ? (p.truckWorkPctBig ?? 0) : (p.truckWorkPct ?? 100))));
-  const truckWorkClock = disHours + (crew ? (packManHoursAll - packAbsorbedManHours) / crew : 0);
+  const truckWorkClock = disHours + (crew ? packClockOf(packChargedManHours) : 0);
   const truckHWork = !truckHoursManual && truckWorkPctUsed < 100 ? Math.min(truckH, roundHalf(truckWorkClock)) : 0;
   const truckHFull = truckH - truckHWork;
   // над 10 часа на ден не се работи — толкова дни реално са нужни за изпълнение
@@ -2029,6 +2039,23 @@ function parseRecoveryHash() {
   const params = new URLSearchParams(hash.replace(/^#/, ""));
   const access_token = params.get("access_token");
   return access_token ? { access_token } : null;
+}
+// „Вход с Google“ (Додо, 26.11.2026): Supabase води към Google и връща човека тук с
+// #access_token=...&refresh_token=... в адреса. Само @korekt-bg.com акаунти — нов акаунт с друг
+// домейн базата отказва (trigger от 20261108_harden_security), а съществуващ колега със същия
+// имейл влиза в своя профил (ролята и записите му се пазят).
+function googleSignInUrl(url) {
+  const back = window.location.href.split("#")[0];
+  return `${url}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(back)}`;
+}
+function parseOAuthReturn() {
+  const hash = new URLSearchParams((window.location.hash || "").replace(/^#/, ""));
+  const query = new URLSearchParams(window.location.search);
+  const error = hash.get("error_description") || query.get("error_description");
+  if (error) return { error: error.replace(/\+/g, " ") };
+  if (hash.get("type") === "recovery") return null;   // линкът за нова парола си има отделен екран
+  const refresh_token = hash.get("refresh_token");
+  return refresh_token ? { refresh_token } : null;
 }
 // задава нова парола с временния recovery токен (не е обичайната сесия)
 async function supabaseSetNewPassword(accessToken, newPassword, url, key) {
@@ -4337,7 +4364,7 @@ function ProfilePanel({ session, userName, onSaved, notify, p }) {
 // начално състояние на калкулацията (стъпка 1) — извадено извън компонента, за да служи и като
 // база при сливане с възстановена чернова (schema-safe, ако по-късно добавим ново поле)
 const INITIAL_S = {
-  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, heavyOverride: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, truckHoursOverride: 0, labourKmOverride: 0, storage: { on: false, months: 1, mode: "auto" }, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, deviationOverride: 0, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {}, floorFeeOff: {}, fill: {}, buyBox: {}, stretchRollsManual: 0, stretchRollPriceManual: 0,
+  service: null, city: "", country: "", km: 0, localKm: 12, pickupHood: "", dropoffHood: "", pickupCity: "", dropoffCity: "", truckId: null, courseMode: "hourly", baseCity: "", labourBase: "", crewOverride: 0, heavyOverride: 0, extraStops: 0, manualHours: 0, kmOverride: 0, hoursOverride: 0, truckHoursOverride: 0, labourKmOverride: 0, storage: { on: false, months: 1, mode: "auto" }, forceCar: false, weFill: true, landfillKm: 0, wasteType: "household", disposalTrucks: 1, deviationOverride: 0, qty: {}, dis: {}, asm: {}, wrap: {}, protect: {}, selfPack: {}, floorFeeOff: {}, fill: {}, buyBox: {}, stretchRollsManual: 0, stretchRollPriceManual: 0,
   pickup: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   dropoff: { building: "Апартамент", floor: 0, elevator: false, elevatorType: "passenger", carryDistanceM: 0 },
   extras: { packing: false, materials: false, disassembly: false },
@@ -4464,6 +4491,22 @@ export default function KorektCalculator() {
     saveAuthSession(null);
     setShowLog(false); setShowSettings(false); setShowMargin(false); setShowUsers(false); setShowOffers(false); setShowVoice(false);
   };
+  // връщане от „Вход с Google“: прави обичайна сесия от refresh_token-а и чисти адреса
+  useEffect(() => {
+    const back = parseOAuthReturn();
+    if (!back) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    if (back.error) {
+      setLoginError(/korekt-bg\.com|служебен/i.test(back.error) ? "Вход с Google само със служебен акаунт @korekt-bg.com." : "Вход с Google не успя: " + back.error);
+      return;
+    }
+    setLoginBusy(true);
+    supabaseRefreshSession(back, p.supabaseUrl, p.supabaseKey).then((next) => {
+      setLoginBusy(false);
+      if (next) { setAuthSession(next); saveAuthSession(next); }
+      else setLoginError("Вход с Google не успя. Опитайте пак или влезте с парола.");
+    });
+  }, []);
   // опреснява сесията малко преди да изтече, вместо да чака 401 от базата
   useEffect(() => {
     if (!authSession) return;
@@ -4932,6 +4975,16 @@ export default function KorektCalculator() {
                 className="w-full text-sm font-semibold px-4 py-2.5 rounded-full text-white disabled:opacity-50 mb-2" style={{ background: accent }}>
                 {loginBusy ? "…" : loginMode === "signup" ? "Регистрация" : loginMode === "forgot" ? "Изпрати линк" : "Вход"}
               </button>
+              {loginMode === "signin" && (
+                <>
+                  <div className="flex items-center gap-2 my-2 text-[11px] text-slate-400"><span className="flex-1 h-px bg-slate-200" />или<span className="flex-1 h-px bg-slate-200" /></div>
+                  <a href={googleSignInUrl(p.supabaseUrl)}
+                    className="w-full flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-full border border-slate-300 bg-white mb-3" style={{ color: ink }}>
+                    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.3 6.9-17.7z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-6c-2.2 1.5-5 2.3-8.2 2.3-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>
+                    Вход с Google (служебен акаунт)
+                  </a>
+                </>
+              )}
               <div className="flex items-center justify-between">
                 <button type="button" onClick={() => { setLoginMode((m) => (m === "signup" ? "signin" : "signup")); setLoginError(null); }}
                   className="text-xs text-slate-500 underline">
@@ -5622,6 +5675,21 @@ export default function KorektCalculator() {
                         върни изчислените километри
                       </button>
                     )}
+                  </div>
+                )}
+
+                {s.service === "local" && vol > 0 && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 pr-3">
+                        <div className="text-sm font-medium" style={{ color: ink }}>Допълнителни спирки</div>
+                        <div className="text-xs text-slate-400">
+                          Част от багажа се разтоварва на друг адрес — по {p.extraStopMin ?? 20} мин на спирка.
+                          Отбивката в километри добавете към „Километри“.
+                        </div>
+                      </div>
+                      <Stepper value={Math.max(0, Math.round(n(s.extraStops)))} onChange={(v) => set({ extraStops: Math.max(0, v) })} />
+                    </div>
                   </div>
                 )}
 

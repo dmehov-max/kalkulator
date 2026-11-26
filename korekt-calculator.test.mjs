@@ -1131,13 +1131,31 @@ test("много опаковане излиза извън минимума и 
   const line = r.lines.find((l) => l.label.startsWith("Опаковане"));
   ok(line && line.amount > 0, "голямото опаковане трябва да е отделно перо");
 });
+// Запитването на Галя (Додо, 26.11.2026): 3 бюра, 3 плоскости, 3 щендера, 25 кашона, Пловдив (партер)
+// → спирка в Пловдив → с. Дълго поле (24 км). Двама души; опаковането спира и двамата;
+// Додо прецени около 3 часа и 156 €.
+test("Галя: двама, опаковане на двамата, допълнителна спирка — около 156 €", () => {
+  // живите стойности към 26.11.2026, които се различават от тези по подразбиране
+  const plov = { ...P, deviationFactor: 1, citySpeed: 40, wrapMPerManHour: 60, workerRateByCity: [{ city: "Пловдив", rate: 16 }] };
+  const base = { city: "Пловдив", pickupHood: "Каменица 1", dropoffHood: "Център", kmOverride: 24,
+    qty: { officeDesk: 3, panelBoard: 3, rackStand: 3, boxM: 25 } };
+  const r = calc({ ...base, extraStops: 1 }, plov);
+  eq(r.crew, 2, "двама души:");
+  const pack = r.lines.find((l) => l.label.startsWith("Опаковане"));
+  ok(pack && pack.label.includes("× 2 души"), "опаковането е за двамата");
+  ok(Math.abs(r.total - 156) <= 3, `около 156 €, получено ${r.total}`);
+  // спирката добавя 20 мин; тук те се побират в закръглянето до половин час
+  near(r.clockHours - calc(base, plov).clockHours, 20 / 60, 0.01, "спирката добавя 20 мин:");
+  ok(calc({ ...base, extraStops: 2 }, plov).total > r.total, "втора спирка вече оскъпява");
+});
 test("опаковането е отделно перо (при ръчни часове минимумът не го поема)", () => {
   const r = calc({ qty: { mattress: 1 }, hoursOverride: 3 });
   const line = r.lines.find((l) => l.label.startsWith("Опаковане"));
   ok(line, "липсва перо за опаковане");
   // часовете в перото са закръглени нагоре до половин час преди таксуване
   const closeHalf = Math.ceil((r.wrapManHours + r.protectManHours) * 2) / 2;
-  eq(line.amount, Math.round(closeHalf * P.workerRate));
+  // при бригада от двама опаковането спира и двамата (Додо, 26.11.2026) — часовете × бригадата
+  eq(line.amount, Math.round(closeHalf * (r.crew <= 2 ? r.crew : 1) * P.workerRate));
 });
 
 /* --- Сглобяване --- */
@@ -1200,7 +1218,7 @@ test("марж: камионът се смята по същите часове 
   const tr = r.lines.find((l) => l.label.startsWith("Транспорт"));
   const h = tr.amount / params.truckRate;
   ok(r.lines.some((l) => l.label.startsWith("Стълби")), "очаквани стълби (ъглов диван в пътнически асансьор)");
-  ok(r.clockHours > h + 0.5, "престоят на обекта включва стълбите");
+  ok(r.clockHours > h, "престоят на обекта включва стълбите"); // опаковането (двама) вече е и във времето на камиона
   near(r.truckCost, Math.round(h * params.truckCostPerHour), 0.5, "разходът за камион:");
 });
 test("ъглов диван: 2 части — стълбите се смятат за всяка част", () => {
