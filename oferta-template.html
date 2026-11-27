@@ -554,11 +554,10 @@ const T = {
     greetDom: n => n ? `Здравейте, ${n}, ето Вашата оферта за преместване` : "Здравейте, ето Вашата оферта за преместване",
     priceDom: "Крайна цена", priceDomCo: "Цена без ДДС", vatLineCo: v => `+ ДДС 20%: ${v}`, discLine: (pct, sum) => `включена отстъпка ${pct}%: −${sum}`,
     whyDom: "Цената не се променя, ако всичко е по задание и по списъка на багажа.",
-    stepsDom: [
-      ["При потвърждение", "Потвърждавате офертата", "Записваме поръчката и Ви казваме номера ѝ."],
-      ["Преди преместването", "Безплатен оглед, ако е нужен", "Уточняваме достъпа, етажите и асансьора."],
-      ["В деня", "Опаковане и товарене", "Екипът опакова, разглобява мебелите и товари."],
-      ["В деня", "Транспорт и разтоварване", "Внасяме, сглобяваме и подписваме протокола заедно."]
+    stepsDom: (f, to, pack) => [ // Додо, 27.11.2026: кратко, 3 стъпки
+      ["", "Приемате офертата", "Цената се заключва, координаторът Ви се обажда за дата и час."],
+      ["", `Товарим в ${f}`, pack ? "Опаковаме и описваме вещите." : "Описваме вещите в протокола."],
+      ["", `Разтоварваме в ${to}`, "Внасяме до стаите и подписваме протокола."]
     ],
     autoNote: "Автоматичен превод. При разлика важи българският текст.",
     preview: "Преглед на етапа"
@@ -652,11 +651,10 @@ const T = {
     greetDom: n => n ? `Hello ${n}, here is your moving quote` : "Hello, here is your moving quote",
     priceDom: "Final price", priceDomCo: "Price excl. VAT", vatLineCo: v => `+ VAT 20%: ${v}`, discLine: (pct, sum) => `includes ${pct}% discount: −${sum}`,
     whyDom: "The price does not change if the job matches the brief and the list of items.",
-    stepsDom: [
-      ["On confirmation", "You confirm the quote", "We record the order and give you its number."],
-      ["Before the move", "Free survey if needed", "We check access, floors and the lift."],
-      ["On the day", "Packing and loading", "The crew packs, takes furniture apart and loads."],
-      ["On the day", "Transport and unloading", "We carry in, assemble and sign the report together."]
+    stepsDom: (f, to, pack) => [ // Додо, 27.11.2026: кратко, 3 стъпки
+      ["", "You accept the quote", "The price is locked and your coordinator calls you to set the date and time."],
+      ["", `We load in ${f}`, pack ? "We pack and record your items." : "We record your items in the report."],
+      ["", `We unload in ${to}`, "We carry everything into the rooms and sign the report."]
     ],
     autoNote: "Automatic translation. If anything differs, the Bulgarian text applies.",
     preview: "Preview stage"
@@ -750,11 +748,10 @@ const T = {
     greetDom: n => n ? `Здравствуйте, ${n}, вот Ваше предложение по переезду` : "Здравствуйте, вот Ваше предложение по переезду",
     priceDom: "Итоговая цена", priceDomCo: "Цена без НДС", vatLineCo: v => `+ НДС 20%: ${v}`, discLine: (pct, sum) => `включена скидка ${pct}%: −${sum}`,
     whyDom: "Цена не меняется, если всё соответствует заданию и списку вещей.",
-    stepsDom: [
-      ["При подтверждении", "Вы подтверждаете предложение", "Мы записываем заказ и сообщаем Вам его номер."],
-      ["Перед переездом", "Бесплатный осмотр при необходимости", "Уточняем доступ, этажи и лифт."],
-      ["В день переезда", "Упаковка и погрузка", "Бригада упаковывает вещи, разбирает мебель и грузит."],
-      ["В день переезда", "Перевозка и разгрузка", "Заносим, собираем и вместе подписываем акт."]
+    stepsDom: (f, to, pack) => [ // Додо, 27.11.2026: кратко, 3 стъпки
+      ["", "Вы принимаете предложение", "Цена фиксируется, координатор звонит Вам, чтобы согласовать дату и время."],
+      ["", `Грузим в ${f}`, pack ? "Упаковываем и описываем вещи." : "Описываем вещи в акте."],
+      ["", `Разгружаем в ${to}`, "Заносим вещи в комнаты и подписываем акт."]
     ],
     autoNote: "Автоматический перевод. При расхождениях действует болгарский текст.",
     preview: "Предпросмотр этапа"
@@ -912,7 +909,7 @@ $("coordName").textContent = L(c.name); $("coordRole").textContent = L(c.role);
   $("addons").closest("section").hidden = !o.addons.length;
   $("addons").innerHTML = o.addons.map(a => `<label class="addon" for="${a.id}"><input type="checkbox" id="${a.id}" ${picked.has(a.id) ? "checked" : ""}><span><span class="t">${esc(LT(a))}${a.amount ? ` <b class="mono">+ ${eur(isIntl() ? a.amount : Math.ceil(Math.round(a.amount * (1 + o.vatRate) * 100) / 100 - 1e-9))}</b>` : ""}</span><br><span class="d">${esc(L(a.d))}</span></span></label>`).join("");
   renderInventory();
-  $("steps").innerHTML = (intl ? t.steps : t.stepsDom).map(([w, h, d]) => `<li><div><div class="when">${w}</div><div class="what">${h}</div><div class="how">${d}</div></div></li>`).join("");
+  $("steps").innerHTML = (intl ? t.steps : t.stepsDom(esc(L(o.from.city)), esc(L(o.to.city)), /стреч|велпапе|опаков|кашон/i.test(invText))).map(([w, h, d]) => `<li><div>${w ? `<div class="when">${w}</div>` : ""}<div class="what">${h}</div><div class="how">${d}</div></div></li>`).join("");
   $("info").innerHTML = t.info.map(([h, items]) => `<div><h3>${h}</h3><ul>${items.map(i => `<li>${i}</li>`).join("")}</ul></div>`).join("");
   $("trust").innerHTML = t.trust.map(([b, s]) => `<div><div class="big">${b}</div><div class="small">${s}</div></div>`).join("");
   $("clients").innerHTML = `<b>${t.clientsTitle}</b> ${t.clients.join(" · ")}`;
