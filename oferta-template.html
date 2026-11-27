@@ -869,7 +869,10 @@ $("coordName").textContent = L(c.name); $("coordRole").textContent = L(c.role);
   const NEW_LOOK = false, newLook = NEW_LOOK && !intl;
   document.body.classList.toggle("dom", newLook);
   $("heroTitle").hidden = $("heroTrust").hidden = $("guarPanel").hidden = !newLook;
-  if (!newLook) { $("h-incl").textContent = t.inclTitle; $("incl").innerHTML = t.incl.map(tick).join(""); }
+  // Додо, 27.11.2026: кашоните (ред 1) и разглобяването (ред 2) се показват само ако ги има в списъка на багажа
+  const invText = (o.inventory || []).map(r => String((r.item && r.item.bg) || "") + " " + String((r.note && r.note.bg) || "")).join(" ");
+  const inclKeep = (x, i) => i === 1 ? /кашон/i.test(invText) : i === 2 ? /разглоб|сглоб/i.test(invText) : true;
+  if (!newLook) { $("h-incl").textContent = t.inclTitle; $("incl").innerHTML = t.incl.filter(inclKeep).map(tick).join(""); }
   else {
     $("heroTitle").textContent = t.heroTitle;
     $("heroTrust").innerHTML = t.heroTrust.map(([b, s], i) => i === 1

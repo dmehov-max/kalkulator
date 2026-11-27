@@ -1,5 +1,5 @@
 <!doctype html><html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-OpUNhg9ckfVQxVXo+RlkUeTdDb1UuggOsvoet3DjsXg=' 'sha256-aid4EgVc6wLFZBBkUSSBZ0scA8B98iNCQyQYrVqqHYA='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-s6wR3l5T9bg1GPfq7aT04jn8eHWz8Hk2w3KgYn216Bk=' 'sha256-aid4EgVc6wLFZBBkUSSBZ0scA8B98iNCQyQYrVqqHYA='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src https://ncwiyhndgyssepaqyiss.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
 </head><body style="margin:0">
@@ -815,7 +815,10 @@ $("coordName").textContent = L(c.name); $("coordRole").textContent = L(c.role);
   const NEW_LOOK = false, newLook = NEW_LOOK && !intl;
   document.body.classList.toggle("dom", newLook);
   $("heroTitle").hidden = $("heroTrust").hidden = $("guarPanel").hidden = !newLook;
-  if (!newLook) { $("h-incl").textContent = t.inclTitle; $("incl").innerHTML = t.incl.map(tick).join(""); }
+  // Додо, 27.11.2026: кашоните (ред 1) и разглобяването (ред 2) се показват само ако ги има в списъка на багажа
+  const invText = (o.inventory || []).map(r => String((r.item && r.item.bg) || "") + " " + String((r.note && r.note.bg) || "")).join(" ");
+  const inclKeep = (x, i) => i === 1 ? /кашон/i.test(invText) : i === 2 ? /разглоб|сглоб/i.test(invText) : true;
+  if (!newLook) { $("h-incl").textContent = t.inclTitle; $("incl").innerHTML = t.incl.filter(inclKeep).map(tick).join(""); }
   else {
     $("heroTitle").textContent = t.heroTitle;
     $("heroTrust").innerHTML = t.heroTrust.map(([b, s], i) => i === 1
