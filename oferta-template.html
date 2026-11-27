@@ -484,8 +484,8 @@ const T = {
     inclEyebrow: "В цената", inclTitle: "Какво е включено",
     incl: [
       ["Застраховка", "Годишна полица за щети по вещите по време на преместването"],
-      ["Опаковане и етикети", "Всеки кашон е надписан, за да знаете къде отива"],
       ["Демонтаж и монтаж", "Разглобяваме в София и сглобяваме в новия дом"],
+      ["Опаковане и етикети", "Всеки кашон е надписан, за да знаете къде отива"],
       ["Приемо-предавателен протокол", "Описваме вещите при товарене и при разтоварване"],
       ["Цената не се променя", "Ако всичко е по задание, сумата остава същата"],
       ["Един координатор", "Тодор следи пратката и отговаря на въпросите Ви"]
@@ -582,8 +582,8 @@ const T = {
     inclEyebrow: "In the price", inclTitle: "What is included",
     incl: [
       ["Insurance", "Annual policy covering damage to your belongings during the move"],
-      ["Packing and labels", "Every box is labelled so you know where it goes"],
       ["Disassembly and assembly", "We take furniture apart in Sofia and put it back together"],
+      ["Packing and labels", "Every box is labelled so you know where it goes"],
       ["Handover report", "We record your items at loading and at unloading"],
       ["Fixed price", "If the job matches the brief, the price stays the same"],
       ["One coordinator", "Todor tracks your shipment and answers your questions"]
@@ -680,8 +680,8 @@ const T = {
     inclEyebrow: "В цене", inclTitle: "Что включено",
     incl: [
       ["Страховка", "Годовой полис на случай повреждения вещей во время переезда"],
-      ["Упаковка и маркировка", "Каждая коробка подписана, чтобы Вы знали, куда её нести"],
       ["Разборка и сборка", "Разбираем мебель на месте погрузки и собираем в новом доме"],
+      ["Упаковка и маркировка", "Каждая коробка подписана, чтобы Вы знали, куда её нести"],
       ["Приёмо-передаточный акт", "Описываем вещи при погрузке и при разгрузке"],
       ["Цена не меняется", "Если всё соответствует заданию, сумма остаётся прежней"],
       ["Один координатор", "Следит за грузом и отвечает на Ваши вопросы"]
@@ -886,13 +886,13 @@ $("coordName").textContent = L(c.name); $("coordRole").textContent = L(c.role);
   const NEW_LOOK = false, newLook = NEW_LOOK && !intl;
   document.body.classList.toggle("dom", newLook);
   $("heroTitle").hidden = $("heroTrust").hidden = $("guarPanel").hidden = !newLook;
-  // Додо, 27.11.2026: кашоните (ред 1) и разглобяването (ред 2) се показват само ако ги има в списъка на багажа
+  // Додо, 27.11.2026: разглобяването (ред 1) и кашоните (ред 2) се показват само ако ги има в списъка на багажа
   const invText = (o.inventory || []).map(r => String((r.item && r.item.bg) || "") + " " + String((r.note && r.note.bg) || "")).join(" ");
-  const inclKeep = (x, i) => i === 1 ? /кашон/i.test(invText) : i === 2 ? /разглоб|сглоб/i.test(invText) : true;
+  const inclKeep = (x, i) => i === 1 ? /разглоб|сглоб/i.test(invText) : i === 2 ? /кашон/i.test(invText) : true;
   // Додо, 27.11.2026: опаковъчните материали — само тези, които са в списъка на багажа
   const mats = [/стреч/i.test(invText) && t.mat.wrap, /велпапе/i.test(invText) && t.mat.prot, /кашоните са от нас/i.test(invText) && t.mat.box].filter(Boolean);
   const inclRows = t.incl.filter(inclKeep);
-  if (mats.length) inclRows.splice(1, 0, [t.matTitle, t.matText(mats.join(", "))]);
+  if (mats.length) inclRows.splice(inclRows.includes(t.incl[1]) ? 2 : 1, 0, [t.matTitle, t.matText(mats.join(", "))]);
   if (!newLook) { $("h-incl").textContent = t.inclTitle; $("incl").innerHTML = inclRows.map(tick).join(""); }
   else {
     $("heroTitle").textContent = t.heroTitle;
