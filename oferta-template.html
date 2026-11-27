@@ -548,7 +548,7 @@ const T = {
     fDate: "Желана дата за товарене", fFlex: "Колко гъвкави сте?", flex: ["Само тази дата", "± 2–3 дни", "± 1 седмица"], fNote: "Бележка (по желание)",
     sentDates: "Благодарим! Тодор ще провери транспорта за тези дати и ще Ви изпрати точна цена.",
     payAfter: "Схемата на плащане се определя с точната цена.",
-    payDefault: "По банка, с карта или в брой. Срокът за плащане се уточнява с координатора.",
+    payM: { bank: "по банка", cash: "в брой", card: "с карта" }, payOr: "или", payCoord: "Срокът за плащане се уточнява с координатора.", payIn3: "До 3 дни от издаване на фактурата.",
     invEyebrow: "Опис", invTitle: "Списък на багажа", invLead: "Цената е изчислена за тези вещи. Ако нещо липсва, натиснете „Искам промени“.",
     fDate: "Дата на преместване", invItem: "Предмет", invQty: "Брой", invNote: "Бележка", invTotal: "Общо",
     greetDom: n => n ? `Здравейте, ${n}, ето Вашата оферта за преместване` : "Здравейте, ето Вашата оферта за преместване",
@@ -645,7 +645,7 @@ const T = {
     fDate: "Preferred loading date", fFlex: "How flexible are you?", flex: ["This date only", "± 2–3 days", "± 1 week"], fNote: "Note (optional)",
     sentDates: "Thank you! Todor will check transport for these dates and send you the exact price.",
     payAfter: "The payment schedule is set with the exact price.",
-    payDefault: "By bank transfer, card or cash. The payment date is agreed with your coordinator.",
+    payM: { bank: "by bank transfer", cash: "in cash", card: "by card" }, payOr: "or", payCoord: "The payment date is agreed with your coordinator.", payIn3: "Within 3 days of the invoice date.",
     invEyebrow: "Inventory", invTitle: "List of items", invLead: "The price is calculated for these items. If something is missing, press “Request changes”.",
     fDate: "Moving date", invItem: "Item", invQty: "Qty", invNote: "Note", invTotal: "Total",
     greetDom: n => n ? `Hello ${n}, here is your moving quote` : "Hello, here is your moving quote",
@@ -742,7 +742,7 @@ const T = {
     fFlex: "Насколько Вы гибки?", flex: ["Только эта дата", "± 2–3 дня", "± 1 неделя"], fNote: "Примечание (необязательно)",
     sentDates: "Спасибо! Мы проверим транспорт на эти даты и пришлём точную цену.",
     payAfter: "График оплаты определяется вместе с точной ценой.",
-    payDefault: "Банковским переводом, картой или наличными. Срок оплаты согласуется с координатором.",
+    payM: { bank: "банковским переводом", cash: "наличными", card: "картой" }, payOr: "или", payCoord: "Срок оплаты согласуется с координатором.", payIn3: "В течение 3 дней с даты выставления счёта.",
     invEyebrow: "Опись", invTitle: "Список вещей", invLead: "Цена рассчитана для этих вещей. Если чего-то не хватает, нажмите «Хочу изменения».",
     fDate: "Дата переезда", invItem: "Предмет", invQty: "Кол-во", invNote: "Примечание", invTotal: "Итого",
     greetDom: n => n ? `Здравствуйте, ${n}, вот Ваше предложение по переезду` : "Здравствуйте, вот Ваше предложение по переезду",
@@ -777,6 +777,12 @@ const LT = o => o[lang] ?? o.bg;   // липсващ превод → бълга
 // целите суми се пишат без стотинки („136 €“), останалите с две
 const eur = n => new Intl.NumberFormat(LOC[lang] || "en-GB", { style: "currency", currency: "EUR", minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 }).format(n);
 const date = s => new Date(s + "T12:00:00").toLocaleDateString(LOC[lang] || "en-GB", { day: "numeric", month: "long", year: "numeric" });
+// Додо, 27.11.2026: начините на плащане се избират в редактора (по подразбиране банка и в брой)
+const payText = t => {
+  const m = (OFFER.payMethods && OFFER.payMethods.length ? OFFER.payMethods : ["bank", "cash"]).map(k => t.payM[k]).filter(Boolean);
+  const w = m.length > 1 ? m.slice(0, -1).join(", ") + " " + t.payOr + " " + m[m.length - 1] : m[0];
+  return w.charAt(0).toUpperCase() + w.slice(1) + ". " + (OFFER.payTerm === "bank3" ? t.payIn3 : t.payCoord);
+};
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 const isIntl = () => (OFFER.kind || "international") === "international";
@@ -823,7 +829,7 @@ function renderPrice() {
   OFFER.addons.filter(a => picked.has(a.id)).forEach(a => items.push(`<li class="addonline">${esc(LT(a))}</li>`));
   $("lines").innerHTML = `<span class="eyebrow">${t.priceIncl}</span><ul class="pincl">${items.join("")}</ul>`;
   if (ind) { $("pay").innerHTML = `<span>${t.payAfter}</span>`; return; }
-  if (!OFFER.payments.length) { $("pay").innerHTML = `<span>${t.payDefault}</span>`; return; }
+  if (!OFFER.payments.length) { $("pay").innerHTML = `<span>${payText(t)}</span>`; return; }
   let left = s.gross;
   $("pay").innerHTML = OFFER.payments.map((p, i) => {
     const amt = i === OFFER.payments.length - 1 ? left : Math.round(s.gross * p.share * 100) / 100;

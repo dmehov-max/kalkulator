@@ -116,6 +116,7 @@ textarea { min-height: 54px; resize: vertical; }
         <label class="f">Валидна (дни)<input type="number" id="f-valid" data-k="validDays" min="1"></label>
         <label class="f">Отстъпка (%) — обещаната на клиента<input type="number" id="f-discountPct" data-k="discountPct" min="0" max="50" step="1"></label>
         <label class="f">Клиентът е<select id="f-clientType" data-k="clientType"><option value="person">Физическо лице — „Крайна цена“</option><option value="company">Юридическо лице — „Цена без ДДС“ + ДДС 20%</option></select></label>
+        <div class="f">Плащане — начини и срок<span style="display:flex;flex-wrap:wrap;gap:4px 14px;margin:4px 0"><label><input type="checkbox" data-pay="bank"> По банка</label><label><input type="checkbox" data-pay="cash"> В брой</label><label><input type="checkbox" data-pay="card"> С карта (ПОС)</label></span><select id="f-payTerm" data-k="payTerm"><option value="any">Срокът се уточнява с координатора</option><option value="bank3">До 3 дни от издаване на фактурата</option></select></div>
       </div>
       <label class="f">Обръщение към клиента<input type="text" id="f-client" data-k="client" placeholder="напр. г-жо Петрова"></label>
       <div>
@@ -368,7 +369,9 @@ function fromTemplateOffer(o) {
     conditions: (o.conditions || []).map(c => ({ title: b(c.b), text: b(c.s) })),
     advance: o.payments && o.payments.length ? Math.round(o.payments[0].share * 100) : 0,
     coName: b(o.coordinator.name), coRole: b(o.coordinator.role), coPhone: o.coordinator.phone, coPhone2: o.coordinator.phone2, coEmail: o.coordinator.email || "", coPhoto: o.coordinator.photo || "",
-    clientType: o.clientType === "company" ? "company" : "person"
+    clientType: o.clientType === "company" ? "company" : "person",
+    payTerm: o.payTerm === "bank3" ? "bank3" : "any",
+    payMethods: Array.isArray(o.payMethods) && o.payMethods.length ? o.payMethods : ["bank", "cash"]
   };
 }
 
@@ -380,7 +383,8 @@ function toOffer(s) {
   return {
     id: s.id || "—", example: false, demo: true, langs: ["bg"], kind: s.kind || "international",
     inventory: (s.inventory || []).filter(r => r.item).map(r => ({ item: B(r.item), qty: +r.qty || 1, note: B(r.note) })),
-    client: B(s.client), issued: s.issued || TODAY, validDays: +s.validDays || 28, vatRate: 0.2, discountPct: +s.discountPct || 0, clientType: s.clientType === "company" ? "company" : "person",
+    client: B(s.client), issued: s.issued || TODAY, validDays: +s.validDays || 28, vatRate: 0.2, discountPct: +s.discountPct || 0, clientType: s.clientType === "company" ? "company" : "person", payTerm: s.payTerm === "bank3" ? "bank3" : "any",
+    payMethods: ["bank", "cash", "card"].filter(k => (s.payMethods || ["bank", "cash"]).includes(k)),
     from: { city: B(s.fromCity), country: B(s.fromCountry), addr: B(s.fromAddr) },
     to: { city: B(s.toCity || "…"), country: B(s.toCountry), addr: B(s.toAddr) },
     km: +s.km || null, stage: s.stage, preferredPeriod: B(s.period || "предстои да се уточни"),
@@ -409,6 +413,8 @@ function buildHtml(offer, preview) {
 function fillInputs() {
   document.querySelectorAll("[data-k]").forEach(el => { el.value = S[el.dataset.k] ?? ""; });
   $("f-clientType").value = S.clientType === "company" ? "company" : "person";
+  $("f-payTerm").value = S.payTerm === "bank3" ? "bank3" : "any";
+  document.querySelectorAll("[data-pay]").forEach(c => { c.checked = (S.payMethods || ["bank", "cash"]).includes(c.dataset.pay); });
   S.kind = S.kind || "international"; S.inventory = S.inventory || [];
   document.querySelectorAll("[data-stage]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.stage === S.stage)));
   document.querySelectorAll("[data-kind]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.kind === S.kind)));
@@ -486,6 +492,7 @@ function changed() { markDirty(true); renderTotals(); schedulePreview(); try { l
 $("form").addEventListener("input", e => {
   const el = e.target;
   if (el.dataset.k) { S[el.dataset.k] = el.value; if (el.dataset.k === "id") markDirty(true); changed(); }
+  else if (el.dataset.pay) { S.payMethods = [...document.querySelectorAll("[data-pay]:checked")].map(c => c.dataset.pay); changed(); }
   else if (el.dataset.list) { S[el.dataset.list][+el.dataset.i][el.dataset.f] = el.value; changed(); }
 });
 document.addEventListener("click", e => {
